@@ -79,7 +79,7 @@ namespace llvm {
   void initializeARMExecutionDomainFixPass(PassRegistry&);
 }
 
-extern "C" void LLVMInitializeARMTarget() {
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeARMTarget() {
   // Register the target.
   RegisterTargetMachine<ARMLETargetMachine> X(getTheARMLETarget());
   RegisterTargetMachine<ARMLETargetMachine> A(getTheThumbLETarget());
@@ -96,8 +96,10 @@ extern "C" void LLVMInitializeARMTarget() {
   initializeARMExpandPseudoPass(Registry);
   initializeThumb2SizeReducePass(Registry);
   initializeMVEVPTBlockPass(Registry);
+  initializeMVEVPTOptimisationsPass(Registry);
   initializeMVETailPredicationPass(Registry);
   initializeARMLowOverheadLoopsPass(Registry);
+  initializeMVEGatherScatterLoweringPass(Registry);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
@@ -242,6 +244,9 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
     this->Options.NoTrapAfterNoreturn = true;
   }
 
+  // ARM supports the debug entry values.
+  setSupportsDebugEntryValues(true);
+
   initAsmInfo();
 }
 
@@ -358,6 +363,7 @@ public:
   void addPreRegAlloc() override;
   void addPreSched2() override;
   void addPreEmitPass() override;
+  void addPreEmitPass2() override;
 
   std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
 };
@@ -403,6 +409,8 @@ void ARMPassConfig::addIRPasses() {
           const auto &ST = this->TM->getSubtarget<ARMSubtarget>(F);
           return ST.hasAnyDataBarrier() && !ST.isThumb1Only();
         }));
+
+  addPass(createMVEGatherScatterLoweringPass());
 
   TargetPassConfig::addIRPasses();
 
@@ -480,6 +488,8 @@ bool ARMPassConfig::addGlobalInstructionSelect() {
 
 void ARMPassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOpt::None) {
+    addPass(createMVEVPTOptimisationsPass());
+
     addPass(createMLxExpansionPass());
 
     if (EnableARMLoadStoreOpt)
@@ -535,7 +545,9 @@ void ARMPassConfig::addPreEmitPass() {
   // Don't optimize barriers at -O0.
   if (getOptLevel() != CodeGenOpt::None)
     addPass(createARMOptimizeBarriersPass());
+}
 
+void ARMPassConfig::addPreEmitPass2() {
   addPass(createARMConstantIslandPass());
   addPass(createARMLowOverheadLoopsPass());
 

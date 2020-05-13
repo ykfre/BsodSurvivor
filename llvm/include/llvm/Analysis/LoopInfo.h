@@ -103,6 +103,14 @@ public:
     return D;
   }
   BlockT *getHeader() const { return getBlocks().front(); }
+  /// Return the parent loop if it exists or nullptr for top
+  /// level loops.
+
+  /// A loop is either top-level in a function (that is, it is not
+  /// contained in any other loop) or it is entirely enclosed in
+  /// some other loop.
+  /// If a loop is top-level, it has no parent, otherwise its
+  /// parent is the innermost loop in which it is enclosed.
   LoopT *getParentLoop() const { return ParentLoop; }
 
   /// This is a raw interface for bypassing addChildLoop.
@@ -208,7 +216,7 @@ public:
   bool isLoopExiting(const BlockT *BB) const {
     assert(!isInvalid() && "Loop not in a valid state!");
     assert(contains(BB) && "Exiting block must be part of the loop");
-    for (const auto &Succ : children<const BlockT *>(BB)) {
+    for (const auto *Succ : children<const BlockT *>(BB)) {
       if (!contains(Succ))
         return true;
     }
@@ -772,10 +780,11 @@ public:
   bool isCanonical(ScalarEvolution &SE) const;
 
   /// Return true if the Loop is in LCSSA form.
-  bool isLCSSAForm(DominatorTree &DT) const;
+  bool isLCSSAForm(const DominatorTree &DT) const;
 
   /// Return true if this Loop and all inner subloops are in LCSSA form.
-  bool isRecursivelyLCSSAForm(DominatorTree &DT, const LoopInfo &LI) const;
+  bool isRecursivelyLCSSAForm(const DominatorTree &DT,
+                              const LoopInfo &LI) const;
 
   /// Return true if the Loop is in the form that the LoopSimplify form
   /// transforms loops to, which is sometimes called normal form.
@@ -953,6 +962,12 @@ public:
     const LoopT *L = getLoopFor(BB);
     return L && L->getHeader() == BB;
   }
+
+  /// Return the top-level loops.
+  const std::vector<LoopT *> &getTopLevelLoops() const { return TopLevelLoops; }
+
+  /// Return the top-level loops.
+  std::vector<LoopT *> &getTopLevelLoopsVector() { return TopLevelLoops; }
 
   /// This removes the specified top-level loop from this loop info object.
   /// The loop is not deleted, as it will presumably be inserted into

@@ -17,6 +17,7 @@
 #include "clang/AST/LocInfoType.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/LangOptions.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Sema.h"
@@ -29,6 +30,9 @@ using namespace clang;
 
 void UnqualifiedId::setTemplateId(TemplateIdAnnotation *TemplateId) {
   assert(TemplateId && "NULL template-id annotation?");
+  assert(!TemplateId->isInvalid() &&
+         "should not convert invalid template-ids to unqualified-ids");
+
   Kind = UnqualifiedIdKind::IK_TemplateId;
   this->TemplateId = TemplateId;
   StartLocation = TemplateId->TemplateNameLoc;
@@ -37,6 +41,9 @@ void UnqualifiedId::setTemplateId(TemplateIdAnnotation *TemplateId) {
 
 void UnqualifiedId::setConstructorTemplateId(TemplateIdAnnotation *TemplateId) {
   assert(TemplateId && "NULL template-id annotation?");
+  assert(!TemplateId->isInvalid() &&
+         "should not convert invalid template-ids to unqualified-ids");
+
   Kind = UnqualifiedIdKind::IK_ConstructorTemplateId;
   this->TemplateId = TemplateId;
   StartLocation = TemplateId->TemplateNameLoc;
@@ -130,6 +137,8 @@ void CXXScopeSpec::Adopt(NestedNameSpecifierLoc Other) {
 
   Range = Other.getSourceRange();
   Builder.Adopt(Other);
+  assert(Range == Builder.getSourceRange() &&
+         "NestedNameSpecifierLoc range computation incorrect");
 }
 
 SourceLocation CXXScopeSpec::getLastQualifierNameLoc() const {
@@ -351,6 +360,7 @@ bool Declarator::isDeclarationOfFunction() const {
     case TST_half:
     case TST_int:
     case TST_int128:
+    case TST_extint:
     case TST_struct:
     case TST_interface:
     case TST_union:
@@ -529,6 +539,7 @@ const char *DeclSpec::getSpecifierName(DeclSpec::TST T,
   case DeclSpec::TST_char32:      return "char32_t";
   case DeclSpec::TST_int:         return "int";
   case DeclSpec::TST_int128:      return "__int128";
+  case DeclSpec::TST_extint:      return "_ExtInt";
   case DeclSpec::TST_half:        return "half";
   case DeclSpec::TST_float:       return "float";
   case DeclSpec::TST_double:      return "double";
@@ -784,6 +795,15 @@ bool DeclSpec::SetTypeSpecType(TST T, SourceLocation TagKwLoc,
   return false;
 }
 
+bool DeclSpec::SetTypeSpecType(TST T, SourceLocation Loc, const char *&PrevSpec,
+                               unsigned &DiagID, TemplateIdAnnotation *Rep,
+                               const PrintingPolicy &Policy) {
+  assert(T == TST_auto || T == TST_decltype_auto);
+  ConstrainedAuto = true;
+  TemplateIdRep = Rep;
+  return SetTypeSpecType(T, Loc, PrevSpec, DiagID, Policy);
+}
+
 bool DeclSpec::SetTypeSpecType(TST T, SourceLocation Loc,
                                const char *&PrevSpec,
                                unsigned &DiagID,
@@ -892,6 +912,27 @@ bool DeclSpec::SetTypeSpecError() {
   TypeSpecOwned = false;
   TSTLoc = SourceLocation();
   TSTNameLoc = SourceLocation();
+  return false;
+}
+
+bool DeclSpec::SetExtIntType(SourceLocation KWLoc, Expr *BitsExpr,
+                             const char *&PrevSpec, unsigned &DiagID,
+                             const PrintingPolicy &Policy) {
+  assert(BitsExpr && "no expression provided!");
+  if (TypeSpecType == TST_error)
+    return false;
+
+  if (TypeSpecType != TST_unspecified) {
+    PrevSpec = DeclSpec::getSpecifierName((TST) TypeSpecType, Policy);
+    DiagID = diag::err_invalid_decl_spec_combination;
+    return true;
+  }
+
+  TypeSpecType = TST_extint;
+  ExprRep = BitsExpr;
+  TSTLoc = KWLoc;
+  TSTNameLoc = KWLoc;
+  TypeSpecOwned = false;
   return false;
 }
 
@@ -1176,7 +1217,7 @@ void DeclSpec::Finish(Sema &S, const PrintingPolicy &Policy) {
       TypeSpecType = TST_int; // unsigned -> unsigned int, signed -> signed int.
     else if (TypeSpecType != TST_int && TypeSpecType != TST_int128 &&
              TypeSpecType != TST_char && TypeSpecType != TST_wchar &&
-             !IsFixedPointType) {
+             !IsFixedPointType && TypeSpecType != TST_extint) {
       S.Diag(TSSLoc, diag::err_invalid_sign_spec)
         << getSpecifierName((TST)TypeSpecType, Policy);
       // signed double -> double.
@@ -1223,7 +1264,8 @@ void DeclSpec::Finish(Sema &S, const PrintingPolicy &Policy) {
                               S.getLocForEndOfToken(getTypeSpecComplexLoc()),
                                                  " double");
       TypeSpecType = TST_double;   // _Complex -> _Complex double.
-    } else if (TypeSpecType == TST_int || TypeSpecType == TST_char) {
+    } else if (TypeSpecType == TST_int || TypeSpecType == TST_char ||
+               TypeSpecType == TST_extint) {
       // Note that this intentionally doesn't include _Complex _Bool.
       if (!S.getLangOpts().CPlusPlus)
         S.Diag(TSTLoc, diag::ext_integer_complex);

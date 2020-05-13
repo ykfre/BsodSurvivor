@@ -146,10 +146,10 @@ tools = [
 # FIXME: Why do we have both `lli` and `%lli` that do slightly different things?
 tools.extend([
     'dsymutil', 'lli', 'lli-child-target', 'llvm-ar', 'llvm-as',
-    'llvm-bcanalyzer', 'llvm-config', 'llvm-cov', 'llvm-cxxdump', 'llvm-cvtres',
-    'llvm-diff', 'llvm-dis', 'llvm-dwarfdump', 'llvm-exegesis', 'llvm-extract',
-    'llvm-isel-fuzzer', 'llvm-ifs', 'llvm-install-name-tool',
-    'llvm-jitlink', 'llvm-opt-fuzzer', 'llvm-lib',
+    'llvm-addr2line', 'llvm-bcanalyzer', 'llvm-config', 'llvm-cov',
+    'llvm-cxxdump', 'llvm-cvtres', 'llvm-diff', 'llvm-dis', 'llvm-dwarfdump',
+    'llvm-exegesis', 'llvm-extract', 'llvm-isel-fuzzer', 'llvm-ifs',
+    'llvm-install-name-tool', 'llvm-jitlink', 'llvm-opt-fuzzer', 'llvm-lib',
     'llvm-link', 'llvm-lto', 'llvm-lto2', 'llvm-mc', 'llvm-mca',
     'llvm-modextract', 'llvm-nm', 'llvm-objcopy', 'llvm-objdump',
     'llvm-pdbutil', 'llvm-profdata', 'llvm-ranlib', 'llvm-rc', 'llvm-readelf',
@@ -197,6 +197,24 @@ else:
 if config.has_plugins:
     config.available_features.add('plugins')
 
+if config.build_examples:
+    config.available_features.add('examples')
+
+if config.linked_bye_extension:
+    config.substitutions.append(('%llvmcheckext', 'CHECK-EXT'))
+    config.substitutions.append(('%loadbye', ''))
+    config.substitutions.append(('%loadnewpmbye', ''))
+else:
+    config.substitutions.append(('%llvmcheckext', 'CHECK-NOEXT'))
+    config.substitutions.append(('%loadbye',
+                                 '-load={}/Bye{}'.format(config.llvm_shlib_dir,
+                                                         config.llvm_shlib_ext)))
+    config.substitutions.append(('%loadnewpmbye',
+                                 '-load-pass-plugin={}/Bye{}'
+                                 .format(config.llvm_shlib_dir,
+                                         config.llvm_shlib_ext)))
+
+
 # Static libraries are not built if BUILD_SHARED_LIBS is ON.
 if not config.build_shared_libs and not config.link_llvm_dylib:
     config.available_features.add('static-libs')
@@ -233,10 +251,6 @@ if have_cxx_shared_library():
 
 if config.libcxx_used:
     config.available_features.add('libcxx-used')
-
-# Direct object generation
-if not 'hexagon' in config.target_triple:
-    config.available_features.add('object-emission')
 
 # LLVM can be configured with an empty default triple
 # Some tests are "generic" and require a valid default triple
@@ -312,15 +326,18 @@ llvm_config.feature_config(
      ('--has-global-isel', {'ON': 'global-isel'})])
 
 if 'darwin' == sys.platform:
-    try:
-        sysctl_cmd = subprocess.Popen(['sysctl', 'hw.optional.fma'],
-                                      stdout=subprocess.PIPE)
-    except OSError:
-        print('Could not exec sysctl')
-    result = sysctl_cmd.stdout.read().decode('ascii')
-    if -1 != result.find('hw.optional.fma: 1'):
-        config.available_features.add('fma3')
-    sysctl_cmd.wait()
+    cmd = ['sysctl', 'hw.optional.fma']
+    sysctl_cmd = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+
+    # Non zero return, probably a permission issue
+    if sysctl_cmd.wait():
+        print(
+          "Warning: sysctl exists but calling \"{}\" failed, defaulting to no fma3.".format(
+          " ".join(cmd)))
+    else:
+        result = sysctl_cmd.stdout.read().decode('ascii')
+        if 'hw.optional.fma: 1' in result:
+            config.available_features.add('fma3')
 
 # .debug_frame is not emitted for targeting Windows x64.
 if not re.match(r'^x86_64.*-(windows-gnu|windows-msvc)', config.target_triple):

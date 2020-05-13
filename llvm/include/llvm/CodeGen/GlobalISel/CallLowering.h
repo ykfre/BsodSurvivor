@@ -18,7 +18,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/TargetCallingConv.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MachineValueType.h"
@@ -28,6 +27,7 @@
 namespace llvm {
 
 class CCState;
+class CallBase;
 class DataLayout;
 class Function;
 class MachineIRBuilder;
@@ -84,7 +84,7 @@ public:
 
     /// Valid if the call has a swifterror inout parameter, and contains the
     /// vreg that the swifterror should be copied into after the call.
-    Register SwiftErrorVReg = 0;
+    Register SwiftErrorVReg;
 
     MDNode *KnownCallees = nullptr;
 
@@ -107,7 +107,7 @@ public:
   /// make these decisions: function formal arguments, call
   /// instruction args, call instruction returns and function
   /// returns. However, once a decision has been made on where an
-  /// arugment should go, exactly what happens can vary slightly. This
+  /// argument should go, exactly what happens can vary slightly. This
   /// class abstracts the differences.
   struct ValueHandler {
     ValueHandler(MachineIRBuilder &MIRBuilder, MachineRegisterInfo &MRI,
@@ -141,6 +141,14 @@ public:
                                       uint64_t Size, MachinePointerInfo &MPO,
                                       CCValAssign &VA) = 0;
 
+    /// An overload which takes an ArgInfo if additional information about
+    /// the arg is needed.
+    virtual void assignValueToAddress(const ArgInfo &Arg, Register Addr,
+                                      uint64_t Size, MachinePointerInfo &MPO,
+                                      CCValAssign &VA) {
+      assignValueToAddress(Arg.Regs[0], Addr, Size, MPO, VA);
+    }
+
     /// Handle custom values, which may be passed into one or more of \p VAs.
     /// \return The number of \p VAs that have been assigned after the first
     ///         one, and which should therefore be skipped from further
@@ -152,7 +160,10 @@ public:
       llvm_unreachable("Custom values not supported");
     }
 
-    Register extendRegister(Register ValReg, CCValAssign &VA);
+    /// Extend a register to the location type given in VA, capped at extending
+    /// to at most MaxSize bits. If MaxSizeBits is 0 then no maximum is set.
+    Register extendRegister(Register ValReg, CCValAssign &VA,
+                            unsigned MaxSizeBits = 0);
 
     virtual bool assignArg(unsigned ValNo, MVT ValVT, MVT LocVT,
                            CCValAssign::LocInfo LocInfo, const ArgInfo &Info,
@@ -328,7 +339,7 @@ public:
   /// range of an immediate jump.
   ///
   /// \return true if the lowering succeeded, false otherwise.
-  bool lowerCall(MachineIRBuilder &MIRBuilder, ImmutableCallSite CS,
+  bool lowerCall(MachineIRBuilder &MIRBuilder, const CallBase &Call,
                  ArrayRef<Register> ResRegs,
                  ArrayRef<ArrayRef<Register>> ArgRegs, Register SwiftErrorVReg,
                  std::function<unsigned()> GetCalleeReg) const;

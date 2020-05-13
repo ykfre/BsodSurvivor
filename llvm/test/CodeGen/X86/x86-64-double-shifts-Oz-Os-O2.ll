@@ -24,7 +24,7 @@ entry:
   ret i64 %or
 }
 
-attributes #0 = { minsize nounwind readnone uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { minsize nounwind readnone uwtable "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 
 ; clang -Os -c test2.cpp -emit-llvm -S
@@ -63,7 +63,7 @@ entry:
   ret i64 %or
 }
 
-attributes #1 = { nounwind optsize readnone uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { nounwind optsize readnone uwtable "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 ; clang -O2 -c test2.cpp -emit-llvm -S
 ; Verify that we do not generate shld insruction when we are not optimizing
@@ -78,9 +78,9 @@ attributes #1 = { nounwind optsize readnone uwtable "less-precise-fpmad"="false"
 define i64 @_Z8lshift12mm(i64 %a, i64 %b) #2 {
 ; CHECK-LABEL: _Z8lshift12mm:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    shlq $12, %rdi
 ; CHECK-NEXT:    shrq $52, %rsi
-; CHECK-NEXT:    leaq (%rsi,%rdi), %rax
+; CHECK-NEXT:    shlq $12, %rdi
+; CHECK-NEXT:    leaq (%rdi,%rsi), %rax
 ; CHECK-NEXT:    retq
 entry:
   %shl = shl i64 %a, 12
@@ -89,7 +89,7 @@ entry:
   ret i64 %or
 }
 
-attributes #2= { nounwind readnone uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #2= { nounwind readnone uwtable "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.module.flags = !{!0}
 !0 = !{i32 1, !"ProfileSummary", !1}

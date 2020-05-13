@@ -8,8 +8,10 @@
 
 #include "AST.h"
 
+#include "FindTarget.h"
 #include "SourceCode.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
@@ -23,7 +25,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Specifiers.h"
 #include "clang/Index/USRGeneration.h"
-#include "clang/Lex/Lexer.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
@@ -94,7 +95,7 @@ getUsingNamespaceDirectives(const DeclContext *DestContext,
   return VisibleNamespaceDecls;
 }
 
-// Goes over all parents of SourceContext until we find a comman ancestor for
+// Goes over all parents of SourceContext until we find a common ancestor for
 // DestContext and SourceContext. Any qualifier including and above common
 // ancestor is redundant, therefore we stop at lowest common ancestor.
 // In addition to that stops early whenever IsVisible returns true. This can be
@@ -299,32 +300,21 @@ llvm::Optional<SymbolID> getSymbolID(const llvm::StringRef MacroName,
   return SymbolID(USR);
 }
 
-std::string shortenNamespace(const llvm::StringRef OriginalName,
-                             const llvm::StringRef CurrentNamespace) {
-  llvm::SmallVector<llvm::StringRef, 8> OriginalParts;
-  llvm::SmallVector<llvm::StringRef, 8> CurrentParts;
-  llvm::SmallVector<llvm::StringRef, 8> Result;
-  OriginalName.split(OriginalParts, "::");
-  CurrentNamespace.split(CurrentParts, "::");
-  auto MinLength = std::min(CurrentParts.size(), OriginalParts.size());
-
-  unsigned DifferentAt = 0;
-  while (DifferentAt < MinLength &&
-         CurrentParts[DifferentAt] == OriginalParts[DifferentAt]) {
-    DifferentAt++;
-  }
-
-  for (unsigned i = DifferentAt; i < OriginalParts.size(); ++i) {
-    Result.push_back(OriginalParts[i]);
-  }
-  return join(Result, "::");
-}
-
-std::string printType(const QualType QT, const DeclContext &Context) {
-  PrintingPolicy PP(Context.getParentASTContext().getPrintingPolicy());
-  PP.SuppressUnwrittenScope = 1;
-  PP.SuppressTagKeyword = 1;
-  return shortenNamespace(QT.getAsString(PP), printNamespaceScope(Context));
+// FIXME: This should be handled while printing underlying decls instead.
+std::string printType(const QualType QT, const DeclContext &CurContext) {
+  std::string Result;
+  llvm::raw_string_ostream OS(Result);
+  auto Decls = explicitReferenceTargets(
+      ast_type_traits::DynTypedNode::create(QT), DeclRelation::Alias);
+  if (!Decls.empty())
+    OS << getQualification(CurContext.getParentASTContext(), &CurContext,
+                           Decls.front(),
+                           /*VisibleNamespaces=*/llvm::ArrayRef<std::string>{});
+  PrintingPolicy PP(CurContext.getParentASTContext().getPrintingPolicy());
+  PP.SuppressScope = true;
+  PP.SuppressTagKeyword = true;
+  QT.print(OS, PP);
+  return OS.str();
 }
 
 QualType declaredType(const TypeDecl *D) {
@@ -426,16 +416,8 @@ public:
 
 llvm::Optional<QualType> getDeducedType(ASTContext &ASTCtx,
                                         SourceLocation Loc) {
-  Token Tok;
-  // Only try to find a deduced type if the token is auto or decltype.
-  if (!Loc.isValid() ||
-      Lexer::getRawToken(Loc, Tok, ASTCtx.getSourceManager(),
-                         ASTCtx.getLangOpts(), false) ||
-      !Tok.is(tok::raw_identifier) ||
-      !(Tok.getRawIdentifier() == "auto" ||
-        Tok.getRawIdentifier() == "decltype")) {
+  if (!Loc.isValid())
     return {};
-  }
   DeducedTypeVisitor V(Loc);
   V.TraverseAST(ASTCtx);
   if (V.DeducedType.isNull())
@@ -464,7 +446,7 @@ std::string getQualification(ASTContext &Context,
 
 std::string getQualification(ASTContext &Context,
                              const DeclContext *DestContext,
-                             SourceLocation InsertionPoint, const NamedDecl *ND,
+                             const NamedDecl *ND,
                              llvm::ArrayRef<std::string> VisibleNamespaces) {
   for (llvm::StringRef NS : VisibleNamespaces) {
     assert(NS.endswith("::"));
@@ -480,6 +462,13 @@ std::string getQualification(ASTContext &Context,
           return OS.str() == Namespace;
         });
       });
+}
+
+bool hasUnstableLinkage(const Decl *D) {
+  // Linkage of a ValueDecl depends on the type.
+  // If that's not deduced yet, deducing it may change the linkage.
+  auto *VD = llvm::dyn_cast_or_null<ValueDecl>(D);
+  return VD && !VD->getType().isNull() && VD->getType()->isUndeducedType();
 }
 
 } // namespace clangd

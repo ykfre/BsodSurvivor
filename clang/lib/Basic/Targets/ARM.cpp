@@ -107,7 +107,7 @@ void ARMTargetInfo::setArchInfo() {
   StringRef ArchName = getTriple().getArchName();
 
   ArchISA = llvm::ARM::parseArchISA(ArchName);
-  CPU = llvm::ARM::getDefaultCPU(ArchName);
+  CPU = std::string(llvm::ARM::getDefaultCPU(ArchName));
   llvm::ARM::ArchKind AK = llvm::ARM::parseArch(ArchName);
   if (AK != llvm::ARM::ArchKind::INVALID)
     ArchKind = AK;
@@ -154,6 +154,8 @@ bool ARMTargetInfo::hasMVEFloat() const {
   return hasMVE() && (MVE & MVE_FP);
 }
 
+bool ARMTargetInfo::hasCDE() const { return getARMCDECoprocMask() != 0; }
+
 bool ARMTargetInfo::isThumb() const {
   return ArchISA == llvm::ARM::ISAKind::THUMB;
 }
@@ -199,6 +201,8 @@ StringRef ARMTargetInfo::getCPUAttr() const {
     return "8_4A";
   case llvm::ARM::ArchKind::ARMV8_5A:
     return "8_5A";
+  case llvm::ARM::ArchKind::ARMV8_6A:
+    return "8_6A";
   case llvm::ARM::ArchKind::ARMV8MBaseline:
     return "8M_BASE";
   case llvm::ARM::ArchKind::ARMV8MMainline:
@@ -372,7 +376,7 @@ bool ARMTargetInfo::initFeatureMap(
   llvm::ARM::getFPUFeatures(FPUKind, TargetFeatures);
 
   // get default Extension features
-  unsigned Extensions = llvm::ARM::getDefaultExtensions(CPU, Arch);
+  uint64_t Extensions = llvm::ARM::getDefaultExtensions(CPU, Arch);
   llvm::ARM::getExtensionFeatures(Extensions, TargetFeatures);
 
   for (auto Feature : TargetFeatures)
@@ -421,7 +425,9 @@ bool ARMTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
   // Note that SoftFloatABI is initialized in our constructor.
   HWDiv = 0;
   DotProd = 0;
+  HasMatMul = 0;
   HasFloat16 = true;
+  ARMCDECoprocMask = 0;
 
   // This does not diagnose illegal cases like having both
   // "+vfpv2" and "+vfpv3" or having "+neon" and "-fp64".
@@ -480,14 +486,18 @@ bool ARMTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
     } else if (Feature == "+dotprod") {
       DotProd = true;
     } else if (Feature == "+mve") {
-      DSP = 1;
       MVE |= MVE_INT;
     } else if (Feature == "+mve.fp") {
-      DSP = 1;
       HasLegalHalfType = true;
       FPU |= FPARMV8;
       MVE |= MVE_INT | MVE_FP;
       HW_FP |= HW_FP_SP | HW_FP_HP;
+    } else if (Feature == "+i8mm") {
+      HasMatMul = 1;
+    } else if (Feature.size() == strlen("+cdecp0") && Feature >= "+cdecp0" &&
+               Feature <= "+cdecp7") {
+      unsigned Coproc = Feature.back() - '0';
+      ARMCDECoprocMask |= (1U << Coproc);
     }
   }
 
@@ -760,6 +770,12 @@ void ARMTargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__ARM_FEATURE_MVE", hasMVEFloat() ? "3" : "1");
   }
 
+  if (hasCDE()) {
+    Builder.defineMacro("__ARM_FEATURE_CDE", "1");
+    Builder.defineMacro("__ARM_FEATURE_CDE_COPROC",
+                        "0x" + Twine::utohexstr(getARMCDECoprocMask()));
+  }
+
   Builder.defineMacro("__ARM_SIZEOF_WCHAR_T",
                       Twine(Opts.WCharSize ? Opts.WCharSize : 4));
 
@@ -807,6 +823,9 @@ void ARMTargetInfo::getTargetDefines(const LangOptions &Opts,
   if (DotProd)
     Builder.defineMacro("__ARM_FEATURE_DOTPROD", "1");
 
+  if (HasMatMul)
+    Builder.defineMacro("__ARM_FEATURE_MATMUL_INT8", "1");
+
   switch (ArchKind) {
   default:
     break;
@@ -819,6 +838,7 @@ void ARMTargetInfo::getTargetDefines(const LangOptions &Opts,
   case llvm::ARM::ArchKind::ARMV8_3A:
   case llvm::ARM::ArchKind::ARMV8_4A:
   case llvm::ARM::ArchKind::ARMV8_5A:
+  case llvm::ARM::ArchKind::ARMV8_6A:
     getTargetDefinesARMV83A(Opts, Builder);
     break;
   }

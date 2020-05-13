@@ -97,6 +97,15 @@ void Instruction::moveBefore(BasicBlock &BB,
   BB.getInstList().splice(I, getParent()->getInstList(), getIterator());
 }
 
+bool Instruction::comesBefore(const Instruction *Other) const {
+  assert(Parent && Other->Parent &&
+         "instructions without BB parents have no order");
+  assert(Parent == Other->Parent && "cross-BB instruction order comparison");
+  if (!Parent->isInstrOrderValid())
+    Parent->renumberInstructions();
+  return Order < Other->Order;
+}
+
 void Instruction::setHasNoUnsignedWrap(bool b) {
   cast<OverflowingBinaryOperator>(this)->setHasNoUnsignedWrap(b);
 }
@@ -434,6 +443,9 @@ static bool haveSameSpecialState(const Instruction *I1, const Instruction *I2,
            RMWI->isVolatile() == cast<AtomicRMWInst>(I2)->isVolatile() &&
            RMWI->getOrdering() == cast<AtomicRMWInst>(I2)->getOrdering() &&
            RMWI->getSyncScopeID() == cast<AtomicRMWInst>(I2)->getSyncScopeID();
+  if (const ShuffleVectorInst *SVI = dyn_cast<ShuffleVectorInst>(I1))
+    return SVI->getShuffleMask() ==
+           cast<ShuffleVectorInst>(I2)->getShuffleMask();
 
   return true;
 }

@@ -1,4 +1,4 @@
-//===-- Process.cpp ---------------------------------------------*- C++ -*-===//
+//===-- Process.cpp -------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -38,6 +38,7 @@
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Target/ABI.h"
+#include "lldb/Target/AssertFrameRecognizer.h"
 #include "lldb/Target/DynamicLoader.h"
 #include "lldb/Target/InstrumentationRuntime.h"
 #include "lldb/Target/JITLoader.h"
@@ -59,6 +60,7 @@
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanBase.h"
 #include "lldb/Target/ThreadPlanCallFunction.h"
+#include "lldb/Target/ThreadPlanStack.h"
 #include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/Event.h"
 #include "lldb/Utility/Log.h"
@@ -137,18 +139,11 @@ ProcessProperties::ProcessProperties(lldb_private::Process *process)
         Process::GetGlobalProperties().get());
     m_collection_sp->SetValueChangedCallback(
         ePropertyPythonOSPluginPath,
-        ProcessProperties::OptionValueChangedCallback, this);
+        [this] { m_process->LoadOperatingSystemPlugin(true); });
   }
 }
 
 ProcessProperties::~ProcessProperties() = default;
-
-void ProcessProperties::OptionValueChangedCallback(void *baton,
-                                                   OptionValue *option_value) {
-  ProcessProperties *properties = (ProcessProperties *)baton;
-  if (properties->m_process)
-    properties->m_process->LoadOperatingSystemPlugin(true);
-}
 
 bool ProcessProperties::GetDisableMemoryCache() const {
   const uint32_t idx = ePropertyDisableMemCache;
@@ -483,7 +478,7 @@ Process::Process(lldb::TargetSP target_sp, ListenerSP listener_sp,
       m_mod_id(), m_process_unique_id(0), m_thread_index_id(0),
       m_thread_id_to_index_id_map(), m_exit_status(-1), m_exit_string(),
       m_exit_status_mutex(), m_thread_mutex(), m_thread_list_real(this),
-      m_thread_list(this), m_extended_thread_list(this),
+      m_thread_list(this), m_thread_plans(*this), m_extended_thread_list(this),
       m_extended_thread_stop_id(0), m_queue_list(this), m_queue_list_stop_id(0),
       m_notifications(), m_image_tokens(), m_listener_sp(listener_sp),
       m_breakpoint_site_list(), m_dynamic_checkers_up(),
@@ -545,6 +540,8 @@ Process::Process(lldb::TargetSP target_sp, ListenerSP listener_sp,
       target_sp->GetPlatform()->GetDefaultMemoryCacheLineSize();
   if (!value_sp->OptionWasSet() && platform_cache_line_size != 0)
     value_sp->SetUInt64Value(platform_cache_line_size);
+
+  RegisterAssertFrameRecognizer(this);
 }
 
 Process::~Process() {
@@ -604,6 +601,7 @@ void Process::Finalize() {
   m_system_runtime_up.reset();
   m_dyld_up.reset();
   m_jit_loaders_up.reset();
+  m_thread_plans.Clear();
   m_thread_list_real.Destroy();
   m_thread_list.Destroy();
   m_extended_thread_list.Destroy();
@@ -941,11 +939,17 @@ bool Process::HandleProcessStateChangedEvent(const EventSP &event_sp,
         Debugger &debugger = process_sp->GetTarget().GetDebugger();
         if (debugger.GetTargetList().GetSelectedTarget().get() ==
             &process_sp->GetTarget()) {
+          ThreadSP thread_sp = process_sp->GetThreadList().GetSelectedThread();
+
+          if (!thread_sp || !thread_sp->IsValid())
+            return false;
+
           const bool only_threads_with_stop_reason = true;
-          const uint32_t start_frame = 0;
+          const uint32_t start_frame = thread_sp->GetSelectedFrameIndex();
           const uint32_t num_frames = 1;
           const uint32_t num_frames_with_source = 1;
           const bool stop_format = true;
+
           process_sp->GetStatus(*stream);
           process_sp->GetThreadStatus(*stream, only_threads_with_stop_reason,
                                       start_frame, num_frames,
@@ -956,14 +960,11 @@ bool Process::HandleProcessStateChangedEvent(const EventSP &event_sp,
             ValueObjectSP valobj_sp = StopInfo::GetCrashingDereference(
                 curr_thread_stop_info_sp, &crashing_address);
             if (valobj_sp) {
-              const bool qualify_cxx_base_classes = false;
-
               const ValueObject::GetExpressionPathFormat format =
                   ValueObject::GetExpressionPathFormat::
                       eGetExpressionPathFormatHonorPointers;
               stream->PutCString("Likely cause: ");
-              valobj_sp->GetExpressionPath(*stream, qualify_cxx_base_classes,
-                                           format);
+              valobj_sp->GetExpressionPath(*stream, format);
               stream->Printf(" accessed 0x%" PRIx64 "\n", crashing_address);
             }
           }
@@ -1183,9 +1184,12 @@ void Process::UpdateThreadListIfNeeded() {
   const uint32_t stop_id = GetStopID();
   if (m_thread_list.GetSize(false) == 0 ||
       stop_id != m_thread_list.GetStopID()) {
+    bool clear_unused_threads = true;
     const StateType state = GetPrivateState();
     if (StateIsStoppedState(state, true)) {
       std::lock_guard<std::recursive_mutex> guard(m_thread_list.GetMutex());
+      m_thread_list.SetStopID(stop_id);
+
       // m_thread_list does have its own mutex, but we need to hold onto the
       // mutex between the call to UpdateThreadList(...) and the
       // os->UpdateThreadList(...) so it doesn't change on us
@@ -1206,6 +1210,10 @@ void Process::UpdateThreadListIfNeeded() {
           size_t num_old_threads = old_thread_list.GetSize(false);
           for (size_t i = 0; i < num_old_threads; ++i)
             old_thread_list.GetThreadAtIndex(i, false)->ClearBackingThread();
+          // See if the OS plugin reports all threads.  If it does, then
+          // it is safe to clear unseen thread's plans here.  Otherwise we 
+          // should preserve them in case they show up again:
+          clear_unused_threads = GetTarget().GetOSPluginReportsAllThreads();
 
           // Turn off dynamic types to ensure we don't run any expressions.
           // Objective-C can run an expression to determine if a SBValue is a
@@ -1232,7 +1240,7 @@ void Process::UpdateThreadListIfNeeded() {
             target.SetPreferDynamicValue(saved_prefer_dynamic);
         } else {
           // No OS plug-in, the new thread list is the same as the real thread
-          // list
+          // list.
           new_thread_list = real_thread_list;
         }
 
@@ -1249,8 +1257,40 @@ void Process::UpdateThreadListIfNeeded() {
           m_queue_list_stop_id = GetLastNaturalStopID();
         }
       }
+      // Now update the plan stack map.
+      // If we do have an OS plugin, any absent real threads in the
+      // m_thread_list have already been removed from the ThreadPlanStackMap.
+      // So any remaining threads are OS Plugin threads, and those we want to
+      // preserve in case they show up again.
+      m_thread_plans.Update(m_thread_list, clear_unused_threads);
     }
   }
+}
+
+ThreadPlanStack *Process::FindThreadPlans(lldb::tid_t tid) {
+  return m_thread_plans.Find(tid);
+}
+
+bool Process::PruneThreadPlansForTID(lldb::tid_t tid) {
+  return m_thread_plans.PrunePlansForTID(tid);
+}
+
+void Process::PruneThreadPlans() {
+  m_thread_plans.Update(GetThreadList(), true, false);
+}
+
+bool Process::DumpThreadPlansForTID(Stream &strm, lldb::tid_t tid,
+                                    lldb::DescriptionLevel desc_level,
+                                    bool internal, bool condense_trivial,
+                                    bool skip_unreported_plans) {
+  return m_thread_plans.DumpPlansForTID(
+      strm, tid, desc_level, internal, condense_trivial, skip_unreported_plans);
+}
+void Process::DumpThreadPlans(Stream &strm, lldb::DescriptionLevel desc_level,
+                              bool internal, bool condense_trivial,
+                              bool skip_unreported_plans) {
+  m_thread_plans.DumpPlans(strm, desc_level, internal, condense_trivial,
+                           skip_unreported_plans);
 }
 
 void Process::UpdateQueueListIfNeeded() {
@@ -2800,9 +2840,9 @@ Status Process::Attach(ProcessAttachInfo &attach_info) {
           match_info.GetProcessInfo() = attach_info;
           match_info.SetNameMatchType(NameMatch::Equals);
           platform_sp->FindProcesses(match_info, process_infos);
-          const uint32_t num_matches = process_infos.GetSize();
+          const uint32_t num_matches = process_infos.size();
           if (num_matches == 1) {
-            attach_pid = process_infos.GetProcessIDAtIndex(0);
+            attach_pid = process_infos[0].GetProcessID();
             // Fall through and attach using the above process ID
           } else {
             match_info.GetProcessInfo().GetExecutableFile().GetPath(
@@ -2811,7 +2851,7 @@ Status Process::Attach(ProcessAttachInfo &attach_info) {
               StreamString s;
               ProcessInstanceInfo::DumpTableHeader(s, true, false);
               for (size_t i = 0; i < num_matches; i++) {
-                process_infos.GetProcessInfoAtIndex(i).DumpAsTableRow(
+                process_infos[i].DumpAsTableRow(
                     s, platform_sp->GetUserIDResolver(), true, false);
               }
               error.SetErrorStringWithFormat(
@@ -3232,6 +3272,10 @@ Status Process::Detach(bool keep_stopped) {
 }
 
 Status Process::Destroy(bool force_kill) {
+  // If we've already called Process::Finalize then there's nothing useful to
+  // be done here.  Finalize has actually called Destroy already.
+  if (m_finalize_called)
+    return {};
 
   // Tell ourselves we are in the process of destroying the process, so that we
   // don't do any unnecessary work that might hinder the destruction.  Remember
@@ -3272,8 +3316,8 @@ Status Process::Destroy(bool force_kill) {
       DidDestroy();
       StopPrivateStateThread();
     }
-    m_stdio_communication.Disconnect();
     m_stdio_communication.StopReadThread();
+    m_stdio_communication.Disconnect();
     m_stdin_forward = false;
 
     if (m_process_input_reader) {
@@ -3342,8 +3386,8 @@ bool Process::ShouldBroadcastEvent(Event *event_ptr) {
   case eStateExited:
   case eStateUnloaded:
     m_stdio_communication.SynchronizeWithReadThread();
-    m_stdio_communication.Disconnect();
     m_stdio_communication.StopReadThread();
+    m_stdio_communication.Disconnect();
     m_stdin_forward = false;
 
     LLVM_FALLTHROUGH;
@@ -4429,23 +4473,18 @@ protected:
 
 void Process::SetSTDIOFileDescriptor(int fd) {
   // First set up the Read Thread for reading/handling process I/O
+  m_stdio_communication.SetConnection(
+      std::make_unique<ConnectionFileDescriptor>(fd, true));
+  if (m_stdio_communication.IsConnected()) {
+    m_stdio_communication.SetReadThreadBytesReceivedCallback(
+        STDIOReadThreadBytesReceived, this);
+    m_stdio_communication.StartReadThread();
 
-  std::unique_ptr<ConnectionFileDescriptor> conn_up(
-      new ConnectionFileDescriptor(fd, true));
+    // Now read thread is set up, set up input reader.
 
-  if (conn_up) {
-    m_stdio_communication.SetConnection(conn_up.release());
-    if (m_stdio_communication.IsConnected()) {
-      m_stdio_communication.SetReadThreadBytesReceivedCallback(
-          STDIOReadThreadBytesReceived, this);
-      m_stdio_communication.StartReadThread();
-
-      // Now read thread is set up, set up input reader.
-
-      if (!m_process_input_reader)
-        m_process_input_reader =
-            std::make_shared<IOHandlerProcessSTDIO>(this, fd);
-    }
+    if (!m_process_input_reader)
+      m_process_input_reader =
+          std::make_shared<IOHandlerProcessSTDIO>(this, fd);
   }
 }
 
@@ -4467,7 +4506,8 @@ bool Process::PushProcessIOHandler() {
     // existing IOHandler that potentially provides the user interface (e.g.
     // the IOHandler for Editline).
     bool cancel_top_handler = !m_mod_id.IsRunningUtilityFunction();
-    GetTarget().GetDebugger().PushIOHandler(io_handler_sp, cancel_top_handler);
+    GetTarget().GetDebugger().RunIOHandlerAsync(io_handler_sp,
+                                                cancel_top_handler);
     return true;
   }
   return false;
@@ -4476,7 +4516,7 @@ bool Process::PushProcessIOHandler() {
 bool Process::PopProcessIOHandler() {
   IOHandlerSP io_handler_sp(m_process_input_reader);
   if (io_handler_sp)
-    return GetTarget().GetDebugger().PopIOHandler(io_handler_sp);
+    return GetTarget().GetDebugger().RemoveIOHandler(io_handler_sp);
   return false;
 }
 
@@ -5756,12 +5796,12 @@ size_t Process::AddImageToken(lldb::addr_t image_ptr) {
 lldb::addr_t Process::GetImagePtrFromToken(size_t token) const {
   if (token < m_image_tokens.size())
     return m_image_tokens[token];
-  return LLDB_INVALID_IMAGE_TOKEN;
+  return LLDB_INVALID_ADDRESS;
 }
 
 void Process::ResetImageToken(size_t token) {
   if (token < m_image_tokens.size())
-    m_image_tokens[token] = LLDB_INVALID_IMAGE_TOKEN;
+    m_image_tokens[token] = LLDB_INVALID_ADDRESS;
 }
 
 Address
@@ -5778,12 +5818,11 @@ Process::AdvanceAddressToNextBranchInstruction(Address default_stop_addr,
   if (!default_stop_addr.IsValid())
     return retval;
 
-  ExecutionContext exe_ctx(this);
   const char *plugin_name = nullptr;
   const char *flavor = nullptr;
   const bool prefer_file_cache = true;
   disassembler_sp = Disassembler::DisassembleRange(
-      target.GetArchitecture(), plugin_name, flavor, exe_ctx, range_bounds,
+      target.GetArchitecture(), plugin_name, flavor, GetTarget(), range_bounds,
       prefer_file_cache);
   if (disassembler_sp)
     insn_list = &disassembler_sp->GetInstructionList();

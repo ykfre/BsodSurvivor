@@ -25,13 +25,16 @@
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
 
 #include <algorithm>
+#include <chrono>
 #include <map>
 
+#include <TargetConditionals.h>
 #import <Foundation/Foundation.h>
 
 #include "DNBDataRef.h"
@@ -86,7 +89,7 @@ static CFStringRef CopyBundleIDForPath(const char *app_bundle_path,
 #if defined(WITH_BKS) || defined(WITH_FBS)
 #import <Foundation/Foundation.h>
 static const int OPEN_APPLICATION_TIMEOUT_ERROR = 111;
-typedef void (*SetErrorFunction)(NSInteger, DNBError &);
+typedef void (*SetErrorFunction)(NSInteger, std::string, DNBError &);
 typedef bool (*CallOpenApplicationFunction)(NSString *bundleIDNSStr,
                                             NSDictionary *options,
                                             DNBError &error, pid_t *return_pid);
@@ -122,6 +125,7 @@ static bool CallBoardSystemServiceOpenApplication(NSString *bundleIDNSStr,
   mach_port_t client_port = [system_service createClientPort];
   __block dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
   __block ErrorFlavor open_app_error = no_error_enum_value;
+  __block std::string open_app_error_string;
   bool wants_pid = (return_pid != NULL);
   __block pid_t pid_in_block;
 
@@ -159,15 +163,20 @@ static bool CallBoardSystemServiceOpenApplication(NSString *bundleIDNSStr,
              } else {
                const char *error_str =
                    [(NSString *)[bks_error localizedDescription] UTF8String];
+               if (error_str) {
+                 open_app_error_string = error_str;
+                 DNBLogError("In app launch attempt, got error "
+                             "localizedDescription '%s'.", error_str);
+                 const char *obj_desc = 
+                      [NSString stringWithFormat:@"%@", bks_error].UTF8String;
+                 DNBLogError("In app launch attempt, got error "
+                             "NSError object description: '%s'.",
+                             obj_desc);
+               }
                DNBLogThreadedIf(LOG_PROCESS, "In completion handler for send "
                                              "event, got error \"%s\"(%ld).",
                                 error_str ? error_str : "<unknown error>",
                                 open_app_error);
-               // REMOVE ME
-               DNBLogError("In completion handler for send event, got error "
-                           "\"%s\"(%ld).",
-                           error_str ? error_str : "<unknown error>",
-                           open_app_error);
              }
 
              [system_service release];
@@ -190,7 +199,7 @@ static bool CallBoardSystemServiceOpenApplication(NSString *bundleIDNSStr,
     error.SetError(OPEN_APPLICATION_TIMEOUT_ERROR, DNBError::Generic);
     error.SetErrorString("timed out trying to launch app");
   } else if (open_app_error != no_error_enum_value) {
-    error_function(open_app_error, error);
+    error_function(open_app_error, open_app_error_string, error);
     DNBLogError("unable to launch the application with CFBundleIdentifier '%s' "
                 "bks_error = %u",
                 cstr, open_app_error);
@@ -245,19 +254,19 @@ static bool IsBKSProcess(nub_process_t pid) {
   return app_state != BKSApplicationStateUnknown;
 }
 
-static void SetBKSError(NSInteger error_code, DNBError &error) {
+static void SetBKSError(NSInteger error_code, 
+                        std::string error_description, 
+                        DNBError &error) {
   error.SetError(error_code, DNBError::BackBoard);
   NSString *err_nsstr = ::BKSOpenApplicationErrorCodeToString(
       (BKSOpenApplicationErrorCode)error_code);
-  const char *err_str = NULL;
-  if (err_nsstr == NULL)
-    err_str = "unknown BKS error";
-  else {
+  std::string err_str = "unknown BKS error";
+  if (error_description.empty() == false) {
+    err_str = error_description;
+  } else if (err_nsstr != nullptr) {
     err_str = [err_nsstr UTF8String];
-    if (err_str == NULL)
-      err_str = "unknown BKS error";
   }
-  error.SetErrorString(err_str);
+  error.SetErrorString(err_str.c_str());
 }
 
 static bool BKSAddEventDataToOptions(NSMutableDictionary *options,
@@ -355,19 +364,19 @@ static bool IsFBSProcess(nub_process_t pid) {
 }
 #endif
 
-static void SetFBSError(NSInteger error_code, DNBError &error) {
+static void SetFBSError(NSInteger error_code, 
+                        std::string error_description, 
+                        DNBError &error) {
   error.SetError((DNBError::ValueType)error_code, DNBError::FrontBoard);
   NSString *err_nsstr = ::FBSOpenApplicationErrorCodeToString(
       (FBSOpenApplicationErrorCode)error_code);
-  const char *err_str = NULL;
-  if (err_nsstr == NULL)
-    err_str = "unknown FBS error";
-  else {
+  std::string err_str = "unknown FBS error";
+  if (error_description.empty() == false) {
+    err_str = error_description;
+  } else if (err_nsstr != nullptr) {
     err_str = [err_nsstr UTF8String];
-    if (err_str == NULL)
-      err_str = "unknown FBS error";
   }
-  error.SetErrorString(err_str);
+  error.SetErrorString(err_str.c_str());
 }
 
 static bool FBSAddEventDataToOptions(NSMutableDictionary *options,
@@ -481,6 +490,7 @@ MachProcess::MachProcess()
       m_stdio_mutex(PTHREAD_MUTEX_RECURSIVE), m_stdout_data(),
       m_profile_enabled(false), m_profile_interval_usec(0), m_profile_thread(0),
       m_profile_data_mutex(PTHREAD_MUTEX_RECURSIVE), m_profile_data(),
+      m_profile_events(0, eMachProcessProfileCancel),
       m_thread_actions(), m_exception_messages(),
       m_exception_messages_mutex(PTHREAD_MUTEX_RECURSIVE), m_thread_list(),
       m_activities(), m_state(eStateUnloaded),
@@ -591,6 +601,16 @@ nub_addr_t MachProcess::GetTSDAddressForThread(
       plo_pthread_tsd_entry_size);
 }
 
+/// Determine whether this is running on macOS.
+/// Since debugserver runs on the same machine as the process, we can
+/// just look at the compilation target.
+static bool IsMacOSHost() {
+#if TARGET_OS_OSX == 1
+  return true;
+#else
+  return false;
+#endif
+}
 
 const char *MachProcess::GetDeploymentInfo(const struct load_command& lc,
                                            uint64_t load_command_address,
@@ -612,15 +632,17 @@ const char *MachProcess::GetDeploymentInfo(const struct load_command& lc,
     minor_version = (vers_cmd.sdk >> 8) & 0xffu;
     patch_version = vers_cmd.sdk & 0xffu;
 
+    // Handle the older LC_VERSION load commands, which don't
+    // distinguish between simulator and real hardware.
     switch (cmd) {
     case LC_VERSION_MIN_IPHONEOS:
-      return "ios";
+      return IsMacOSHost() ? "iossimulator": "ios";
     case LC_VERSION_MIN_MACOSX:
       return "macosx";
     case LC_VERSION_MIN_TVOS:
-      return "tvos";
+      return IsMacOSHost() ? "tvossimulator": "tvos";
     case LC_VERSION_MIN_WATCHOS:
-      return "watchos";
+      return IsMacOSHost() ? "watchossimulator" : "watchos";
     default:
       return nullptr;
     }
@@ -642,14 +664,17 @@ const char *MachProcess::GetDeploymentInfo(const struct load_command& lc,
     case PLATFORM_MACCATALYST:
       return "maccatalyst";
     case PLATFORM_IOS:
-    case PLATFORM_IOSSIMULATOR:
       return "ios";
+    case PLATFORM_IOSSIMULATOR:
+      return "iossimulator";
     case PLATFORM_TVOS:
-    case PLATFORM_TVOSSIMULATOR:
       return "tvos";
+    case PLATFORM_TVOSSIMULATOR:
+      return "tvossimulator";
     case PLATFORM_WATCHOS:
-    case PLATFORM_WATCHOSSIMULATOR:
       return "watchos";
+    case PLATFORM_WATCHOSSIMULATOR:
+      return "watchossimulator";
     case PLATFORM_BRIDGEOS:
       return "bridgeos";
     case PLATFORM_DRIVERKIT:
@@ -730,6 +755,8 @@ bool MachProcess::GetMachOInformationFromMemory(
       this_seg.nsects = seg.nsects;
       this_seg.flags = seg.flags;
       inf.segments.push_back(this_seg);
+      if (this_seg.name == "ExecExtraSuspend")
+        m_task.TaskWillExecProcessesSuspended();
     }
     if (lc.cmd == LC_SEGMENT_64) {
       struct segment_command_64 seg;
@@ -751,6 +778,8 @@ bool MachProcess::GetMachOInformationFromMemory(
       this_seg.nsects = seg.nsects;
       this_seg.flags = seg.flags;
       inf.segments.push_back(this_seg);
+      if (this_seg.name == "ExecExtraSuspend")
+        m_task.TaskWillExecProcessesSuspended();
     }
     if (lc.cmd == LC_UUID) {
       struct uuid_command uuidcmd;
@@ -1286,10 +1315,7 @@ void MachProcess::Clear(bool detaching) {
     m_exception_messages.clear();
   }
   m_activities.Clear();
-  if (m_profile_thread) {
-    pthread_join(m_profile_thread, NULL);
-    m_profile_thread = NULL;
-  }
+  StopProfileThread();
 }
 
 bool MachProcess::StartSTDIOThread() {
@@ -1308,9 +1334,17 @@ void MachProcess::SetEnableAsyncProfiling(bool enable, uint64_t interval_usec,
   if (m_profile_enabled && (m_profile_thread == NULL)) {
     StartProfileThread();
   } else if (!m_profile_enabled && m_profile_thread) {
-    pthread_join(m_profile_thread, NULL);
-    m_profile_thread = NULL;
+    StopProfileThread();
   }
+}
+
+void MachProcess::StopProfileThread() {
+  if (m_profile_thread == NULL)
+    return;
+  m_profile_events.SetEvents(eMachProcessProfileCancel);
+  pthread_join(m_profile_thread, NULL);
+  m_profile_thread = NULL;
+  m_profile_events.ResetEvents(eMachProcessProfileCancel);
 }
 
 bool MachProcess::StartProfileThread() {
@@ -1413,29 +1447,29 @@ bool MachProcess::Interrupt() {
 bool MachProcess::Signal(int signal, const struct timespec *timeout_abstime) {
   DNBLogThreadedIf(LOG_PROCESS,
                    "MachProcess::Signal (signal = %d, timeout = %p)", signal,
-                   reinterpret_cast<const void *>(timeout_abstime));
+                   static_cast<const void *>(timeout_abstime));
   nub_state_t state = GetState();
   if (::kill(ProcessID(), signal) == 0) {
     // If we were running and we have a timeout, wait for the signal to stop
     if (IsRunning(state) && timeout_abstime) {
-      DNBLogThreadedIf(LOG_PROCESS, "MachProcess::Signal (signal = %d, timeout "
-                                    "= %p) waiting for signal to stop "
-                                    "process...",
-                       signal, reinterpret_cast<const void *>(timeout_abstime));
+      DNBLogThreadedIf(LOG_PROCESS,
+                       "MachProcess::Signal (signal = %d, timeout "
+                       "= %p) waiting for signal to stop "
+                       "process...",
+                       signal, static_cast<const void *>(timeout_abstime));
       m_private_events.WaitForSetEvents(eEventProcessStoppedStateChanged,
                                         timeout_abstime);
       state = GetState();
       DNBLogThreadedIf(
           LOG_PROCESS,
           "MachProcess::Signal (signal = %d, timeout = %p) state = %s", signal,
-          reinterpret_cast<const void *>(timeout_abstime),
-          DNBStateAsString(state));
+          static_cast<const void *>(timeout_abstime), DNBStateAsString(state));
       return !IsRunning(state);
     }
     DNBLogThreadedIf(
         LOG_PROCESS,
         "MachProcess::Signal (signal = %d, timeout = %p) not waiting...",
-        signal, reinterpret_cast<const void *>(timeout_abstime));
+        signal, static_cast<const void *>(timeout_abstime));
     return true;
   }
   DNBError err(errno, DNBError::POSIX);
@@ -1739,10 +1773,10 @@ DNBBreakpoint *MachProcess::CreateBreakpoint(nub_addr_t addr, nub_size_t length,
     bp = m_breakpoints.Add(addr, length, hardware);
 
   if (EnableBreakpoint(addr)) {
-    DNBLogThreadedIf(LOG_BREAKPOINTS, "MachProcess::CreateBreakpoint ( addr = "
-                                      "0x%8.8llx, length = %llu) => %p",
-                     (uint64_t)addr, (uint64_t)length,
-                     reinterpret_cast<void *>(bp));
+    DNBLogThreadedIf(LOG_BREAKPOINTS,
+                     "MachProcess::CreateBreakpoint ( addr = "
+                     "0x%8.8llx, length = %llu) => %p",
+                     (uint64_t)addr, (uint64_t)length, static_cast<void *>(bp));
     return bp;
   } else if (bp->Release() == 0) {
     m_breakpoints.Remove(addr);
@@ -1771,10 +1805,10 @@ DNBBreakpoint *MachProcess::CreateWatchpoint(nub_addr_t addr, nub_size_t length,
   wp->SetIsWatchpoint(watch_flags);
 
   if (EnableWatchpoint(addr)) {
-    DNBLogThreadedIf(LOG_WATCHPOINTS, "MachProcess::CreateWatchpoint ( addr = "
-                                      "0x%8.8llx, length = %llu) => %p",
-                     (uint64_t)addr, (uint64_t)length,
-                     reinterpret_cast<void *>(wp));
+    DNBLogThreadedIf(LOG_WATCHPOINTS,
+                     "MachProcess::CreateWatchpoint ( addr = "
+                     "0x%8.8llx, length = %llu) => %p",
+                     (uint64_t)addr, (uint64_t)length, static_cast<void *>(wp));
     return wp;
   } else {
     DNBLogThreadedIf(LOG_WATCHPOINTS, "MachProcess::CreateWatchpoint ( addr = "
@@ -2303,7 +2337,7 @@ void MachProcess::AppendSTDOUT(char *s, size_t len) {
 
 size_t MachProcess::GetAvailableSTDOUT(char *buf, size_t buf_size) {
   DNBLogThreadedIf(LOG_PROCESS, "MachProcess::%s (&%p[%llu]) ...", __FUNCTION__,
-                   reinterpret_cast<void *>(buf), (uint64_t)buf_size);
+                   static_cast<void *>(buf), (uint64_t)buf_size);
   PTHREAD_MUTEX_LOCKER(locker, m_stdio_mutex);
   size_t bytes_available = m_stdout_data.size();
   if (bytes_available > 0) {
@@ -2463,7 +2497,7 @@ void MachProcess::SignalAsyncProfileData(const char *info) {
 
 size_t MachProcess::GetAsyncProfileData(char *buf, size_t buf_size) {
   DNBLogThreadedIf(LOG_PROCESS, "MachProcess::%s (&%p[%llu]) ...", __FUNCTION__,
-                   reinterpret_cast<void *>(buf), (uint64_t)buf_size);
+                   static_cast<void *>(buf), (uint64_t)buf_size);
   PTHREAD_MUTEX_LOCKER(locker, m_profile_data_mutex);
   if (m_profile_data.empty())
     return 0;
@@ -2505,10 +2539,20 @@ void *MachProcess::ProfileThread(void *arg) {
       // Done. Get out of this thread.
       break;
     }
-
-    // A simple way to set up the profile interval. We can also use select() or
-    // dispatch timer source if necessary.
-    usleep(proc->ProfileInterval());
+    timespec ts;
+    {
+      using namespace std::chrono;
+      std::chrono::microseconds dur(proc->ProfileInterval());
+      const auto dur_secs = duration_cast<seconds>(dur);
+      const auto dur_usecs = dur % std::chrono::seconds(1);
+      DNBTimer::OffsetTimeOfDay(&ts, dur_secs.count(), 
+                                dur_usecs.count());
+    }
+    uint32_t bits_set = 
+        proc->m_profile_events.WaitForSetEvents(eMachProcessProfileCancel, &ts);
+    // If we got bits back, we were told to exit.  Do so.
+    if (bits_set & eMachProcessProfileCancel)
+      break;
   }
   return NULL;
 }
@@ -2754,7 +2798,8 @@ const void *MachProcess::PrepareForAttach(const char *path,
           "debugserver timed out waiting for openApplication to complete.");
       attach_err.SetError(OPEN_APPLICATION_TIMEOUT_ERROR, DNBError::Generic);
     } else if (attach_error_code != FBSOpenApplicationErrorCodeNone) {
-      SetFBSError(attach_error_code, attach_err);
+      std::string empty_str;
+      SetFBSError(attach_error_code, empty_str, attach_err);
       DNBLogError("unable to launch the application with CFBundleIdentifier "
                   "'%s' bks_error = %ld",
                   bundleIDStr.c_str(), (NSInteger)attach_error_code);
@@ -2831,7 +2876,8 @@ const void *MachProcess::PrepareForAttach(const char *path,
           "debugserver timed out waiting for openApplication to complete.");
       attach_err.SetError(OPEN_APPLICATION_TIMEOUT_ERROR, DNBError::Generic);
     } else if (attach_error_code != BKSOpenApplicationErrorCodeNone) {
-      SetBKSError(attach_error_code, attach_err);
+      std::string empty_str;
+      SetBKSError(attach_error_code, empty_str, attach_err);
       DNBLogError("unable to launch the application with CFBundleIdentifier "
                   "'%s' bks_error = %ld",
                   bundleIDStr.c_str(), attach_error_code);
@@ -2995,8 +3041,8 @@ pid_t MachProcess::LaunchForDebug(
   DNBLogThreadedIf(LOG_PROCESS,
                    "%s( path = '%s', argv = %p, envp = %p, "
                    "launch_flavor = %u, disable_aslr = %d )",
-                   __FUNCTION__, path, reinterpret_cast<const void *>(argv),
-                   reinterpret_cast<const void *>(envp), launch_flavor,
+                   __FUNCTION__, path, static_cast<const void *>(argv),
+                   static_cast<const void *>(envp), launch_flavor,
                    disable_aslr);
 
   // Fork a child process for debugging
@@ -3138,11 +3184,12 @@ pid_t MachProcess::PosixSpawnChildForPTraceDebugging(
     MachProcess *process, int disable_aslr, DNBError &err) {
   posix_spawnattr_t attr;
   short flags;
-  DNBLogThreadedIf(LOG_PROCESS, "%s ( path='%s', argv=%p, envp=%p, "
-                                "working_dir=%s, stdin=%s, stdout=%s "
-                                "stderr=%s, no-stdio=%i)",
-                   __FUNCTION__, path, reinterpret_cast<const void *>(argv),
-                   reinterpret_cast<const void *>(envp), working_directory,
+  DNBLogThreadedIf(LOG_PROCESS,
+                   "%s ( path='%s', argv=%p, envp=%p, "
+                   "working_dir=%s, stdin=%s, stdout=%s "
+                   "stderr=%s, no-stdio=%i)",
+                   __FUNCTION__, path, static_cast<const void *>(argv),
+                   static_cast<const void *>(envp), working_directory,
                    stdin_path, stdout_path, stderr_path, no_stdio);
 
   err.SetError(::posix_spawnattr_init(&attr), DNBError::POSIX);

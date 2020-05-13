@@ -1,8 +1,9 @@
 from __future__ import absolute_import
 import os
-
+import tempfile
 import subprocess
 import sys
+import platform
 
 import lit.Test
 import lit.TestRunner
@@ -62,57 +63,99 @@ class LLDBTest(TestFormat):
             return (lit.Test.UNSUPPORTED, 'Test is unsupported')
 
         testPath, testFile = os.path.split(test.getSourcePath())
+
+        # The Python used to run lit can be different from the Python LLDB was
+        # build with.
+        executable = test.config.python_executable
+
         # On Windows, the system does not always correctly interpret
         # shebang lines.  To make sure we can execute the tests, add
         # python exe as the first parameter of the command.
-        cmd = [sys.executable] + self.dotest_cmd + [testPath, '-p', testFile]
+        cmd = [executable] + self.dotest_cmd + [testPath, '-p', testFile]
 
-        # The macOS system integrity protection (SIP) doesn't allow injecting
-        # libraries into system binaries, but this can be worked around by
-        # copying the binary into a different location.
+        builddir = getBuildDir(cmd)
+        mkdir_p(builddir)
+
+        # On macOS, we can't do the DYLD_INSERT_LIBRARIES trick with a shim
+        # python binary as the ASan interceptors get loaded too late. Also,
+        # when SIP is enabled, we can't inject libraries into system binaries
+        # at all, so we need a copy of the "real" python to work with.
+        #
+        # Find the "real" python binary, copy it, and invoke it.
         if 'DYLD_INSERT_LIBRARIES' in test.config.environment and \
-                (sys.executable.startswith('/System/') or \
-                sys.executable.startswith('/usr/bin/')):
-            builddir = getBuildDir(cmd)
-            mkdir_p(builddir)
+                platform.system() == 'Darwin':
             copied_python = os.path.join(builddir, 'copied-system-python')
             if not os.path.isfile(copied_python):
                 import shutil, subprocess
                 python = subprocess.check_output([
-                    sys.executable,
-                    '-c',
-                    'import sys; print(sys.executable)'
+                    executable,
+                    os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                        'get_darwin_real_python.py')
                 ]).decode('utf-8').strip()
                 shutil.copy(python, copied_python)
             cmd[0] = copied_python
 
+        if 'lldb-repro-capture' in test.config.available_features or \
+           'lldb-repro-replay' in test.config.available_features:
+            reproducer_root = os.path.join(builddir, 'reproducers')
+            mkdir_p(reproducer_root)
+            reproducer_path = os.path.join(reproducer_root, testFile)
+            if 'lldb-repro-capture' in test.config.available_features:
+                cmd.extend(['--capture-path', reproducer_path])
+            else:
+                cmd.extend(['--replay-path', reproducer_path])
+
+        timeoutInfo = None
         try:
             out, err, exitCode = lit.util.executeCommand(
                 cmd,
                 env=test.config.environment,
                 timeout=litConfig.maxIndividualTestTime)
-        except lit.util.ExecuteCommandTimeoutException:
-            return (lit.Test.TIMEOUT, 'Reached timeout of {} seconds'.format(
-                litConfig.maxIndividualTestTime))
+        except lit.util.ExecuteCommandTimeoutException as e:
+            out = e.out
+            err = e.err
+            exitCode = e.exitCode
+            timeoutInfo = 'Reached timeout of {} seconds'.format(
+                litConfig.maxIndividualTestTime)
+
+        if sys.version_info.major == 2:
+            # In Python 2, string objects can contain Unicode characters. Use
+            # the non-strict 'replace' decoding mode. We cannot use the strict
+            # mode right now because lldb's StringPrinter facility and the
+            # Python utf8 decoder have different interpretations of which
+            # characters are "printable". This leads to Python utf8 decoding
+            # exceptions even though lldb is behaving as expected.
+            out = out.decode('utf-8', 'replace')
+            err = err.decode('utf-8', 'replace')
+
+        output = """Script:\n--\n%s\n--\nExit Code: %d\n""" % (
+            ' '.join(cmd), exitCode)
+        if timeoutInfo is not None:
+            output += """Timeout: %s\n""" % (timeoutInfo,)
+        output += "\n"
+
+        if out:
+            output += """Command Output (stdout):\n--\n%s\n--\n""" % (out,)
+        if err:
+            output += """Command Output (stderr):\n--\n%s\n--\n""" % (err,)
+
+        if timeoutInfo:
+            return lit.Test.TIMEOUT, output
 
         if exitCode:
-            # Match FAIL but not XFAIL.
-            for line in out.splitlines() + err.splitlines():
-                if line.startswith('FAIL:'):
-                    return lit.Test.FAIL, out + err
-
             if 'XPASS:' in out or 'XPASS:' in err:
-                return lit.Test.XPASS, out + err
+                return lit.Test.XPASS, output
+
+            # Otherwise this is just a failure.
+            return lit.Test.FAIL, output
 
         has_unsupported_tests = 'UNSUPPORTED:' in out or 'UNSUPPORTED:' in err
         has_passing_tests = 'PASS:' in out or 'PASS:' in err
         if has_unsupported_tests and not has_passing_tests:
-            return lit.Test.UNSUPPORTED, out + err
+            return lit.Test.UNSUPPORTED, output
 
         passing_test_line = 'RESULT: PASSED'
         if passing_test_line not in out and passing_test_line not in err:
-            msg = ('Unable to find %r in dotest output (exit code %d):\n\n%s%s'
-                   % (passing_test_line, exitCode, out, err))
-            return lit.Test.UNRESOLVED, msg
+            return lit.Test.UNRESOLVED, output
 
-        return lit.Test.PASS, ''
+        return lit.Test.PASS, output

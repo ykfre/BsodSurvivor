@@ -1,4 +1,5 @@
-; RUN: llc -mtriple=arm64-- -O0 -debug-pass=Structure < %s -o /dev/null 2>&1 | grep -v "Verify generated machine code" | FileCheck %s
+; RUN: llc --debugify-and-strip-all-safe=0 -mtriple=arm64-- -O0 -debug-pass=Structure < %s -o /dev/null 2>&1 | \
+; RUN:     grep -v "Verify generated machine code" | FileCheck %s
 
 ; REQUIRES: asserts
 
@@ -56,6 +57,7 @@
 ; CHECK-NEXT:       Eliminate PHI nodes for register allocation
 ; CHECK-NEXT:       Two-Address instruction pass
 ; CHECK-NEXT:       Fast Register Allocator
+; CHECK-NEXT:       Fixup Statepoint Caller Saved
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       Prologue/Epilogue Insertion & Frame Finalization
@@ -63,14 +65,15 @@
 ; CHECK-NEXT:       AArch64 pseudo instruction expansion pass
 ; CHECK-NEXT:       AArch64 speculation hardening pass
 ; CHECK-NEXT:       Analyze Machine Code For Garbage Collection
-; CHECK-NEXT:       AArch64 Branch Targets
-; CHECK-NEXT:       Branch relaxation pass
-; CHECK-NEXT:       Contiguously Lay Out Funclets
-; CHECK-NEXT:       StackMap Liveness Analysis
-; CHECK-NEXT:       Live DEBUG_VALUE analysis
 ; CHECK-NEXT:       Insert fentry calls
 ; CHECK-NEXT:       Insert XRay ops
 ; CHECK-NEXT:       Implement the 'patchable-function' attribute
+; CHECK-NEXT:       AArch64 Branch Targets
+; CHECK-NEXT:       Branch relaxation pass
+; CHECK-NEXT:       Unpack machine instruction bundles
+; CHECK-NEXT:       Contiguously Lay Out Funclets
+; CHECK-NEXT:       StackMap Liveness Analysis
+; CHECK-NEXT:       Live DEBUG_VALUE analysis
 ; CHECK-NEXT:       Lazy Machine Block Frequency Analysis
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       AArch64 Assembly Printer

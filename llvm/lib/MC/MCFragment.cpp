@@ -234,9 +234,9 @@ void ilist_alloc_traits<MCFragment>::deleteNode(MCFragment *V) { V->destroy(); }
 
 MCFragment::MCFragment(FragmentType Kind, bool HasInstructions,
                        MCSection *Parent)
-    : Kind(Kind), HasInstructions(HasInstructions), LayoutOrder(0),
-      Parent(Parent), Atom(nullptr), Offset(~UINT64_C(0)) {
-  if (Parent && !isDummy())
+    : Parent(Parent), Atom(nullptr), Offset(~UINT64_C(0)), LayoutOrder(0),
+      Kind(Kind), HasInstructions(HasInstructions) {
+  if (Parent && !isa<MCDummyFragment>(*this))
     Parent->getFragmentList().push_back(this);
 }
 
@@ -394,6 +394,7 @@ LLVM_DUMP_METHOD void MCFragment::dump() const {
     OS << "\n       ";
     OS << " Inst:";
     F->getInst().dump_pretty(OS);
+    OS << " (" << F->getContents().size() << " bytes)";
     break;
   }
   case MCFragment::FT_Org:  {
@@ -424,14 +425,9 @@ LLVM_DUMP_METHOD void MCFragment::dump() const {
   }
   case MCFragment::FT_BoundaryAlign: {
     const auto *BF = cast<MCBoundaryAlignFragment>(this);
-    if (BF->canEmitNops())
-      OS << " (can emit nops to align";
-    if (BF->isFused())
-      OS << " fused branch)";
-    else
-      OS << " unfused branch)";
     OS << "\n       ";
     OS << " BoundarySize:" << BF->getAlignment().value()
+       << " LastFragment:" << BF->getLastFragment()
        << " Size:" << BF->getSize();
     break;
   }

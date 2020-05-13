@@ -913,7 +913,12 @@ bool ModuloScheduleExpander::computeDelta(MachineInstr &MI, unsigned &Delta) {
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
   const MachineOperand *BaseOp;
   int64_t Offset;
-  if (!TII->getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
+  bool OffsetIsScalable;
+  if (!TII->getMemOperandWithOffset(MI, BaseOp, Offset, OffsetIsScalable, TRI))
+    return false;
+
+  // FIXME: This algorithm assumes instructions have fixed-size offsets.
+  if (OffsetIsScalable)
     return false;
 
   if (!BaseOp->isReg())
@@ -1435,11 +1440,15 @@ Register KernelRewriter::remapUse(Register Reg, MachineInstr &MI) {
     // immediately prior to pruning.
     auto RC = MRI.getRegClass(Reg);
     Register R = MRI.createVirtualRegister(RC);
-    BuildMI(*BB, MI, DebugLoc(), TII->get(TargetOpcode::PHI), R)
-        .addReg(IllegalPhiDefault.getValue())
-        .addMBB(PreheaderBB) // Block choice is arbitrary and has no effect.
-        .addReg(LoopReg)
-        .addMBB(BB); // Block choice is arbitrary and has no effect.
+    MachineInstr *IllegalPhi =
+        BuildMI(*BB, MI, DebugLoc(), TII->get(TargetOpcode::PHI), R)
+            .addReg(IllegalPhiDefault.getValue())
+            .addMBB(PreheaderBB) // Block choice is arbitrary and has no effect.
+            .addReg(LoopReg)
+            .addMBB(BB); // Block choice is arbitrary and has no effect.
+    // Illegal phi should belong to the producer stage so that it can be
+    // filtered correctly during peeling.
+    S.setStage(IllegalPhi, LoopProducerStage);
     return R;
   }
 

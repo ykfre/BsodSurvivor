@@ -25,7 +25,6 @@ namespace llvm {
 class MachineFunction;
 class HexagonInstrInfo;
 class HexagonRegisterInfo;
-class HexagonTargetLowering;
 
 class HexagonDAGToDAGISel : public SelectionDAGISel {
   const HexagonSubtarget *HST;
@@ -51,7 +50,7 @@ public:
     return true;
   }
   void PreprocessISelDAG() override;
-  void EmitFunctionEntryCode() override;
+  void emitFunctionEntryCode() override;
 
   void Select(SDNode *N) override;
 

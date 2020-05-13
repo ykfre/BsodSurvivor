@@ -1,7 +1,7 @@
-; RUN: llc -march=bpfel -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EL %s
-; RUN: llc -march=bpfeb -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EB %s
-; RUN: llc -march=bpfel -mattr=+alu32 -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EL %s
-; RUN: llc -march=bpfeb -mattr=+alu32 -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EB %s
+; RUN: llc -march=bpfel -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EL,CHECK64 %s
+; RUN: llc -march=bpfeb -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EB,CHECK64 %s
+; RUN: llc -march=bpfel -mattr=+alu32 -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EL,CHECK32 %s
+; RUN: llc -march=bpfeb -mattr=+alu32 -filetype=asm -o - %s | FileCheck -check-prefixes=CHECK,CHECK-EB,CHECK32 %s
 ; Source code:
 ;   struct s {
 ;     int a;
@@ -114,9 +114,12 @@ sw.epilog:                                        ; preds = %entry, %sw.bb9, %sw
 
 ; CHECK:             r{{[0-9]+}} = 4
 ; CHECK:             r{{[0-9]+}} = 4
-; CHECK-EL:          r{{[0-9]+}} = 51
-; CHECK-EB:          r{{[0-9]+}} = 41
-; CHECK:             r{{[0-9]+}} = 60
+; CHECK-EL:          r{{[0-9]+}} <<= 51
+; CHECK-EB:          r{{[0-9]+}} <<= 41
+; CHECK64:           r{{[0-9]+}} s>>= 60
+; CHECK64:           r{{[0-9]+}} >>= 60
+; CHECK32:           r{{[0-9]+}} >>= 60
+; CHECK32:           r{{[0-9]+}} s>>= 60
 ; CHECK:             r{{[0-9]+}} = 1
 
 ; CHECK:             .long   1                       # BTF_KIND_STRUCT(id = 2)
@@ -126,11 +129,7 @@ sw.epilog:                                        ; preds = %entry, %sw.bb9, %sw
 
 ; CHECK:             .long   16                      # FieldReloc
 ; CHECK-NEXT:        .long   30                      # Field reloc section string offset=30
-; CHECK-NEXT:        .long   5
-; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
-; CHECK-NEXT:        .long   2
-; CHECK-NEXT:        .long   36
-; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   8
 ; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   36
@@ -138,7 +137,23 @@ sw.epilog:                                        ; preds = %entry, %sw.bb9, %sw
 ; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   36
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   2
+; CHECK-NEXT:        .long   36
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   2
+; CHECK-NEXT:        .long   36
+; CHECK-NEXT:        .long   0
+; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   2
+; CHECK-NEXT:        .long   36
 ; CHECK-NEXT:        .long   4
+; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
+; CHECK-NEXT:        .long   2
+; CHECK-NEXT:        .long   36
+; CHECK-NEXT:        .long   5
 ; CHECK-NEXT:        .long   .Ltmp{{[0-9]+}}
 ; CHECK-NEXT:        .long   2
 ; CHECK-NEXT:        .long   36

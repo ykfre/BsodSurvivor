@@ -14,6 +14,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "ClangTidyMain.h"
 #include "../ClangTidy.h"
 #include "../ClangTidyForceLinker.h"
 #include "../GlobList.h"
@@ -35,17 +36,20 @@ static cl::extrahelp ClangTidyHelp(R"(
 Configuration files:
   clang-tidy attempts to read configuration for each source file from a
   .clang-tidy file located in the closest parent directory of the source
-  file. If any configuration options have a corresponding command-line
-  option, command-line option takes precedence. The effective
-  configuration can be inspected using -dump-config:
+  file. If InheritParentConfig is true in a config file, the configuration file
+  in the parent directory (if any exists) will be taken and current config file
+  will be applied on top of the parent one. If any configuration options have
+  a corresponding command-line option, command-line option takes precedence.
+  The effective configuration can be inspected using -dump-config:
 
     $ clang-tidy -dump-config
     ---
-    Checks:          '-*,some-check'
-    WarningsAsErrors: ''
-    HeaderFilterRegex: ''
-    FormatStyle:     none
-    User:            user
+    Checks:              '-*,some-check'
+    WarningsAsErrors:    ''
+    HeaderFilterRegex:   ''
+    FormatStyle:         none
+    InheritParentConfig: true
+    User:                user
     CheckOptions:
       - key:             some-check.SomeOption
         value:           'some value'
@@ -293,7 +297,7 @@ static std::unique_ptr<ClangTidyOptionsProvider> createOptionsProvider(
             parseConfiguration(Config)) {
       return std::make_unique<ConfigOptionsProvider>(
           GlobalOptions,
-          ClangTidyOptions::getDefaults().mergeWith(DefaultOptions),
+          ClangTidyOptions::getDefaults().mergeWith(DefaultOptions, 0),
           *ParsedConfig, OverrideOptions);
     } else {
       llvm::errs() << "Error: invalid configuration specified.\n"
@@ -327,7 +331,7 @@ getVfsFromFile(const std::string &OverlayFile,
   return FS;
 }
 
-static int clangTidyMain(int argc, const char **argv) {
+int clangTidyMain(int argc, const char **argv) {
   llvm::InitLLVM X(argc, argv);
   CommonOptionsParser OptionsParser(argc, argv, ClangTidyCategory,
                                     cl::ZeroOrMore);
@@ -366,7 +370,7 @@ static int clangTidyMain(int argc, const char **argv) {
     FileName = PathList.front();
   }
 
-  SmallString<256> FilePath = MakeAbsolute(FileName);
+  SmallString<256> FilePath = MakeAbsolute(std::string(FileName));
 
   ClangTidyOptions EffectiveOptions = OptionsProvider->getOptions(FilePath);
   std::vector<std::string> EnabledChecks =
@@ -405,7 +409,7 @@ static int clangTidyMain(int argc, const char **argv) {
         getCheckOptions(EffectiveOptions, AllowEnablingAnalyzerAlphaCheckers);
     llvm::outs() << configurationAsText(
                         ClangTidyOptions::getDefaults().mergeWith(
-                            EffectiveOptions))
+                            EffectiveOptions, 0))
                  << "\n";
     return 0;
   }
@@ -488,7 +492,3 @@ static int clangTidyMain(int argc, const char **argv) {
 
 } // namespace tidy
 } // namespace clang
-
-int main(int argc, const char **argv) {
-  return clang::tidy::clangTidyMain(argc, argv);
-}

@@ -40,6 +40,7 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineSizeOpts.h"
+#include "llvm/CodeGen/MBFIWrapper.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -129,7 +130,7 @@ bool BranchFolderPass::runOnMachineFunction(MachineFunction &MF) {
   // HW that requires structurized CFG.
   bool EnableTailMerge = !MF.getTarget().requiresStructuredCFG() &&
                          PassConfig->getEnableTailMerge();
-  BranchFolder::MBFIWrapper MBBFreqInfo(
+  MBFIWrapper MBBFreqInfo(
       getAnalysis<MachineBlockFrequencyInfo>());
   BranchFolder Folder(EnableTailMerge, /*CommonHoist=*/true, MBBFreqInfo,
                       getAnalysis<MachineBranchProbabilityInfo>(),
@@ -170,7 +171,7 @@ void BranchFolder::RemoveDeadBlock(MachineBasicBlock *MBB) {
 
   // Update call site info.
   std::for_each(MBB->begin(), MBB->end(), [MF](const MachineInstr &MI) {
-    if (MI.isCall(MachineInstr::IgnoreBundle))
+    if (MI.shouldUpdateCallSiteInfo())
       MF->eraseCallSiteInfo(&MI);
   });
   // Remove the block.
@@ -201,14 +202,7 @@ bool BranchFolder::OptimizeFunction(MachineFunction &MF,
   if (!UpdateLiveIns)
     MRI.invalidateLiveness();
 
-  // Fix CFG.  The later algorithms expect it to be right.
   bool MadeChange = false;
-  for (MachineBasicBlock &MBB : MF) {
-    MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
-    SmallVector<MachineOperand, 4> Cond;
-    if (!TII->analyzeBranch(MBB, TBB, FBB, Cond, true))
-      MadeChange |= MBB.CorrectExtraCFGEdges(TBB, FBB, !Cond.empty());
-  }
 
   // Recalculate EH scope membership.
   EHScopeMembership = getEHScopeMembership(MF);
@@ -501,42 +495,6 @@ BranchFolder::MergePotentialsElt::operator<(const MergePotentialsElt &o) const {
 #endif
 }
 
-BlockFrequency
-BranchFolder::MBFIWrapper::getBlockFreq(const MachineBasicBlock *MBB) const {
-  auto I = MergedBBFreq.find(MBB);
-
-  if (I != MergedBBFreq.end())
-    return I->second;
-
-  return MBFI.getBlockFreq(MBB);
-}
-
-void BranchFolder::MBFIWrapper::setBlockFreq(const MachineBasicBlock *MBB,
-                                             BlockFrequency F) {
-  MergedBBFreq[MBB] = F;
-}
-
-raw_ostream &
-BranchFolder::MBFIWrapper::printBlockFreq(raw_ostream &OS,
-                                          const MachineBasicBlock *MBB) const {
-  return MBFI.printBlockFreq(OS, getBlockFreq(MBB));
-}
-
-raw_ostream &
-BranchFolder::MBFIWrapper::printBlockFreq(raw_ostream &OS,
-                                          const BlockFrequency Freq) const {
-  return MBFI.printBlockFreq(OS, Freq);
-}
-
-void BranchFolder::MBFIWrapper::view(const Twine &Name, bool isSimple) {
-  MBFI.view(Name, isSimple);
-}
-
-uint64_t
-BranchFolder::MBFIWrapper::getEntryFreq() const {
-  return MBFI.getEntryFreq();
-}
-
 /// CountTerminators - Count the number of terminators in the given
 /// block and set I to the position of the first non-terminator, if there
 /// is one, or MBB->end() otherwise.
@@ -591,7 +549,7 @@ ProfitableToMerge(MachineBasicBlock *MBB1, MachineBasicBlock *MBB2,
                   MachineBasicBlock *PredBB,
                   DenseMap<const MachineBasicBlock *, int> &EHScopeMembership,
                   bool AfterPlacement,
-                  BranchFolder::MBFIWrapper &MBBFreqInfo,
+                  MBFIWrapper &MBBFreqInfo,
                   ProfileSummaryInfo *PSI) {
   // It is never profitable to tail-merge blocks from two different EH scopes.
   if (!EHScopeMembership.empty()) {
@@ -691,8 +649,8 @@ ProfitableToMerge(MachineBasicBlock *MBB1, MachineBasicBlock *MBB2,
   MachineFunction *MF = MBB1->getParent();
   bool OptForSize =
       MF->getFunction().hasOptSize() ||
-      (llvm::shouldOptimizeForSize(MBB1, PSI, &MBBFreqInfo.getMBFI()) &&
-       llvm::shouldOptimizeForSize(MBB2, PSI, &MBBFreqInfo.getMBFI()));
+      (llvm::shouldOptimizeForSize(MBB1, PSI, &MBBFreqInfo) &&
+       llvm::shouldOptimizeForSize(MBB2, PSI, &MBBFreqInfo));
   return EffectiveTailLen >= 2 && OptForSize &&
          (FullBlockTail1 || FullBlockTail2);
 }
@@ -1371,6 +1329,13 @@ ReoptimizeBlock:
     SameEHScope = MBBEHScope->second == FallThroughEHScope->second;
   }
 
+  // Analyze the branch in the current block. As a side-effect, this may cause
+  // the block to become empty.
+  MachineBasicBlock *CurTBB = nullptr, *CurFBB = nullptr;
+  SmallVector<MachineOperand, 4> CurCond;
+  bool CurUnAnalyzable =
+      TII->analyzeBranch(*MBB, CurTBB, CurFBB, CurCond, true);
+
   // If this block is empty, make everyone use its fall-through, not the block
   // explicitly.  Landing pads should not do this since the landing-pad table
   // points to this block.  Blocks with their addresses taken shouldn't be
@@ -1413,10 +1378,6 @@ ReoptimizeBlock:
   bool PriorUnAnalyzable =
       TII->analyzeBranch(PrevBB, PriorTBB, PriorFBB, PriorCond, true);
   if (!PriorUnAnalyzable) {
-    // If the CFG for the prior block has extra edges, remove them.
-    MadeChange |= PrevBB.CorrectExtraCFGEdges(PriorTBB, PriorFBB,
-                                              !PriorCond.empty());
-
     // If the previous branch is conditional and both conditions go to the same
     // destination, remove the branch, replacing it with an unconditional one or
     // a fall-through.
@@ -1437,7 +1398,7 @@ ReoptimizeBlock:
     // has been used, but it can happen if tail merging splits a fall-through
     // predecessor of a block.
     // This has to check PrevBB->succ_size() because EH edges are ignored by
-    // AnalyzeBranch.
+    // analyzeBranch.
     if (PriorCond.empty() && !PriorTBB && MBB->pred_size() == 1 &&
         PrevBB.succ_size() == 1 &&
         !MBB->hasAddressTaken() && !MBB->isEHPad()) {
@@ -1547,7 +1508,7 @@ ReoptimizeBlock:
 
   bool OptForSize =
       MF.getFunction().hasOptSize() ||
-      llvm::shouldOptimizeForSize(MBB, PSI, &MBBFreqInfo.getMBFI());
+      llvm::shouldOptimizeForSize(MBB, PSI, &MBBFreqInfo);
   if (!IsEmptyBlock(MBB) && MBB->pred_size() == 1 && OptForSize) {
     // Changing "Jcc foo; foo: jmp bar;" into "Jcc bar;" might change the branch
     // direction, thereby defeating careful block placement and regressing
@@ -1584,15 +1545,7 @@ ReoptimizeBlock:
     }
   }
 
-  // Analyze the branch in the current block.
-  MachineBasicBlock *CurTBB = nullptr, *CurFBB = nullptr;
-  SmallVector<MachineOperand, 4> CurCond;
-  bool CurUnAnalyzable =
-      TII->analyzeBranch(*MBB, CurTBB, CurFBB, CurCond, true);
   if (!CurUnAnalyzable) {
-    // If the CFG for the prior block has extra edges, remove them.
-    MadeChange |= MBB->CorrectExtraCFGEdges(CurTBB, CurFBB, !CurCond.empty());
-
     // If this is a two-way branch, and the FBB branches to this block, reverse
     // the condition so the single-basic-block loop is faster.  Instead of:
     //    Loop: xxx; jcc Out; jmp Loop
@@ -1669,7 +1622,7 @@ ReoptimizeBlock:
               PMBB->ReplaceUsesOfBlockWith(MBB, CurTBB);
               // If this change resulted in PMBB ending in a conditional
               // branch where both conditions go to the same destination,
-              // change this to an unconditional branch (and fix the CFG).
+              // change this to an unconditional branch.
               MachineBasicBlock *NewCurTBB = nullptr, *NewCurFBB = nullptr;
               SmallVector<MachineOperand, 4> NewCurCond;
               bool NewCurUnAnalyzable = TII->analyzeBranch(
@@ -1681,7 +1634,6 @@ ReoptimizeBlock:
                 TII->insertBranch(*PMBB, NewCurTBB, nullptr, NewCurCond, pdl);
                 MadeChange = true;
                 ++NumBranchOpts;
-                PMBB->CorrectExtraCFGEdges(NewCurTBB, nullptr, false);
               }
             }
           }
@@ -1875,8 +1827,7 @@ MachineBasicBlock::iterator findHoistingInsertPosAndDeps(MachineBasicBlock *MBB,
 
   // The terminator is probably a conditional branch, try not to separate the
   // branch from condition setting instruction.
-  MachineBasicBlock::iterator PI =
-    skipDebugInstructionsBackward(std::prev(Loc), MBB->begin());
+  MachineBasicBlock::iterator PI = prev_nodbg(Loc, MBB->begin());
 
   bool IsDef = false;
   for (const MachineOperand &MO : PI->operands()) {

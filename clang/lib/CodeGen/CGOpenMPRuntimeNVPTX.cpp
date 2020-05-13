@@ -341,8 +341,7 @@ class CheckVarsEscapingDeclContext final
           if (!Attr)
             return;
           if (((Attr->getCaptureKind() != OMPC_map) &&
-               !isOpenMPPrivate(
-                   static_cast<OpenMPClauseKind>(Attr->getCaptureKind()))) ||
+               !isOpenMPPrivate(Attr->getCaptureKind())) ||
               ((Attr->getCaptureKind() == OMPC_map) &&
                !FD->getType()->isAnyPointerType()))
             return;
@@ -786,6 +785,8 @@ static bool hasNestedSPMDDirective(ASTContext &Ctx,
     case OMPD_taskgroup:
     case OMPD_atomic:
     case OMPD_flush:
+    case OMPD_depobj:
+    case OMPD_scan:
     case OMPD_teams:
     case OMPD_target_data:
     case OMPD_target_exit_data:
@@ -801,6 +802,8 @@ static bool hasNestedSPMDDirective(ASTContext &Ctx,
     case OMPD_target_update:
     case OMPD_declare_simd:
     case OMPD_declare_variant:
+    case OMPD_begin_declare_variant:
+    case OMPD_end_declare_variant:
     case OMPD_declare_target:
     case OMPD_end_declare_target:
     case OMPD_declare_reduction:
@@ -862,6 +865,8 @@ static bool supportsSPMDExecutionMode(ASTContext &Ctx,
   case OMPD_taskgroup:
   case OMPD_atomic:
   case OMPD_flush:
+  case OMPD_depobj:
+  case OMPD_scan:
   case OMPD_teams:
   case OMPD_target_data:
   case OMPD_target_exit_data:
@@ -877,6 +882,8 @@ static bool supportsSPMDExecutionMode(ASTContext &Ctx,
   case OMPD_target_update:
   case OMPD_declare_simd:
   case OMPD_declare_variant:
+  case OMPD_begin_declare_variant:
+  case OMPD_end_declare_variant:
   case OMPD_declare_target:
   case OMPD_end_declare_target:
   case OMPD_declare_reduction:
@@ -1031,6 +1038,8 @@ static bool hasNestedLightweightDirective(ASTContext &Ctx,
     case OMPD_taskgroup:
     case OMPD_atomic:
     case OMPD_flush:
+    case OMPD_depobj:
+    case OMPD_scan:
     case OMPD_teams:
     case OMPD_target_data:
     case OMPD_target_exit_data:
@@ -1046,6 +1055,8 @@ static bool hasNestedLightweightDirective(ASTContext &Ctx,
     case OMPD_target_update:
     case OMPD_declare_simd:
     case OMPD_declare_variant:
+    case OMPD_begin_declare_variant:
+    case OMPD_end_declare_variant:
     case OMPD_declare_target:
     case OMPD_end_declare_target:
     case OMPD_declare_reduction:
@@ -1113,6 +1124,8 @@ static bool supportsLightweightRuntime(ASTContext &Ctx,
   case OMPD_taskgroup:
   case OMPD_atomic:
   case OMPD_flush:
+  case OMPD_depobj:
+  case OMPD_scan:
   case OMPD_teams:
   case OMPD_target_data:
   case OMPD_target_exit_data:
@@ -1128,6 +1141,8 @@ static bool supportsLightweightRuntime(ASTContext &Ctx,
   case OMPD_target_update:
   case OMPD_declare_simd:
   case OMPD_declare_variant:
+  case OMPD_begin_declare_variant:
+  case OMPD_end_declare_variant:
   case OMPD_declare_target:
   case OMPD_end_declare_target:
   case OMPD_declare_reduction:
@@ -1915,19 +1930,6 @@ unsigned CGOpenMPRuntimeNVPTX::getDefaultLocationReserved2Flags() const {
   llvm_unreachable("Unknown flags are requested.");
 }
 
-bool CGOpenMPRuntimeNVPTX::tryEmitDeclareVariant(const GlobalDecl &NewGD,
-                                                 const GlobalDecl &OldGD,
-                                                 llvm::GlobalValue *OrigAddr,
-                                                 bool IsForDefinition) {
-  // Emit the function in OldGD with the body from NewGD, if NewGD is defined.
-  auto *NewFD = cast<FunctionDecl>(NewGD.getDecl());
-  if (NewFD->isDefined()) {
-    CGM.emitOpenMPDeviceFunctionRedefinition(OldGD, NewGD, OrigAddr);
-    return true;
-  }
-  return false;
-}
-
 CGOpenMPRuntimeNVPTX::CGOpenMPRuntimeNVPTX(CodeGenModule &CGM)
     : CGOpenMPRuntime(CGM, "_", "$") {
   if (!CGM.getLangOpts().OpenMPIsDevice)
@@ -1935,7 +1937,7 @@ CGOpenMPRuntimeNVPTX::CGOpenMPRuntimeNVPTX(CodeGenModule &CGM)
 }
 
 void CGOpenMPRuntimeNVPTX::emitProcBindClause(CodeGenFunction &CGF,
-                                              OpenMPProcBindClauseKind ProcBind,
+                                              ProcBindKind ProcBind,
                                               SourceLocation Loc) {
   // Do nothing in case of SPMD mode and L0 parallel.
   if (getExecutionMode() == CGOpenMPRuntimeNVPTX::EM_SPMD)
@@ -4754,6 +4756,7 @@ Address CGOpenMPRuntimeNVPTX::getAddressOfLocalVariable(CodeGenFunction &CGF,
     switch (A->getAllocatorType()) {
       // Use the default allocator here as by default local vars are
       // threadlocal.
+    case OMPAllocateDeclAttr::OMPNullMemAlloc:
     case OMPAllocateDeclAttr::OMPDefaultMemAlloc:
     case OMPAllocateDeclAttr::OMPThreadMemAlloc:
     case OMPAllocateDeclAttr::OMPHighBWMemAlloc:
@@ -4920,6 +4923,7 @@ bool CGOpenMPRuntimeNVPTX::hasAllocateAttributeForGlobalVar(const VarDecl *VD,
     return false;
   const auto *A = VD->getAttr<OMPAllocateDeclAttr>();
   switch(A->getAllocatorType()) {
+  case OMPAllocateDeclAttr::OMPNullMemAlloc:
   case OMPAllocateDeclAttr::OMPDefaultMemAlloc:
   // Not supported, fallback to the default mem space.
   case OMPAllocateDeclAttr::OMPThreadMemAlloc:
@@ -4962,7 +4966,7 @@ static CudaArch getCudaArch(CodeGenModule &CGM) {
 
 /// Check to see if target architecture supports unified addressing which is
 /// a restriction for OpenMP requires clause "unified_shared_memory".
-void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
+void CGOpenMPRuntimeNVPTX::processRequiresDirective(
     const OMPRequiresDecl *D) {
   for (const OMPClause *Clause : D->clauselists()) {
     if (Clause->getClauseKind() == OMPC_unified_shared_memory) {
@@ -4990,6 +4994,7 @@ void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
       case CudaArch::SM_70:
       case CudaArch::SM_72:
       case CudaArch::SM_75:
+      case CudaArch::SM_80:
       case CudaArch::GFX600:
       case CudaArch::GFX601:
       case CudaArch::GFX700:
@@ -5017,7 +5022,7 @@ void CGOpenMPRuntimeNVPTX::checkArchForUnifiedAddressing(
       }
     }
   }
-  CGOpenMPRuntime::checkArchForUnifiedAddressing(D);
+  CGOpenMPRuntime::processRequiresDirective(D);
 }
 
 /// Get number of SMs and number of blocks per SM.
@@ -5047,6 +5052,7 @@ static std::pair<unsigned, unsigned> getSMsBlocksPerSM(CodeGenModule &CGM) {
   case CudaArch::SM_70:
   case CudaArch::SM_72:
   case CudaArch::SM_75:
+  case CudaArch::SM_80:
     return {84, 32};
   case CudaArch::GFX600:
   case CudaArch::GFX601:

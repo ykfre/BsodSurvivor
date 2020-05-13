@@ -1,4 +1,4 @@
-//===-- CompilerType.cpp ----------------------------------------*- C++ -*-===//
+//===-- CompilerType.cpp --------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,12 +25,6 @@
 
 using namespace lldb;
 using namespace lldb_private;
-
-CompilerType::CompilerType(TypeSystem *type_system,
-                           lldb::opaque_compiler_type_t type)
-    : m_type(type), m_type_system(type_system) {}
-
-CompilerType::~CompilerType() {}
 
 // Tests
 
@@ -274,19 +268,6 @@ size_t CompilerType::GetPointerByteSize() const {
   return 0;
 }
 
-ConstString CompilerType::GetConstQualifiedTypeName() const {
-  return GetConstTypeName();
-}
-
-ConstString CompilerType::GetConstTypeName() const {
-  if (IsValid()) {
-    ConstString type_name(GetTypeName());
-    if (type_name)
-      return type_name;
-  }
-  return ConstString("<invalid>");
-}
-
 ConstString CompilerType::GetTypeName() const {
   if (IsValid()) {
     return m_type_system->GetTypeName(m_type);
@@ -294,7 +275,11 @@ ConstString CompilerType::GetTypeName() const {
   return ConstString("<invalid>");
 }
 
-ConstString CompilerType::GetDisplayTypeName() const { return GetTypeName(); }
+ConstString CompilerType::GetDisplayTypeName() const {
+  if (IsValid())
+    return m_type_system->GetDisplayTypeName(m_type);
+  return ConstString("<invalid>");
+}
 
 uint32_t CompilerType::GetTypeInfo(
     CompilerType *pointee_or_element_compiler_type) const {
@@ -454,11 +439,11 @@ CompilerType CompilerType::AddRestrictModifier() const {
     return CompilerType();
 }
 
-CompilerType
-CompilerType::CreateTypedef(const char *name,
-                            const CompilerDeclContext &decl_ctx) const {
+CompilerType CompilerType::CreateTypedef(const char *name,
+                                         const CompilerDeclContext &decl_ctx,
+                                         uint32_t payload) const {
   if (IsValid())
-    return m_type_system->CreateTypedef(m_type, name, decl_ctx);
+    return m_type_system->CreateTypedef(m_type, name, decl_ctx, payload);
   else
     return CompilerType();
 }
@@ -759,14 +744,15 @@ void CompilerType::DumpSummary(ExecutionContext *exe_ctx, Stream *s,
                                data_byte_size);
 }
 
-void CompilerType::DumpTypeDescription() const {
+void CompilerType::DumpTypeDescription(lldb::DescriptionLevel level) const {
   if (IsValid())
-    m_type_system->DumpTypeDescription(m_type);
+    m_type_system->DumpTypeDescription(m_type, level);
 }
 
-void CompilerType::DumpTypeDescription(Stream *s) const {
+void CompilerType::DumpTypeDescription(Stream *s,
+                                       lldb::DescriptionLevel level) const {
   if (IsValid()) {
-    m_type_system->DumpTypeDescription(m_type, s);
+    m_type_system->DumpTypeDescription(m_type, s, level);
   }
 }
 
@@ -879,6 +865,12 @@ bool CompilerType::GetValueAsScalar(const lldb_private::DataExtractor &data,
   }
   return false;
 }
+
+#ifndef NDEBUG
+bool CompilerType::Verify() const {
+  return !IsValid() || m_type_system->Verify(m_type);
+}
+#endif
 
 bool lldb_private::operator==(const lldb_private::CompilerType &lhs,
                               const lldb_private::CompilerType &rhs) {

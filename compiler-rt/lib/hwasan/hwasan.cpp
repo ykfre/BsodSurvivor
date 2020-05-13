@@ -36,21 +36,6 @@ using namespace __sanitizer;
 
 namespace __hwasan {
 
-void EnterSymbolizer() {
-  Thread *t = GetCurrentThread();
-  CHECK(t);
-  t->EnterSymbolizer();
-}
-void ExitSymbolizer() {
-  Thread *t = GetCurrentThread();
-  CHECK(t);
-  t->LeaveSymbolizer();
-}
-bool IsInSymbolizer() {
-  Thread *t = GetCurrentThread();
-  return t && t->InSymbolizer();
-}
-
 static Flags hwasan_flags;
 
 Flags *flags() {
@@ -201,19 +186,12 @@ void __sanitizer::BufferedStackTrace::UnwindImpl(
     uptr pc, uptr bp, void *context, bool request_fast, u32 max_depth) {
   Thread *t = GetCurrentThread();
   if (!t) {
-    // the thread is still being created.
+    // The thread is still being created, or has already been destroyed.
     size = 0;
     return;
   }
-  if (!StackTrace::WillUseFastUnwind(request_fast)) {
-    // Block reports from our interceptors during _Unwind_Backtrace.
-    SymbolizerScope sym_scope;
-    return Unwind(max_depth, pc, bp, context, 0, 0, request_fast);
-  }
-  if (StackTrace::WillUseFastUnwind(request_fast))
-    Unwind(max_depth, pc, bp, nullptr, t->stack_top(), t->stack_bottom(), true);
-  else
-    Unwind(max_depth, pc, 0, context, 0, 0, false);
+  Unwind(max_depth, pc, bp, context, t->stack_top(), t->stack_bottom(),
+         request_fast);
 }
 
 struct hwasan_global {
@@ -386,8 +364,6 @@ void __hwasan_init() {
   InitializeInterceptors();
   InstallDeadlySignalHandlers(HwasanOnDeadlySignal);
   InstallAtExitHandler(); // Needs __cxa_atexit interceptor.
-
-  Symbolizer::GetOrInit()->AddHooks(EnterSymbolizer, ExitSymbolizer);
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 

@@ -92,15 +92,6 @@ private:
         ", length=" + formatv("{0:d}", RI.r_length));
   }
 
-  MachO::relocation_info
-  getRelocationInfo(const object::relocation_iterator RelItr) {
-    MachO::any_relocation_info ARI =
-        getObject().getRelocation(RelItr->getRawDataRefImpl());
-    MachO::relocation_info RI;
-    memcpy(&RI, &ARI, sizeof(MachO::relocation_info));
-    return RI;
-  }
-
   using PairRelocInfo =
       std::tuple<MachOARM64RelocationKind, Symbol *, uint64_t>;
 
@@ -560,7 +551,8 @@ private:
       *(ulittle32_t *)FixupPtr = Value;
       break;
     }
-    case Pointer64: {
+    case Pointer64:
+    case Pointer64Anon: {
       uint64_t Value = E.getTarget().getAddress() + E.getAddend();
       *(ulittle64_t *)FixupPtr = Value;
       break;

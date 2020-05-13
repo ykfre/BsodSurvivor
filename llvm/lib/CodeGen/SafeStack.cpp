@@ -33,7 +33,6 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DIBuilder.h"
@@ -200,7 +199,7 @@ class SafeStack {
   bool IsAccessSafe(Value *Addr, uint64_t Size, const Value *AllocaPtr,
                     uint64_t AllocaSize);
 
-  bool ShouldInlinePointerAddress(CallSite &CS);
+  bool ShouldInlinePointerAddress(CallInst &CI);
   void TryInlinePointerAddress();
 
 public:
@@ -322,7 +321,7 @@ bool SafeStack::IsSafeStackAlloca(const Value *AllocaPtr, uint64_t AllocaSize) {
 
       case Instruction::Call:
       case Instruction::Invoke: {
-        ImmutableCallSite CS(I);
+        const CallBase &CS = *cast<CallBase>(I);
 
         if (I->isLifetimeStartOrEnd())
           continue;
@@ -344,8 +343,8 @@ bool SafeStack::IsSafeStackAlloca(const Value *AllocaPtr, uint64_t AllocaSize) {
         // FIXME: a more precise solution would require an interprocedural
         // analysis here, which would look at all uses of an argument inside
         // the function being called.
-        ImmutableCallSite::arg_iterator B = CS.arg_begin(), E = CS.arg_end();
-        for (ImmutableCallSite::arg_iterator A = B; A != E; ++A)
+        auto B = CS.arg_begin(), E = CS.arg_end();
+        for (auto A = B; A != E; ++A)
           if (A->get() == V)
             if (!(CS.doesNotCapture(A - B) && (CS.doesNotAccessMemory(A - B) ||
                                                CS.doesNotAccessMemory()))) {
@@ -576,8 +575,8 @@ Value *SafeStack::moveStaticAllocasToUnsafeStack(
                                      Arg->getName() + ".unsafe-byval");
 
     // Replace alloc with the new location.
-    replaceDbgDeclare(Arg, BasePointer, BasePointer->getNextNode(), DIB,
-                      DIExpression::ApplyOffset, -Offset);
+    replaceDbgDeclare(Arg, BasePointer, DIB, DIExpression::ApplyOffset,
+                      -Offset);
     Arg->replaceAllUsesWith(NewArg);
     IRB.SetInsertPoint(cast<Instruction>(NewArg)->getNextNode());
     IRB.CreateMemCpy(Off, Align, Arg, Arg->getParamAlign(), Size);
@@ -588,8 +587,7 @@ Value *SafeStack::moveStaticAllocasToUnsafeStack(
     IRB.SetInsertPoint(AI);
     unsigned Offset = SSL.getObjectOffset(AI);
 
-    replaceDbgDeclareForAlloca(AI, BasePointer, DIB, DIExpression::ApplyOffset,
-                               -Offset);
+    replaceDbgDeclare(AI, BasePointer, DIB, DIExpression::ApplyOffset, -Offset);
     replaceDbgValueForAlloca(AI, BasePointer, DIB, -Offset);
 
     // Replace uses of the alloca with the new location.
@@ -676,7 +674,7 @@ void SafeStack::moveDynamicAllocasToUnsafeStack(
     if (AI->hasName() && isa<Instruction>(NewAI))
       NewAI->takeName(AI);
 
-    replaceDbgDeclareForAlloca(AI, NewAI, DIB, DIExpression::ApplyOffset, 0);
+    replaceDbgDeclare(AI, NewAI, DIB, DIExpression::ApplyOffset, 0);
     AI->replaceAllUsesWith(NewAI);
     AI->eraseFromParent();
   }
@@ -706,33 +704,34 @@ void SafeStack::moveDynamicAllocasToUnsafeStack(
   }
 }
 
-bool SafeStack::ShouldInlinePointerAddress(CallSite &CS) {
-  Function *Callee = CS.getCalledFunction();
-  if (CS.hasFnAttr(Attribute::AlwaysInline) && isInlineViable(*Callee))
+bool SafeStack::ShouldInlinePointerAddress(CallInst &CI) {
+  Function *Callee = CI.getCalledFunction();
+  if (CI.hasFnAttr(Attribute::AlwaysInline) &&
+      isInlineViable(*Callee).isSuccess())
     return true;
   if (Callee->isInterposable() || Callee->hasFnAttribute(Attribute::NoInline) ||
-      CS.isNoInline())
+      CI.isNoInline())
     return false;
   return true;
 }
 
 void SafeStack::TryInlinePointerAddress() {
-  if (!isa<CallInst>(UnsafeStackPtr))
+  auto *CI = dyn_cast<CallInst>(UnsafeStackPtr);
+  if (!CI)
     return;
 
   if(F.hasOptNone())
     return;
 
-  CallSite CS(UnsafeStackPtr);
-  Function *Callee = CS.getCalledFunction();
+  Function *Callee = CI->getCalledFunction();
   if (!Callee || Callee->isDeclaration())
     return;
 
-  if (!ShouldInlinePointerAddress(CS))
+  if (!ShouldInlinePointerAddress(*CI))
     return;
 
   InlineFunctionInfo IFI;
-  InlineFunction(CS, IFI);
+  InlineFunction(*CI, IFI);
 }
 
 bool SafeStack::run() {

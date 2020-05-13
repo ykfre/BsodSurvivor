@@ -187,12 +187,12 @@ sub target_options() {
                 set_target_os( $_[ 1 ] ) or
                     die "Bad value of --target-os option: \"$_[ 1 ]\"\n";
             },
-        "target-architecture|targert-arch|architecture|arch=s" =>
+        "target-architecture|target-arch|architecture|arch=s" =>
            sub {
                set_target_arch( $_[ 1 ] ) or
                    die "Bad value of --target-architecture option: \"$_[ 1 ]\"\n";
            },
-        "target-mic-architecture|targert-mic-arch|mic-architecture|mic-arch=s" =>
+        "target-mic-architecture|target-mic-arch|mic-architecture|mic-arch=s" =>
            sub {
                set_target_mic_arch( $_[ 1 ] ) or
                    die "Bad value of --target-mic-architecture option: \"$_[ 1 ]\"\n";
@@ -390,7 +390,7 @@ naming files, directories, macros, etc.
     my $os     = canon_os( "Windows NT" );     # Returns "win".
 
     print( $host_arch, $host_os, $host_platform );
-    print( $taregt_arch, $target_os, $target_platform );
+    print( $target_arch, $target_os, $target_platform );
 
     tools::get_options(
         Platform::target_options(),
@@ -413,7 +413,7 @@ the script assumes host architecture is target one.
 =item B<canon_arch( $arch )>
 
 Input string is an architecture name to canonize. The function recognizes many variants, for example:
-C<32e>, C<Intel64>, C<Intel(R) 64>, etc. Returned string is a canononized architecture name,
+C<32e>, C<Intel64>, C<Intel(R) 64>, etc. Returned string is a canonized architecture name,
 one of: C<32>, C<32e>, C<64>, C<arm>, C<ppc64le>, C<ppc64>, C<mic>, C<mips>, C<mips64>, C<riscv64> or C<undef> is input string is not recognized.
 
 =item B<legal_arch( $arch )>

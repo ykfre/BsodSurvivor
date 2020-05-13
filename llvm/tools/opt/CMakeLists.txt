@@ -9,6 +9,7 @@ set(LLVM_LINK_COMPONENTS
   CodeGen
   Core
   Coroutines
+  Extensions
   IPO
   IRReader
   InstCombine
@@ -37,8 +38,8 @@ add_llvm_tool(opt
   intrinsics_gen
   SUPPORT_PLUGINS
   )
-export_executable_symbols(opt)
+export_executable_symbols_for_plugins(opt)
 
-if(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
-  target_link_libraries(opt PRIVATE Polly)
-endif(WITH_POLLY AND LINK_POLLY_INTO_TOOLS)
+if(LLVM_BUILD_EXAMPLES)
+    target_link_libraries(opt PRIVATE ExampleIRTransforms)
+endif(LLVM_BUILD_EXAMPLES)

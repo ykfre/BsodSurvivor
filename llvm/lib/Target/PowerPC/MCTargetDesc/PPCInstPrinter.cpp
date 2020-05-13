@@ -64,8 +64,9 @@ void PPCInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
   OS << RegName;
 }
 
-void PPCInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                               StringRef Annot, const MCSubtargetInfo &STI) {
+void PPCInstPrinter::printInst(const MCInst *MI, uint64_t Address,
+                               StringRef Annot, const MCSubtargetInfo &STI,
+                               raw_ostream &O) {
   // Customize printing of the addis instruction on AIX. When an operand is a
   // symbol reference, the instruction syntax is changed to look like a load
   // operation, i.e:
@@ -192,11 +193,10 @@ void PPCInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
     }
   }
 
-  if (!printAliasInstr(MI, O))
-    printInstruction(MI, O);
+  if (!printAliasInstr(MI, Address, O))
+    printInstruction(MI, Address, O);
   printAnnotation(O, Annot);
 }
-
 
 void PPCInstPrinter::printPredicateOperand(const MCInst *MI, unsigned OpNo,
                                            raw_ostream &O,
@@ -339,6 +339,13 @@ void PPCInstPrinter::printS5ImmOperand(const MCInst *MI, unsigned OpNo,
   O << (int)Value;
 }
 
+void PPCInstPrinter::printImmZeroOperand(const MCInst *MI, unsigned OpNo,
+                                         raw_ostream &O) {
+  unsigned int Value = MI->getOperand(OpNo).getImm();
+  assert(Value == 0 && "Operand must be zero");
+  O << (unsigned int)Value;
+}
+
 void PPCInstPrinter::printU5ImmOperand(const MCInst *MI, unsigned OpNo,
                                        raw_ostream &O) {
   unsigned int Value = MI->getOperand(OpNo).getImm();
@@ -391,6 +398,17 @@ void PPCInstPrinter::printS16ImmOperand(const MCInst *MI, unsigned OpNo,
     printOperand(MI, OpNo, O);
 }
 
+void PPCInstPrinter::printS34ImmOperand(const MCInst *MI, unsigned OpNo,
+                                        raw_ostream &O) {
+  if (MI->getOperand(OpNo).isImm()) {
+    long long Value = MI->getOperand(OpNo).getImm();
+    assert(isInt<34>(Value) && "Invalid s34imm argument!");
+    O << (long long)Value;
+  }
+  else
+    printOperand(MI, OpNo, O);
+}
+
 void PPCInstPrinter::printU16ImmOperand(const MCInst *MI, unsigned OpNo,
                                         raw_ostream &O) {
   if (MI->getOperand(OpNo).isImm())
@@ -399,18 +417,29 @@ void PPCInstPrinter::printU16ImmOperand(const MCInst *MI, unsigned OpNo,
     printOperand(MI, OpNo, O);
 }
 
-void PPCInstPrinter::printBranchOperand(const MCInst *MI, unsigned OpNo,
-                                        raw_ostream &O) {
+void PPCInstPrinter::printBranchOperand(const MCInst *MI, uint64_t Address,
+                                        unsigned OpNo, raw_ostream &O) {
   if (!MI->getOperand(OpNo).isImm())
     return printOperand(MI, OpNo, O);
-
-  // Branches can take an immediate operand.  This is used by the branch
-  // selection pass to print .+8, an eight byte displacement from the PC.
-  O << ".";
   int32_t Imm = SignExtend32<32>((unsigned)MI->getOperand(OpNo).getImm() << 2);
-  if (Imm >= 0)
-    O << "+";
-  O << Imm;
+  if (PrintBranchImmAsAddress) {
+    uint64_t Target = Address + Imm;
+    if (!TT.isPPC64())
+      Target &= 0xffffffff;
+    O << formatHex(Target);
+  } else {
+    // Branches can take an immediate operand. This is used by the branch
+    // selection pass to print, for example `.+8` (for ELF) or `$+8` (for AIX)
+    // to express an eight byte displacement from the program counter.
+    if (!TT.isOSAIX())
+      O << ".";
+    else
+      O << "$";
+
+    if (Imm >= 0)
+      O << "+";
+    O << Imm;
+  }
 }
 
 void PPCInstPrinter::printAbsBranchOperand(const MCInst *MI, unsigned OpNo,
@@ -448,6 +477,22 @@ void PPCInstPrinter::printMemRegImm(const MCInst *MI, unsigned OpNo,
     O << "0";
   else
     printOperand(MI, OpNo+1, O);
+  O << ')';
+}
+
+void PPCInstPrinter::printMemRegImm34PCRel(const MCInst *MI, unsigned OpNo,
+                                           raw_ostream &O) {
+  printS34ImmOperand(MI, OpNo, O);
+  O << '(';
+  printImmZeroOperand(MI, OpNo + 1, O);
+  O << ')';
+}
+
+void PPCInstPrinter::printMemRegImm34(const MCInst *MI, unsigned OpNo,
+                                        raw_ostream &O) {
+  printS34ImmOperand(MI, OpNo, O);
+  O << '(';
+  printOperand(MI, OpNo + 1, O);
   O << ')';
 }
 

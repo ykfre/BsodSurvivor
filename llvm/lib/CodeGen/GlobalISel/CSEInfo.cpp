@@ -52,6 +52,7 @@ bool CSEConfigFull::shouldCSEOpc(unsigned Opc) {
   case TargetOpcode::G_SREM:
   case TargetOpcode::G_CONSTANT:
   case TargetOpcode::G_FCONSTANT:
+  case TargetOpcode::G_IMPLICIT_DEF:
   case TargetOpcode::G_ZEXT:
   case TargetOpcode::G_SEXT:
   case TargetOpcode::G_ANYEXT:
@@ -64,7 +65,7 @@ bool CSEConfigFull::shouldCSEOpc(unsigned Opc) {
 }
 
 bool CSEConfigConstantOnly::shouldCSEOpc(unsigned Opc) {
-  return Opc == TargetOpcode::G_CONSTANT;
+  return Opc == TargetOpcode::G_CONSTANT || Opc == TargetOpcode::G_IMPLICIT_DEF;
 }
 
 std::unique_ptr<CSEConfigBase>
@@ -216,9 +217,6 @@ void GISelCSEInfo::handleRecordedInsts() {
 }
 
 bool GISelCSEInfo::shouldCSE(unsigned Opc) const {
-  // Only GISel opcodes are CSEable
-  if (!isPreISelGenericOpcode(Opc))
-    return false;
   assert(CSEOpt.get() && "CSEConfig not set");
   return CSEOpt->shouldCSEOpc(Opc);
 }
@@ -260,6 +258,39 @@ void GISelCSEInfo::releaseMemory() {
 #endif
 }
 
+Error GISelCSEInfo::verify() {
+#ifndef NDEBUG
+  handleRecordedInsts();
+  // For each instruction in map from MI -> UMI,
+  // Profile(MI) and make sure UMI is found for that profile.
+  for (auto &It : InstrMapping) {
+    FoldingSetNodeID TmpID;
+    GISelInstProfileBuilder(TmpID, *MRI).addNodeID(It.first);
+    void *InsertPos;
+    UniqueMachineInstr *FoundNode =
+        CSEMap.FindNodeOrInsertPos(TmpID, InsertPos);
+    if (FoundNode != It.second)
+      return createStringError(std::errc::not_supported,
+                               "CSEMap mismatch, InstrMapping has MIs without "
+                               "corresponding Nodes in CSEMap");
+  }
+
+  // For every node in the CSEMap, make sure that the InstrMapping
+  // points to it.
+  for (auto It = CSEMap.begin(), End = CSEMap.end(); It != End; ++It) {
+    const UniqueMachineInstr &UMI = *It;
+    if (!InstrMapping.count(UMI.MI))
+      return createStringError(std::errc::not_supported,
+                               "Node in CSE without InstrMapping", UMI.MI);
+
+    if (InstrMapping[UMI.MI] != &UMI)
+      return createStringError(std::make_error_code(std::errc::not_supported),
+                               "Mismatch in CSE mapping");
+  }
+#endif
+  return Error::success();
+}
+
 void GISelCSEInfo::print() {
   LLVM_DEBUG(for (auto &It
                   : OpcodeHitTable) {
@@ -286,7 +317,7 @@ GISelInstProfileBuilder::addNodeIDOpcode(unsigned Opc) const {
 }
 
 const GISelInstProfileBuilder &
-GISelInstProfileBuilder::addNodeIDRegType(const LLT &Ty) const {
+GISelInstProfileBuilder::addNodeIDRegType(const LLT Ty) const {
   uint64_t Val = Ty.getUniqueRAWLLTData();
   ID.AddInteger(Val);
   return *this;
@@ -369,6 +400,7 @@ GISelCSEInfo &
 GISelCSEAnalysisWrapper::get(std::unique_ptr<CSEConfigBase> CSEOpt,
                              bool Recompute) {
   if (!AlreadyComputed || Recompute) {
+    Info.releaseMemory();
     Info.setCSEConfig(std::move(CSEOpt));
     Info.analyze(*MF);
     AlreadyComputed = true;

@@ -93,6 +93,7 @@ template <> struct ScalarEnumerationTraits<FormatStyle::UseTabStyle> {
     IO.enumCase(Value, "ForIndentation", FormatStyle::UT_ForIndentation);
     IO.enumCase(Value, "ForContinuationAndIndentation",
                 FormatStyle::UT_ForContinuationAndIndentation);
+    IO.enumCase(Value, "AlignWithSpaces", FormatStyle::UT_AlignWithSpaces);
   }
 };
 
@@ -157,6 +158,13 @@ template <> struct ScalarEnumerationTraits<FormatStyle::BinPackStyle> {
   }
 };
 
+template <> struct ScalarEnumerationTraits<FormatStyle::TrailingCommaStyle> {
+  static void enumeration(IO &IO, FormatStyle::TrailingCommaStyle &Value) {
+    IO.enumCase(Value, "None", FormatStyle::TCS_None);
+    IO.enumCase(Value, "Wrapped", FormatStyle::TCS_Wrapped);
+  }
+};
+
 template <> struct ScalarEnumerationTraits<FormatStyle::BinaryOperatorStyle> {
   static void enumeration(IO &IO, FormatStyle::BinaryOperatorStyle &Value) {
     IO.enumCase(Value, "All", FormatStyle::BOS_All);
@@ -187,11 +195,13 @@ struct ScalarEnumerationTraits<
   static void
   enumeration(IO &IO,
               FormatStyle::BraceWrappingAfterControlStatementStyle &Value) {
-    IO.enumCase(Value, "false", FormatStyle::BWACS_Never);
-    IO.enumCase(Value, "true", FormatStyle::BWACS_Always);
     IO.enumCase(Value, "Never", FormatStyle::BWACS_Never);
     IO.enumCase(Value, "MultiLine", FormatStyle::BWACS_MultiLine);
     IO.enumCase(Value, "Always", FormatStyle::BWACS_Always);
+
+    // For backward compatibility.
+    IO.enumCase(Value, "false", FormatStyle::BWACS_Never);
+    IO.enumCase(Value, "true", FormatStyle::BWACS_Always);
   }
 };
 
@@ -319,6 +329,8 @@ struct ScalarEnumerationTraits<FormatStyle::SpaceBeforeParensOptions> {
     IO.enumCase(Value, "Never", FormatStyle::SBPO_Never);
     IO.enumCase(Value, "ControlStatements",
                 FormatStyle::SBPO_ControlStatements);
+    IO.enumCase(Value, "ControlStatementsExceptForEachMacros",
+                FormatStyle::SBPO_ControlStatementsExceptForEachMacros);
     IO.enumCase(Value, "NonEmptyParentheses",
                 FormatStyle::SBPO_NonEmptyParentheses);
     IO.enumCase(Value, "Always", FormatStyle::SBPO_Always);
@@ -389,6 +401,8 @@ template <> struct MappingTraits<FormatStyle> {
                    Style.AllowAllConstructorInitializersOnNextLine);
     IO.mapOptional("AllowAllParametersOfDeclarationOnNextLine",
                    Style.AllowAllParametersOfDeclarationOnNextLine);
+    IO.mapOptional("AllowShortEnumsOnASingleLine",
+                   Style.AllowShortEnumsOnASingleLine);
     IO.mapOptional("AllowShortBlocksOnASingleLine",
                    Style.AllowShortBlocksOnASingleLine);
     IO.mapOptional("AllowShortCaseLabelsOnASingleLine",
@@ -480,11 +494,13 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("IncludeIsMainSourceRegex",
                    Style.IncludeStyle.IncludeIsMainSourceRegex);
     IO.mapOptional("IndentCaseLabels", Style.IndentCaseLabels);
+    IO.mapOptional("IndentCaseBlocks", Style.IndentCaseBlocks);
     IO.mapOptional("IndentGotoLabels", Style.IndentGotoLabels);
     IO.mapOptional("IndentPPDirectives", Style.IndentPPDirectives);
     IO.mapOptional("IndentWidth", Style.IndentWidth);
     IO.mapOptional("IndentWrappedFunctionNames",
                    Style.IndentWrappedFunctionNames);
+    IO.mapOptional("InsertTrailingCommas", Style.InsertTrailingCommas);
     IO.mapOptional("JavaImportGroups", Style.JavaImportGroups);
     IO.mapOptional("JavaScriptQuotes", Style.JavaScriptQuotes);
     IO.mapOptional("JavaScriptWrapImports", Style.JavaScriptWrapImports);
@@ -497,6 +513,8 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("NamespaceMacros", Style.NamespaceMacros);
     IO.mapOptional("ObjCBinPackProtocolList", Style.ObjCBinPackProtocolList);
     IO.mapOptional("ObjCBlockIndentWidth", Style.ObjCBlockIndentWidth);
+    IO.mapOptional("ObjCBreakBeforeNestedBlockParam",
+                   Style.ObjCBreakBeforeNestedBlockParam);
     IO.mapOptional("ObjCSpaceAfterProperty", Style.ObjCSpaceAfterProperty);
     IO.mapOptional("ObjCSpaceBeforeProtocolList",
                    Style.ObjCSpaceBeforeProtocolList);
@@ -570,6 +588,7 @@ template <> struct MappingTraits<FormatStyle::BraceWrappingFlags> {
     IO.mapOptional("AfterExternBlock", Wrapping.AfterExternBlock);
     IO.mapOptional("BeforeCatch", Wrapping.BeforeCatch);
     IO.mapOptional("BeforeElse", Wrapping.BeforeElse);
+    IO.mapOptional("BeforeLambdaBody", Wrapping.BeforeLambdaBody);
     IO.mapOptional("IndentBraces", Wrapping.IndentBraces);
     IO.mapOptional("SplitEmptyFunction", Wrapping.SplitEmptyFunction);
     IO.mapOptional("SplitEmptyRecord", Wrapping.SplitEmptyRecord);
@@ -643,6 +662,8 @@ std::string ParseErrorCategory::message(int EV) const {
     return "Invalid argument";
   case ParseError::Unsuitable:
     return "Unsuitable";
+  case ParseError::BinPackTrailingCommaConflict:
+    return "trailing comma insertion cannot be used with bin packing";
   }
   llvm_unreachable("unexpected parse error");
 }
@@ -655,8 +676,8 @@ static FormatStyle expandPresets(const FormatStyle &Style) {
                             false, false, false,
                             false, false, false,
                             false, false, false,
-                            false, true,  true,
-                            true};
+                            false, false, true,
+                            true,  true};
   switch (Style.BreakBeforeBraces) {
   case FormatStyle::BS_Linux:
     Expanded.BraceWrapping.AfterClass = true;
@@ -704,14 +725,15 @@ static FormatStyle expandPresets(const FormatStyle &Style) {
     Expanded.BraceWrapping.AfterExternBlock = true;
     Expanded.BraceWrapping.BeforeCatch = true;
     Expanded.BraceWrapping.BeforeElse = true;
+    Expanded.BraceWrapping.BeforeLambdaBody = true;
     break;
   case FormatStyle::BS_GNU:
-    Expanded.BraceWrapping = {true, true, FormatStyle::BWACS_Always,
-                              true, true, true,
-                              true, true, true,
-                              true, true, true,
-                              true, true, true,
-                              true};
+    Expanded.BraceWrapping = {true,  true, FormatStyle::BWACS_Always,
+                              true,  true, true,
+                              true,  true, true,
+                              true,  true, true,
+                              false, true, true,
+                              true,  true};
     break;
   case FormatStyle::BS_WebKit:
     Expanded.BraceWrapping.AfterFunction = true;
@@ -736,6 +758,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.AllowAllArgumentsOnNextLine = true;
   LLVMStyle.AllowAllConstructorInitializersOnNextLine = true;
   LLVMStyle.AllowAllParametersOfDeclarationOnNextLine = true;
+  LLVMStyle.AllowShortEnumsOnASingleLine = true;
   LLVMStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
   LLVMStyle.AllowShortBlocksOnASingleLine = FormatStyle::SBS_Never;
   LLVMStyle.AllowShortCaseLabelsOnASingleLine = false;
@@ -755,8 +778,8 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
                              false, false, false,
                              false, false, false,
                              false, false, false,
-                             false, true,  true,
-                             true};
+                             false, false, true,
+                             true,  true};
   LLVMStyle.BreakAfterJavaFieldAnnotations = false;
   LLVMStyle.BreakConstructorInitializers = FormatStyle::BCIS_BeforeColon;
   LLVMStyle.BreakInheritanceList = FormatStyle::BILS_BeforeColon;
@@ -782,10 +805,12 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.IncludeStyle.IncludeIsMainRegex = "(Test)?$";
   LLVMStyle.IncludeStyle.IncludeBlocks = tooling::IncludeStyle::IBS_Preserve;
   LLVMStyle.IndentCaseLabels = false;
+  LLVMStyle.IndentCaseBlocks = false;
   LLVMStyle.IndentGotoLabels = true;
   LLVMStyle.IndentPPDirectives = FormatStyle::PPDIS_None;
   LLVMStyle.IndentWrappedFunctionNames = false;
   LLVMStyle.IndentWidth = 2;
+  LLVMStyle.InsertTrailingCommas = FormatStyle::TCS_None;
   LLVMStyle.JavaScriptQuotes = FormatStyle::JSQS_Leave;
   LLVMStyle.JavaScriptWrapImports = true;
   LLVMStyle.TabWidth = 8;
@@ -794,6 +819,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.NamespaceIndentation = FormatStyle::NI_None;
   LLVMStyle.ObjCBinPackProtocolList = FormatStyle::BPS_Auto;
   LLVMStyle.ObjCBlockIndentWidth = 2;
+  LLVMStyle.ObjCBreakBeforeNestedBlockParam = true;
   LLVMStyle.ObjCSpaceAfterProperty = false;
   LLVMStyle.ObjCSpaceBeforeProtocolList = true;
   LLVMStyle.PointerAlignment = FormatStyle::PAS_Right;
@@ -937,11 +963,16 @@ FormatStyle getGoogleStyle(FormatStyle::LanguageKind Language) {
     GoogleStyle.AlignAfterOpenBracket = FormatStyle::BAS_AlwaysBreak;
     GoogleStyle.AlignOperands = false;
     GoogleStyle.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_Empty;
+    // TODO: still under discussion whether to switch to SLS_All.
+    GoogleStyle.AllowShortLambdasOnASingleLine = FormatStyle::SLS_Empty;
     GoogleStyle.AlwaysBreakBeforeMultilineStrings = false;
     GoogleStyle.BreakBeforeTernaryOperators = false;
-    // taze:, triple slash directives (`/// <...`), @see, which is commonly
-    // followed by overlong URLs.
-    GoogleStyle.CommentPragmas = "(taze:|^/[ \t]*<|@see)";
+    // taze:, triple slash directives (`/// <...`), tslint:, and @see, which is
+    // commonly followed by overlong URLs.
+    GoogleStyle.CommentPragmas = "(taze:|^/[ \t]*<|tslint:|@see)";
+    // TODO: enable once decided, in particular re disabling bin packing.
+    // https://google.github.io/styleguide/jsguide.html#features-arrays-trailing-comma
+    // GoogleStyle.InsertTrailingCommas = FormatStyle::TCS_Wrapped;
     GoogleStyle.MaxEmptyLinesToKeep = 3;
     GoogleStyle.NamespaceIndentation = FormatStyle::NI_All;
     GoogleStyle.SpacesInContainerLiterals = false;
@@ -1113,6 +1144,7 @@ FormatStyle getMicrosoftStyle(FormatStyle::LanguageKind Language) {
   Style.BraceWrapping.BeforeCatch = true;
   Style.BraceWrapping.BeforeElse = true;
   Style.PenaltyReturnTypeOnItsOwnLine = 1000;
+  Style.AllowShortEnumsOnASingleLine = false;
   Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
   Style.AllowShortCaseLabelsOnASingleLine = false;
   Style.AllowShortIfStatementsOnASingleLine = FormatStyle::SIS_Never;
@@ -1207,6 +1239,11 @@ std::error_code parseConfiguration(StringRef Text, FormatStyle *Style) {
     StyleSet.Add(std::move(DefaultStyle));
   }
   *Style = *StyleSet.Get(Language);
+  if (Style->InsertTrailingCommas != FormatStyle::TCS_None &&
+      Style->BinPackArguments) {
+    // See comment on FormatStyle::TSC_Wrapped.
+    return make_error_code(ParseError::BinPackTrailingCommaConflict);
+  }
   return make_error_code(ParseError::Success);
 }
 
@@ -1460,6 +1497,75 @@ private:
 
   bool BinPackInconclusiveFunctions;
   FormattingAttemptStatus *Status;
+};
+
+/// TrailingCommaInserter inserts trailing commas into container literals.
+/// E.g.:
+///     const x = [
+///       1,
+///     ];
+/// TrailingCommaInserter runs after formatting. To avoid causing a required
+/// reformatting (and thus reflow), it never inserts a comma that'd exceed the
+/// ColumnLimit.
+///
+/// Because trailing commas disable binpacking of arrays, TrailingCommaInserter
+/// is conceptually incompatible with bin packing.
+class TrailingCommaInserter : public TokenAnalyzer {
+public:
+  TrailingCommaInserter(const Environment &Env, const FormatStyle &Style)
+      : TokenAnalyzer(Env, Style) {}
+
+  std::pair<tooling::Replacements, unsigned>
+  analyze(TokenAnnotator &Annotator,
+          SmallVectorImpl<AnnotatedLine *> &AnnotatedLines,
+          FormatTokenLexer &Tokens) override {
+    AffectedRangeMgr.computeAffectedLines(AnnotatedLines);
+    tooling::Replacements Result;
+    insertTrailingCommas(AnnotatedLines, Result);
+    return {Result, 0};
+  }
+
+private:
+  /// Inserts trailing commas in [] and {} initializers if they wrap over
+  /// multiple lines.
+  void insertTrailingCommas(SmallVectorImpl<AnnotatedLine *> &Lines,
+                            tooling::Replacements &Result) {
+    for (AnnotatedLine *Line : Lines) {
+      insertTrailingCommas(Line->Children, Result);
+      if (!Line->Affected)
+        continue;
+      for (FormatToken *FormatTok = Line->First; FormatTok;
+           FormatTok = FormatTok->Next) {
+        if (FormatTok->NewlinesBefore == 0)
+          continue;
+        FormatToken *Matching = FormatTok->MatchingParen;
+        if (!Matching || !FormatTok->getPreviousNonComment())
+          continue;
+        if (!(FormatTok->is(tok::r_square) &&
+              Matching->is(TT_ArrayInitializerLSquare)) &&
+            !(FormatTok->is(tok::r_brace) && Matching->is(TT_DictLiteral)))
+          continue;
+        FormatToken *Prev = FormatTok->getPreviousNonComment();
+        if (Prev->is(tok::comma) || Prev->is(tok::semi))
+          continue;
+        // getEndLoc is not reliably set during re-lexing, use text length
+        // instead.
+        SourceLocation Start =
+            Prev->Tok.getLocation().getLocWithOffset(Prev->TokenText.size());
+        // If inserting a comma would push the code over the column limit, skip
+        // this location - it'd introduce an unstable formatting due to the
+        // required reflow.
+        unsigned ColumnNumber =
+            Env.getSourceManager().getSpellingColumnNumber(Start);
+        if (ColumnNumber > Style.ColumnLimit)
+          continue;
+        // Comma insertions cannot conflict with each other, and this pass has a
+        // clean set of Replacements, so the operation below cannot fail.
+        cantFail(Result.add(
+            tooling::Replacement(Env.getSourceManager(), Start, 0, ",")));
+      }
+    }
+  }
 };
 
 // This class clean up the erroneous/redundant code around the given ranges in
@@ -1808,7 +1914,7 @@ private:
                      << FormatTok->Tok.getLocation().printToString(
                             SourceManager)
                      << " token: " << FormatTok->TokenText << " token type: "
-                     << getTokenTypeName(FormatTok->Type) << "\n");
+                     << getTokenTypeName(FormatTok->getType()) << "\n");
           return true;
         }
         if (guessIsObjC(SourceManager, Line->Children, Keywords))
@@ -1951,8 +2057,7 @@ static void sortCppIncludes(const FormatStyle &Style,
   // enough as additional newlines might be added or removed across #include
   // blocks. This we handle below by generating the updated #imclude blocks and
   // comparing it to the original.
-  if (Indices.size() == Includes.size() &&
-      std::is_sorted(Indices.begin(), Indices.end()) &&
+  if (Indices.size() == Includes.size() && llvm::is_sorted(Indices) &&
       Style.IncludeStyle.IncludeBlocks == tooling::IncludeStyle::IBS_Preserve)
     return;
 
@@ -1973,8 +2078,8 @@ static void sortCppIncludes(const FormatStyle &Style,
 
   // If the #includes are out of order, we generate a single replacement fixing
   // the entire range of blocks. Otherwise, no replacement is generated.
-  if (replaceCRLF(result) ==
-      replaceCRLF(Code.substr(IncludesBeginOffset, IncludesBlockSize)))
+  if (replaceCRLF(result) == replaceCRLF(std::string(Code.substr(
+                                 IncludesBeginOffset, IncludesBlockSize))))
     return;
 
   auto Err = Replaces.add(tooling::Replacement(
@@ -2142,8 +2247,8 @@ static void sortJavaImports(const FormatStyle &Style,
 
   // If the imports are out of order, we generate a single replacement fixing
   // the entire block. Otherwise, no replacement is generated.
-  if (replaceCRLF(result) ==
-      replaceCRLF(Code.substr(Imports.front().Offset, ImportsBlockSize)))
+  if (replaceCRLF(result) == replaceCRLF(std::string(Code.substr(
+                                 Imports.front().Offset, ImportsBlockSize))))
     return;
 
   auto Err = Replaces.add(tooling::Replacement(FileName, Imports.front().Offset,
@@ -2431,6 +2536,12 @@ reformat(const FormatStyle &Style, StringRef Code,
     return Formatter(Env, Expanded, Status).process();
   });
 
+  if (Style.Language == FormatStyle::LK_JavaScript &&
+      Style.InsertTrailingCommas == FormatStyle::TCS_Wrapped)
+    Passes.emplace_back([&](const Environment &Env) {
+      return TrailingCommaInserter(Env, Expanded).process();
+    });
+
   auto Env =
       std::make_unique<Environment>(Code, FileName, Ranges, FirstStartColumn,
                                     NextStartColumn, LastStartColumn);
@@ -2518,7 +2629,8 @@ LangOptions getFormattingLangOpts(const FormatStyle &Style) {
   LangOpts.CPlusPlus11 = LexingStd >= FormatStyle::LS_Cpp11;
   LangOpts.CPlusPlus14 = LexingStd >= FormatStyle::LS_Cpp14;
   LangOpts.CPlusPlus17 = LexingStd >= FormatStyle::LS_Cpp17;
-  LangOpts.CPlusPlus2a = LexingStd >= FormatStyle::LS_Cpp20;
+  LangOpts.CPlusPlus20 = LexingStd >= FormatStyle::LS_Cpp20;
+  LangOpts.Char8 = LexingStd >= FormatStyle::LS_Cpp20;
 
   LangOpts.LineComment = 1;
   bool AlternativeOperators = Style.isCpp();
@@ -2532,7 +2644,7 @@ LangOptions getFormattingLangOpts(const FormatStyle &Style) {
 
 const char *StyleOptionHelpDescription =
     "Coding style, currently supports:\n"
-    "  LLVM, Google, Chromium, Mozilla, WebKit.\n"
+    "  LLVM, GNU, Google, Chromium, Microsoft, Mozilla, WebKit.\n"
     "Use -style=file to load style configuration from\n"
     ".clang-format file located in one of the parent\n"
     "directories of the source file (or current\n"

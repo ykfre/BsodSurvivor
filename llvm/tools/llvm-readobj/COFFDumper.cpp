@@ -104,6 +104,7 @@ public:
                           bool GHash) override;
   void printStackMap() const override;
   void printAddrsig() override;
+
 private:
   void printSymbols() override;
   void printDynamicSymbols() override;
@@ -409,6 +410,11 @@ static const EnumEntry<COFF::DLLCharacteristics> PEDLLCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE),
 };
 
+static const EnumEntry<COFF::ExtendedDLLCharacteristics>
+    PEExtendedDLLCharacteristics[] = {
+        LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_DLL_CHARACTERISTICS_EX_CET_COMPAT),
+};
+
 static const EnumEntry<COFF::SectionCharacteristics>
 ImageSectionCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SCN_TYPE_NOLOAD           ),
@@ -516,23 +522,25 @@ static const EnumEntry<COFF::COMDATType> ImageCOMDATSelect[] = {
 };
 
 static const EnumEntry<COFF::DebugType> ImageDebugType[] = {
-  { "Unknown"    , COFF::IMAGE_DEBUG_TYPE_UNKNOWN       },
-  { "COFF"       , COFF::IMAGE_DEBUG_TYPE_COFF          },
-  { "CodeView"   , COFF::IMAGE_DEBUG_TYPE_CODEVIEW      },
-  { "FPO"        , COFF::IMAGE_DEBUG_TYPE_FPO           },
-  { "Misc"       , COFF::IMAGE_DEBUG_TYPE_MISC          },
-  { "Exception"  , COFF::IMAGE_DEBUG_TYPE_EXCEPTION     },
-  { "Fixup"      , COFF::IMAGE_DEBUG_TYPE_FIXUP         },
-  { "OmapToSrc"  , COFF::IMAGE_DEBUG_TYPE_OMAP_TO_SRC   },
-  { "OmapFromSrc", COFF::IMAGE_DEBUG_TYPE_OMAP_FROM_SRC },
-  { "Borland"    , COFF::IMAGE_DEBUG_TYPE_BORLAND       },
-  { "Reserved10" , COFF::IMAGE_DEBUG_TYPE_RESERVED10    },
-  { "CLSID"      , COFF::IMAGE_DEBUG_TYPE_CLSID         },
-  { "VCFeature"  , COFF::IMAGE_DEBUG_TYPE_VC_FEATURE    },
-  { "POGO"       , COFF::IMAGE_DEBUG_TYPE_POGO          },
-  { "ILTCG"      , COFF::IMAGE_DEBUG_TYPE_ILTCG         },
-  { "MPX"        , COFF::IMAGE_DEBUG_TYPE_MPX           },
-  { "Repro"      , COFF::IMAGE_DEBUG_TYPE_REPRO         },
+    {"Unknown", COFF::IMAGE_DEBUG_TYPE_UNKNOWN},
+    {"COFF", COFF::IMAGE_DEBUG_TYPE_COFF},
+    {"CodeView", COFF::IMAGE_DEBUG_TYPE_CODEVIEW},
+    {"FPO", COFF::IMAGE_DEBUG_TYPE_FPO},
+    {"Misc", COFF::IMAGE_DEBUG_TYPE_MISC},
+    {"Exception", COFF::IMAGE_DEBUG_TYPE_EXCEPTION},
+    {"Fixup", COFF::IMAGE_DEBUG_TYPE_FIXUP},
+    {"OmapToSrc", COFF::IMAGE_DEBUG_TYPE_OMAP_TO_SRC},
+    {"OmapFromSrc", COFF::IMAGE_DEBUG_TYPE_OMAP_FROM_SRC},
+    {"Borland", COFF::IMAGE_DEBUG_TYPE_BORLAND},
+    {"Reserved10", COFF::IMAGE_DEBUG_TYPE_RESERVED10},
+    {"CLSID", COFF::IMAGE_DEBUG_TYPE_CLSID},
+    {"VCFeature", COFF::IMAGE_DEBUG_TYPE_VC_FEATURE},
+    {"POGO", COFF::IMAGE_DEBUG_TYPE_POGO},
+    {"ILTCG", COFF::IMAGE_DEBUG_TYPE_ILTCG},
+    {"MPX", COFF::IMAGE_DEBUG_TYPE_MPX},
+    {"Repro", COFF::IMAGE_DEBUG_TYPE_REPRO},
+    {"ExtendedDLLCharacteristics",
+     COFF::IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS},
 };
 
 static const EnumEntry<COFF::WeakExternalCharacteristics>
@@ -621,6 +629,7 @@ void COFFDumper::printFileHeaders() {
     W.printHex   ("TimeDateStamp", FormattedTime, Obj->getTimeDateStamp());
     W.printHex   ("PointerToSymbolTable", Obj->getPointerToSymbolTable());
     W.printNumber("SymbolCount", Obj->getNumberOfSymbols());
+    W.printNumber("StringTableSize", Obj->getStringTableSize());
     W.printNumber("OptionalHeaderSize", Obj->getSizeOfOptionalHeader());
     W.printFlags ("Characteristics", Obj->getCharacteristics(),
                     makeArrayRef(ImageFileCharacteristics));
@@ -722,6 +731,10 @@ void COFFDumper::printCOFFDebugDirectory() {
     W.printHex("SizeOfData", D.SizeOfData);
     W.printHex("AddressOfRawData", D.AddressOfRawData);
     W.printHex("PointerToRawData", D.PointerToRawData);
+    // Ideally, if D.AddressOfRawData == 0, we should try to load the payload
+    // using D.PointerToRawData instead.
+    if (D.AddressOfRawData == 0)
+      continue;
     if (D.Type == COFF::IMAGE_DEBUG_TYPE_CODEVIEW) {
       const codeview::DebugInfo *DebugInfo;
       StringRef PDBFileName;
@@ -736,12 +749,19 @@ void COFFDumper::printCOFFDebugDirectory() {
         W.printString("PDBFileName", PDBFileName);
       }
     } else if (D.SizeOfData != 0) {
-      // FIXME: Type values of 12 and 13 are commonly observed but are not in
-      // the documented type enum.  Figure out what they mean.
+      // FIXME: Data visualization for IMAGE_DEBUG_TYPE_VC_FEATURE and
+      // IMAGE_DEBUG_TYPE_POGO?
       ArrayRef<uint8_t> RawData;
       if (std::error_code EC = Obj->getRvaAndSizeAsBytes(D.AddressOfRawData,
                                                          D.SizeOfData, RawData))
         reportError(errorCodeToError(EC), Obj->getFileName());
+      if (D.Type == COFF::IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS) {
+        // FIXME right now the only possible value would fit in 8 bits,
+        // but that might change in the future
+        uint16_t Characteristics = RawData[0];
+        W.printFlags("ExtendedCharacteristics", Characteristics,
+                     makeArrayRef(PEExtendedDLLCharacteristics));
+      }
       W.printBinaryBlock("RawData", RawData);
     }
   }
@@ -1135,7 +1155,7 @@ void COFFDumper::printCodeViewSymbolSection(StringRef SectionName,
           return;
         }
 
-        std::string PC = formatv("+{0:X}", uint32_t(Line.Offset));
+        std::string PC = std::string(formatv("+{0:X}", uint32_t(Line.Offset)));
         ListScope PCScope(W, PC);
         codeview::LineInfo LI(Line.Flags);
 
@@ -1449,21 +1469,25 @@ void COFFDumper::printSymbol(const SymbolRef &Sym) {
   DictScope D(W, "Symbol");
 
   COFFSymbolRef Symbol = Obj->getCOFFSymbol(Sym);
-  const coff_section *Section;
-  if (std::error_code EC = Obj->getSection(Symbol.getSectionNumber(), Section)) {
-    W.startLine() << "Invalid section number: " << EC.message() << "\n";
+  Expected<const coff_section *> SecOrErr =
+      Obj->getSection(Symbol.getSectionNumber());
+  if (!SecOrErr) {
+    W.startLine() << "Invalid section number: " << Symbol.getSectionNumber()
+                  << "\n";
     W.flush();
+    consumeError(SecOrErr.takeError());
     return;
   }
+  const coff_section *Section = *SecOrErr;
 
   StringRef SymbolName;
-  if (Obj->getSymbolName(Symbol, SymbolName))
-    SymbolName = "";
+  if (Expected<StringRef> SymNameOrErr = Obj->getSymbolName(Symbol))
+    SymbolName = *SymNameOrErr;
 
   StringRef SectionName;
-  if (Expected<StringRef> NameOrErr =
+  if (Expected<StringRef> SecNameOrErr =
           getSectionName(Obj, Symbol.getSectionNumber(), Section))
-    SectionName = *NameOrErr;
+    SectionName = *SecNameOrErr;
 
   W.printString("Name", SymbolName);
   W.printNumber("Value", Symbol.getValue());
@@ -1496,12 +1520,12 @@ void COFFDumper::printSymbol(const SymbolRef &Sym) {
       if (!Linked)
         reportError(Linked.takeError(), Obj->getFileName());
 
-      StringRef LinkedName;
-      if (std::error_code EC = Obj->getSymbolName(*Linked, LinkedName))
-        reportError(errorCodeToError(EC), Obj->getFileName());
+      Expected<StringRef> LinkedName = Obj->getSymbolName(*Linked);
+      if (!LinkedName)
+        reportError(LinkedName.takeError(), Obj->getFileName());
 
       DictScope AS(W, "AuxWeakExternal");
-      W.printNumber("Linked", LinkedName, Aux->TagIndex);
+      W.printNumber("Linked", *LinkedName, Aux->TagIndex);
       W.printEnum  ("Search", Aux->Characteristics,
                     makeArrayRef(WeakExternalCharacteristics));
 
@@ -1532,16 +1556,14 @@ void COFFDumper::printSymbol(const SymbolRef &Sym) {
 
       if (Section && Section->Characteristics & COFF::IMAGE_SCN_LNK_COMDAT
           && Aux->Selection == COFF::IMAGE_COMDAT_SELECT_ASSOCIATIVE) {
-        const coff_section *Assoc;
-        StringRef AssocName = "";
-        if (std::error_code EC = Obj->getSection(AuxNumber, Assoc))
-          reportError(errorCodeToError(EC), Obj->getFileName());
-        Expected<StringRef> Res = getSectionName(Obj, AuxNumber, Assoc);
-        if (!Res)
-          reportError(Res.takeError(), Obj->getFileName());
-        AssocName = *Res;
+        Expected<const coff_section *> Assoc = Obj->getSection(AuxNumber);
+        if (!Assoc)
+          reportError(Assoc.takeError(), Obj->getFileName());
+        Expected<StringRef> AssocName = getSectionName(Obj, AuxNumber, *Assoc);
+        if (!AssocName)
+          reportError(AssocName.takeError(), Obj->getFileName());
 
-        W.printNumber("AssocSection", AssocName, AuxNumber);
+        W.printNumber("AssocSection", *AssocName, AuxNumber);
       }
     } else if (Symbol.isCLRToken()) {
       const coff_aux_clr_token *Aux;
@@ -1553,14 +1575,14 @@ void COFFDumper::printSymbol(const SymbolRef &Sym) {
       if (!ReferredSym)
         reportError(ReferredSym.takeError(), Obj->getFileName());
 
-      StringRef ReferredName;
-      if (std::error_code EC = Obj->getSymbolName(*ReferredSym, ReferredName))
-        reportError(errorCodeToError(EC), Obj->getFileName());
+      Expected<StringRef> ReferredName = Obj->getSymbolName(*ReferredSym);
+      if (!ReferredName)
+        reportError(ReferredName.takeError(), Obj->getFileName());
 
       DictScope AS(W, "AuxCLRToken");
       W.printNumber("AuxType", Aux->AuxType);
       W.printNumber("Reserved", Aux->Reserved);
-      W.printNumber("SymbolTableIndex", ReferredName, Aux->SymbolTableIndex);
+      W.printNumber("SymbolTableIndex", *ReferredName, Aux->SymbolTableIndex);
 
     } else {
       W.startLine() << "<unhandled auxiliary record>\n";
@@ -1949,11 +1971,11 @@ void COFFDumper::printAddrsig() {
     if (!Sym)
       reportError(Sym.takeError(), Obj->getFileName());
 
-    StringRef SymName;
-    if (std::error_code EC = Obj->getSymbolName(*Sym, SymName))
-      reportError(errorCodeToError(EC), Obj->getFileName());
+    Expected<StringRef> SymName = Obj->getSymbolName(*Sym);
+    if (!SymName)
+      reportError(SymName.takeError(), Obj->getFileName());
 
-    W.printNumber("Sym", SymName, SymIndex);
+    W.printNumber("Sym", *SymName, SymIndex);
     Cur += Size;
   }
 }

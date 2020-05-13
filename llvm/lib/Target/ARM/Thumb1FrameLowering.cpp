@@ -88,8 +88,10 @@ emitPrologueEpilogueSPUpdate(MachineBasicBlock &MBB,
                             0, MIFlags);
     }
     BuildMI(MBB, MBBI, dl, TII.get(ARM::tADDhirr), ARM::SP)
-      .addReg(ARM::SP).addReg(ScratchReg, RegState::Kill)
-      .add(predOps(ARMCC::AL));
+        .addReg(ARM::SP)
+        .addReg(ScratchReg, RegState::Kill)
+        .add(predOps(ARMCC::AL))
+        .setMIFlags(MIFlags);
     return;
   }
   // FIXME: This is assuming the heuristics in emitThumbRegPlusImmediate
@@ -127,7 +129,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
       // We need to keep the stack aligned properly.  To do this, we round the
       // amount of space needed for the outgoing arguments up to the next
       // alignment boundary.
-      Amount = alignTo(Amount, getStackAlignment());
+      Amount = alignTo(Amount, getStackAlign());
 
       // Replace the pseudo instruction with a new instruction...
       unsigned Opc = Old.getOpcode();
@@ -402,7 +404,7 @@ void Thumb1FrameLowering::emitPrologue(MachineFunction &MF,
   AFI->setDPRCalleeSavedAreaSize(DPRCSSize);
 
   if (RegInfo->needsStackRealignment(MF)) {
-    const unsigned NrBitsToZero = countTrailingZeros(MFI.getMaxAlignment());
+    const unsigned NrBitsToZero = Log2(MFI.getMaxAlign());
     // Emit the following sequence, using R4 as a temporary, since we cannot use
     // SP as a source or destination register for the shifts:
     // mov  r4, sp
@@ -804,11 +806,9 @@ static const unsigned *findNextOrderedReg(const unsigned *CurrentReg,
   return CurrentReg;
 }
 
-bool Thumb1FrameLowering::
-spillCalleeSavedRegisters(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MI,
-                          const std::vector<CalleeSavedInfo> &CSI,
-                          const TargetRegisterInfo *TRI) const {
+bool Thumb1FrameLowering::spillCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    ArrayRef<CalleeSavedInfo> CSI, const TargetRegisterInfo *TRI) const {
   if (CSI.empty())
     return false;
 
@@ -927,11 +927,9 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   return true;
 }
 
-bool Thumb1FrameLowering::
-restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator MI,
-                            std::vector<CalleeSavedInfo> &CSI,
-                            const TargetRegisterInfo *TRI) const {
+bool Thumb1FrameLowering::restoreCalleeSavedRegisters(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+    MutableArrayRef<CalleeSavedInfo> CSI, const TargetRegisterInfo *TRI) const {
   if (CSI.empty())
     return false;
 

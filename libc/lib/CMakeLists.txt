@@ -2,23 +2,55 @@
 add_entrypoint_library(
   llvmlibc
   DEPENDS
+    # assert.h entrypoints
+    libc.src.assert.__assert_fail
+
     # errno.h entrypoints
-    __errno_location
+    libc.src.errno.__errno_location
+
+    # signal.h entrypoints
+    libc.src.signal.raise
+    libc.src.signal.sigaction
+    libc.src.signal.sigdelset
+    libc.src.signal.sigaddset
+    libc.src.signal.sigemptyset
+    libc.src.signal.sigprocmask
+    libc.src.signal.sigfillset
+    libc.src.signal.signal
+
+    # stdlib.h entrypoints
+    libc.src.stdlib._Exit
+    libc.src.stdlib.abort
 
     # string.h entrypoints
-    strcpy
-    strcat
+    libc.src.string.memcpy
+    libc.src.string.strcpy
+    libc.src.string.strcat
+    libc.src.string.strlen
 
     # sys/mman.h entrypoints
-    mmap
-    munmap
+    libc.src.sys.mman.mmap
+    libc.src.sys.mman.munmap
+
+    # threads.h entrypoints
+    libc.src.threads.mtx_init
+    libc.src.threads.mtx_lock
+    libc.src.threads.mtx_unlock
+    libc.src.threads.thrd_create
+    libc.src.threads.thrd_join
+
+    # unistd.h entrypoints
+    libc.src.unistd.write
 )
 
 add_entrypoint_library(
   llvmlibm
   DEPENDS
     # math.h entrypoints
-    round
+    libc.src.math.cosf
+    libc.src.math.round
+    libc.src.math.sincosf
+    libc.src.math.sinf
 )
 
 add_redirector_library(

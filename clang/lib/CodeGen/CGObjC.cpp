@@ -461,38 +461,39 @@ tryEmitSpecializedAllocInit(CodeGenFunction &CGF, const ObjCMessageExpr *OME) {
       Sel.getNameForSlot(0) != "init")
     return None;
 
-  // Okay, this is '[receiver init]', check if 'receiver' is '[cls alloc]' or
-  // we are in an ObjC class method and 'receiver' is '[self alloc]'.
+  // Okay, this is '[receiver init]', check if 'receiver' is '[cls alloc]'
+  // with 'cls' a Class.
   auto *SubOME =
       dyn_cast<ObjCMessageExpr>(OME->getInstanceReceiver()->IgnoreParenCasts());
   if (!SubOME)
     return None;
   Selector SubSel = SubOME->getSelector();
 
-  // Check if we are in an ObjC class method and the receiver expression is
-  // 'self'.
-  const Expr *SelfInClassMethod = nullptr;
-  if (const auto *CurMD = dyn_cast_or_null<ObjCMethodDecl>(CGF.CurFuncDecl))
-    if (CurMD->isClassMethod())
-      if ((SelfInClassMethod = SubOME->getInstanceReceiver()))
-        if (!SelfInClassMethod->isObjCSelfExpr())
-          SelfInClassMethod = nullptr;
-
-  if ((SubOME->getReceiverKind() != ObjCMessageExpr::Class &&
-       !SelfInClassMethod) || !SubOME->getType()->isObjCObjectPointerType() ||
+  if (!SubOME->getType()->isObjCObjectPointerType() ||
       !SubSel.isUnarySelector() || SubSel.getNameForSlot(0) != "alloc")
     return None;
 
-  llvm::Value *Receiver;
-  if (SelfInClassMethod) {
-    Receiver = CGF.EmitScalarExpr(SelfInClassMethod);
-  } else {
+  llvm::Value *Receiver = nullptr;
+  switch (SubOME->getReceiverKind()) {
+  case ObjCMessageExpr::Instance:
+    if (!SubOME->getInstanceReceiver()->getType()->isObjCClassType())
+      return None;
+    Receiver = CGF.EmitScalarExpr(SubOME->getInstanceReceiver());
+    break;
+
+  case ObjCMessageExpr::Class: {
     QualType ReceiverType = SubOME->getClassReceiver();
-    const ObjCObjectType *ObjTy = ReceiverType->getAs<ObjCObjectType>();
+    const ObjCObjectType *ObjTy = ReceiverType->castAs<ObjCObjectType>();
     const ObjCInterfaceDecl *ID = ObjTy->getInterface();
     assert(ID && "null interface should be impossible here");
     Receiver = CGF.CGM.getObjCRuntime().GetClass(CGF, ID);
+    break;
   }
+  case ObjCMessageExpr::SuperInstance:
+  case ObjCMessageExpr::SuperClass:
+    return None;
+  }
+
   return CGF.EmitObjCAllocInit(Receiver, CGF.ConvertType(OME->getType()));
 }
 
@@ -540,10 +541,7 @@ RValue CodeGenFunction::EmitObjCMessageExpr(const ObjCMessageExpr *E,
   switch (E->getReceiverKind()) {
   case ObjCMessageExpr::Instance:
     ReceiverType = E->getInstanceReceiver()->getType();
-    if (auto *OMD = dyn_cast_or_null<ObjCMethodDecl>(CurFuncDecl))
-      if (OMD->isClassMethod())
-        if (E->getInstanceReceiver()->isObjCSelfExpr())
-          isClassMessage = true;
+    isClassMessage = ReceiverType->isObjCClassType();
     if (retainSelf) {
       TryEmitResult ter = tryEmitARCRetainScalarExpr(*this,
                                                    E->getInstanceReceiver());
@@ -555,9 +553,7 @@ RValue CodeGenFunction::EmitObjCMessageExpr(const ObjCMessageExpr *E,
 
   case ObjCMessageExpr::Class: {
     ReceiverType = E->getClassReceiver();
-    const ObjCObjectType *ObjTy = ReceiverType->getAs<ObjCObjectType>();
-    assert(ObjTy && "Invalid Objective-C class message send");
-    OID = ObjTy->getInterface();
+    OID = ReceiverType->castAs<ObjCObjectType>()->getInterface();
     assert(OID && "Invalid Objective-C class message send");
     Receiver = Runtime.GetClass(*this, OID);
     isClassMessage = true;
@@ -1495,11 +1491,11 @@ CodeGenFunction::generateObjCSetterBody(const ObjCImplementationDecl *classImpl,
                                            argLoad.getType()))
     finalArg = &argCast;
 
-
-  BinaryOperator assign(&ivarRef, finalArg, BO_Assign,
-                        ivarRef.getType(), VK_RValue, OK_Ordinary,
-                        SourceLocation(), FPOptions());
-  EmitStmt(&assign);
+  BinaryOperator *assign = BinaryOperator::Create(
+      getContext(), &ivarRef, finalArg, BO_Assign, ivarRef.getType(), VK_RValue,
+      OK_Ordinary, SourceLocation(),
+      FPOptions(getContext().getLangOpts()));
+  EmitStmt(assign);
 }
 
 /// Generate an Objective-C property setter function.
@@ -2164,7 +2160,8 @@ llvm::Value *CodeGenFunction::EmitARCRetainBlock(llvm::Value *value,
   if (!mandatory && isa<llvm::Instruction>(result)) {
     llvm::CallInst *call
       = cast<llvm::CallInst>(result->stripPointerCasts());
-    assert(call->getCalledValue() == CGM.getObjCEntrypoints().objc_retainBlock);
+    assert(call->getCalledOperand() ==
+           CGM.getObjCEntrypoints().objc_retainBlock);
 
     call->setMetadata("clang.arc.copy_on_escape",
                       llvm::MDNode::get(Builder.getContext(), None));
@@ -3509,7 +3506,7 @@ CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
   if (!Ty->isRecordType())
     return nullptr;
   const ObjCPropertyDecl *PD = PID->getPropertyDecl();
-  if ((!(PD->getPropertyAttributes() & ObjCPropertyDecl::OBJC_PR_atomic)))
+  if ((!(PD->getPropertyAttributes() & ObjCPropertyAttribute::kind_atomic)))
     return nullptr;
   llvm::Constant *HelperFn = nullptr;
   if (hasTrivialSetExpr(PID))
@@ -3559,21 +3556,21 @@ CodeGenFunction::GenerateObjCAtomicSetterCopyHelperFunction(
 
   StartFunction(FD, ReturnTy, Fn, FI, args);
 
-  DeclRefExpr DstExpr(getContext(), &DstDecl, false, DestTy, VK_RValue,
-                      SourceLocation());
-  UnaryOperator DST(&DstExpr, UO_Deref, DestTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation(), false);
+  DeclRefExpr DstExpr(C, &DstDecl, false, DestTy, VK_RValue, SourceLocation());
+  UnaryOperator *DST = UnaryOperator::Create(
+      C, &DstExpr, UO_Deref, DestTy->getPointeeType(), VK_LValue, OK_Ordinary,
+      SourceLocation(), false, FPOptions(C.getLangOpts()));
 
-  DeclRefExpr SrcExpr(getContext(), &SrcDecl, false, SrcTy, VK_RValue,
-                      SourceLocation());
-  UnaryOperator SRC(&SrcExpr, UO_Deref, SrcTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation(), false);
+  DeclRefExpr SrcExpr(C, &SrcDecl, false, SrcTy, VK_RValue, SourceLocation());
+  UnaryOperator *SRC = UnaryOperator::Create(
+      C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
+      SourceLocation(), false, FPOptions(C.getLangOpts()));
 
-  Expr *Args[2] = { &DST, &SRC };
+  Expr *Args[2] = {DST, SRC};
   CallExpr *CalleeExp = cast<CallExpr>(PID->getSetterCXXAssignment());
   CXXOperatorCallExpr *TheCall = CXXOperatorCallExpr::Create(
       C, OO_Equal, CalleeExp->getCallee(), Args, DestTy->getPointeeType(),
-      VK_LValue, SourceLocation(), FPOptions());
+      VK_LValue, SourceLocation(), FPOptions(C.getLangOpts()));
 
   EmitStmt(TheCall);
 
@@ -3593,7 +3590,7 @@ CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
   QualType Ty = PD->getType();
   if (!Ty->isRecordType())
     return nullptr;
-  if ((!(PD->getPropertyAttributes() & ObjCPropertyDecl::OBJC_PR_atomic)))
+  if ((!(PD->getPropertyAttributes() & ObjCPropertyAttribute::kind_atomic)))
     return nullptr;
   llvm::Constant *HelperFn = nullptr;
   if (hasTrivialGetExpr(PID))
@@ -3645,14 +3642,15 @@ CodeGenFunction::GenerateObjCAtomicGetterCopyHelperFunction(
   DeclRefExpr SrcExpr(getContext(), &SrcDecl, false, SrcTy, VK_RValue,
                       SourceLocation());
 
-  UnaryOperator SRC(&SrcExpr, UO_Deref, SrcTy->getPointeeType(),
-                    VK_LValue, OK_Ordinary, SourceLocation(), false);
+  UnaryOperator *SRC = UnaryOperator::Create(
+      C, &SrcExpr, UO_Deref, SrcTy->getPointeeType(), VK_LValue, OK_Ordinary,
+      SourceLocation(), false, FPOptions(C.getLangOpts()));
 
   CXXConstructExpr *CXXConstExpr =
     cast<CXXConstructExpr>(PID->getGetterCXXConstructor());
 
   SmallVector<Expr*, 4> ConstructorArgs;
-  ConstructorArgs.push_back(&SRC);
+  ConstructorArgs.push_back(SRC);
   ConstructorArgs.append(std::next(CXXConstExpr->arg_begin()),
                          CXXConstExpr->arg_end());
 

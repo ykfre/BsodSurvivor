@@ -68,6 +68,9 @@ void AArch64Subtarget::initializeProperties() {
   switch (ARMProcFamily) {
   case Others:
     break;
+  case Carmel:
+    CacheLineSize = 64;
+    break;
   case CortexA35:
     break;
   case CortexA53:
@@ -88,7 +91,16 @@ void AArch64Subtarget::initializeProperties() {
   case CortexA76:
     PrefFunctionLogAlignment = 4;
     break;
-  case Cyclone:
+  case A64FX:
+    CacheLineSize = 256;
+    PrefFunctionLogAlignment = 5;
+    PrefLoopLogAlignment = 5;
+    break;
+  case AppleA7:
+  case AppleA10:
+  case AppleA11:
+  case AppleA12:
+  case AppleA13:
     CacheLineSize = 64;
     PrefetchDistance = 280;
     MinPrefetchStride = 2048;
@@ -173,6 +185,7 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, const std::string &CPU,
     ReserveXRegister.set(18);
 
   CallLoweringInfo.reset(new AArch64CallLowering(*getTargetLowering()));
+  InlineAsmLoweringInfo.reset(new InlineAsmLowering(getTargetLowering()));
   Legalizer.reset(new AArch64LegalizerInfo(*this));
 
   auto *RBI = new AArch64RegisterBankInfo(*getRegisterInfo());
@@ -188,6 +201,10 @@ AArch64Subtarget::AArch64Subtarget(const Triple &TT, const std::string &CPU,
 
 const CallLowering *AArch64Subtarget::getCallLowering() const {
   return CallLoweringInfo.get();
+}
+
+const InlineAsmLowering *AArch64Subtarget::getInlineAsmLowering() const {
+  return InlineAsmLoweringInfo.get();
 }
 
 InstructionSelector *AArch64Subtarget::getInstructionSelector() const {

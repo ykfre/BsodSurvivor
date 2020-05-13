@@ -34,7 +34,7 @@ std::string toString(const wasm::InputFile *file) {
     return "<internal>";
 
   if (file->archiveName.empty())
-    return file->getName();
+    return std::string(file->getName());
 
   return (file->archiveName + "(" + file->getName() + ")").str();
 }
@@ -152,6 +152,7 @@ uint32_t ObjFile::calcExpectedValue(const WasmRelocation &reloc) const {
     return reloc.Index;
   case R_WASM_FUNCTION_INDEX_LEB:
   case R_WASM_GLOBAL_INDEX_LEB:
+  case R_WASM_GLOBAL_INDEX_I32:
   case R_WASM_EVENT_INDEX_LEB: {
     const WasmSymbol &sym = wasmObj->syms()[reloc.Index];
     return sym.Info.ElementIndex;
@@ -168,9 +169,11 @@ uint32_t ObjFile::calcNewValue(const WasmRelocation &reloc) const {
     sym = symbols[reloc.Index];
 
     // We can end up with relocations against non-live symbols.  For example
-    // in debug sections.
+    // in debug sections. We return reloc.Addend because always returning zero
+    // causes the generation of spurious range-list terminators in the
+    // .debug_ranges section.
     if ((isa<FunctionSymbol>(sym) || isa<DataSymbol>(sym)) && !sym->isLive())
-      return 0;
+      return reloc.Addend;
   }
 
   switch (reloc.Type) {
@@ -197,6 +200,7 @@ uint32_t ObjFile::calcNewValue(const WasmRelocation &reloc) const {
   case R_WASM_FUNCTION_INDEX_LEB:
     return getFunctionSymbol(reloc.Index)->getFunctionIndex();
   case R_WASM_GLOBAL_INDEX_LEB:
+  case R_WASM_GLOBAL_INDEX_I32:
     if (auto gs = dyn_cast<GlobalSymbol>(sym))
       return gs->getGlobalIndex();
     return sym->getGOTIndex();
@@ -221,14 +225,13 @@ static void setRelocs(const std::vector<T *> &chunks,
     return;
 
   ArrayRef<WasmRelocation> relocs = section->Relocations;
-  assert(std::is_sorted(relocs.begin(), relocs.end(),
-                        [](const WasmRelocation &r1, const WasmRelocation &r2) {
-                          return r1.Offset < r2.Offset;
-                        }));
-  assert(std::is_sorted(
-      chunks.begin(), chunks.end(), [](InputChunk *c1, InputChunk *c2) {
-        return c1->getInputSectionOffset() < c2->getInputSectionOffset();
+  assert(llvm::is_sorted(
+      relocs, [](const WasmRelocation &r1, const WasmRelocation &r2) {
+        return r1.Offset < r2.Offset;
       }));
+  assert(llvm::is_sorted(chunks, [](InputChunk *c1, InputChunk *c2) {
+    return c1->getInputSectionOffset() < c2->getInputSectionOffset();
+  }));
 
   auto relocsNext = relocs.begin();
   auto relocsEnd = relocs.end();
@@ -299,8 +302,7 @@ void ObjFile::parse(bool ignoreComdats) {
       customSectionsByIndex[sectionIndex] = customSections.back();
     }
     sectionIndex++;
-    // Scans relocations to dermine determine if a function symbol is called
-    // directly
+    // Scans relocations to determine if a function symbol is called directly.
     for (const WasmRelocation &reloc : section.Relocations)
       if (reloc.Type == R_WASM_FUNCTION_INDEX_LEB)
         isCalledDirectly[reloc.Index] = true;
@@ -527,7 +529,7 @@ static Symbol *createBitcodeSymbol(const std::vector<bool> &keptComdats,
   if (objSym.isUndefined() || excludedByComdat) {
     flags |= WASM_SYMBOL_UNDEFINED;
     if (objSym.isExecutable())
-      return symtab->addUndefinedFunction(name, "", "", flags, &f, nullptr,
+      return symtab->addUndefinedFunction(name, None, None, flags, &f, nullptr,
                                           true);
     return symtab->addUndefinedData(name, flags, &f);
   }
@@ -537,7 +539,15 @@ static Symbol *createBitcodeSymbol(const std::vector<bool> &keptComdats,
   return symtab->addDefinedData(name, flags, &f, nullptr, 0, 0);
 }
 
+bool BitcodeFile::doneLTO = false;
+
 void BitcodeFile::parse() {
+  if (doneLTO) {
+    error(toString(mb.getBufferIdentifier()) +
+          ": attempt to add bitcode file after LTO.");
+    return;
+  }
+
   obj = check(lto::InputFile::create(MemoryBufferRef(
       mb.getBuffer(), saver.save(archiveName + mb.getBufferIdentifier()))));
   Triple t(obj->getTargetTriple());

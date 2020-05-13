@@ -36,6 +36,7 @@
 //  a -> __builtin_va_list
 //  A -> "reference" to __builtin_va_list
 //  V -> Vector, followed by the number of elements and the base type.
+//  q -> Scalable vector, followed by the number of elements and the base type.
 //  E -> ext_vector, followed by the number of elements and the base type.
 //  X -> _Complex, followed by the base type.
 //  Y -> ptrdiff_t
@@ -471,7 +472,7 @@ BUILTIN(__builtin___NSStringMakeConstantString, "FC*cC*", "nc")
 BUILTIN(__builtin_va_start, "vA.", "nt")
 BUILTIN(__builtin_va_end, "vA", "n")
 BUILTIN(__builtin_va_copy, "vAA", "n")
-BUILTIN(__builtin_stdarg_start, "vA.", "n")
+BUILTIN(__builtin_stdarg_start, "vA.", "nt")
 BUILTIN(__builtin_assume_aligned, "v*vC*z.", "nc")
 BUILTIN(__builtin_bcmp, "ivC*vC*z", "Fn")
 BUILTIN(__builtin_bcopy, "vv*v*z", "n")
@@ -480,6 +481,7 @@ BUILTIN(__builtin_fprintf, "iP*cC*.", "Fp:1:")
 BUILTIN(__builtin_memchr, "v*vC*iz", "nF")
 BUILTIN(__builtin_memcmp, "ivC*vC*z", "nF")
 BUILTIN(__builtin_memcpy, "v*v*vC*z", "nF")
+BUILTIN(__builtin_memcpy_inline, "vv*vC*Iz", "nt")
 BUILTIN(__builtin_memmove, "v*v*vC*z", "nF")
 BUILTIN(__builtin_mempcpy, "v*v*vC*z", "nF")
 BUILTIN(__builtin_memset, "v*v*iz", "nF")
@@ -722,7 +724,7 @@ ATOMIC_BUILTIN(__c11_atomic_fetch_max, "v.", "t")
 ATOMIC_BUILTIN(__c11_atomic_fetch_min, "v.", "t")
 BUILTIN(__c11_atomic_thread_fence, "vi", "n")
 BUILTIN(__c11_atomic_signal_fence, "vi", "n")
-BUILTIN(__c11_atomic_is_lock_free, "iz", "n")
+BUILTIN(__c11_atomic_is_lock_free, "bz", "n")
 
 // GNU atomic builtins.
 ATOMIC_BUILTIN(__atomic_load, "v.", "t")
@@ -751,8 +753,8 @@ BUILTIN(__atomic_test_and_set, "bvD*i", "n")
 BUILTIN(__atomic_clear, "vvD*i", "n")
 BUILTIN(__atomic_thread_fence, "vi", "n")
 BUILTIN(__atomic_signal_fence, "vi", "n")
-BUILTIN(__atomic_always_lock_free, "izvCD*", "n")
-BUILTIN(__atomic_is_lock_free, "izvCD*", "n")
+BUILTIN(__atomic_always_lock_free, "bzvCD*", "n")
+BUILTIN(__atomic_is_lock_free, "bzvCD*", "n")
 
 // OpenCL 2.0 atomic builtins.
 ATOMIC_BUILTIN(__opencl_atomic_init, "v.", "t")
@@ -787,6 +789,9 @@ BUILTIN(__sync_fetch_and_umax, "UiUiD*Ui", "n")
 BUILTIN(__builtin_abort, "v", "Fnr")
 BUILTIN(__builtin_index, "c*cC*i", "Fn")
 BUILTIN(__builtin_rindex, "c*cC*i", "Fn")
+
+// ignored glibc builtin, see https://sourceware.org/bugzilla/show_bug.cgi?id=25399
+BUILTIN(__warn_memset_zero_len, "v", "nU")
 
 // Microsoft builtins.  These are only active with -fms-extensions.
 LANGBUILTIN(_alloca,          "v*z", "n", ALL_MS_LANGUAGES)
@@ -984,6 +989,7 @@ LIBBUILTIN(longjmp, "vJi",        "fr",    "setjmp.h", ALL_LANGUAGES)
 LIBBUILTIN(alloca, "v*z",         "f",     "stdlib.h", ALL_GNU_LANGUAGES)
 // POSIX string.h
 LIBBUILTIN(memccpy, "v*v*vC*iz",  "f",     "string.h", ALL_GNU_LANGUAGES)
+LIBBUILTIN(mempcpy, "v*v*vC*z",   "f",     "string.h", ALL_GNU_LANGUAGES)
 LIBBUILTIN(stpcpy, "c*c*cC*",     "f",     "string.h", ALL_GNU_LANGUAGES)
 LIBBUILTIN(stpncpy, "c*c*cC*z",   "f",     "string.h", ALL_GNU_LANGUAGES)
 LIBBUILTIN(strdup, "c*cC*",       "f",     "string.h", ALL_GNU_LANGUAGES)
@@ -1474,6 +1480,11 @@ BUILTIN(__builtin_operator_delete, "vv*", "tn")
 BUILTIN(__builtin_char_memchr, "c*cC*iz", "n")
 BUILTIN(__builtin_dump_struct, "ivC*v*", "tn")
 BUILTIN(__builtin_preserve_access_index, "v.", "t")
+
+// Alignment builtins (uses custom parsing to support pointers and integers)
+BUILTIN(__builtin_is_aligned, "bvC*z", "nct")
+BUILTIN(__builtin_align_up, "v*vC*z", "nct")
+BUILTIN(__builtin_align_down, "v*vC*z", "nct")
 
 // Safestack builtins
 BUILTIN(__builtin___get_unsafe_stack_start, "v*", "Fn")

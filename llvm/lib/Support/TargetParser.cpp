@@ -99,9 +99,9 @@ constexpr GPUInfo AMDGCNGPUs[37] = {
   {{"gfx906"},    {"gfx906"},  GK_GFX906,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
   {{"gfx908"},    {"gfx908"},  GK_GFX908,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
   {{"gfx909"},    {"gfx909"},  GK_GFX909,  FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
-  {{"gfx1010"},   {"gfx1010"}, GK_GFX1010, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
-  {{"gfx1011"},   {"gfx1011"}, GK_GFX1011, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
-  {{"gfx1012"},   {"gfx1012"}, GK_GFX1012, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32},
+  {{"gfx1010"},   {"gfx1010"}, GK_GFX1010, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32|FEATURE_WAVE32},
+  {{"gfx1011"},   {"gfx1011"}, GK_GFX1011, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32|FEATURE_WAVE32},
+  {{"gfx1012"},   {"gfx1012"}, GK_GFX1012, FEATURE_FAST_FMA_F32|FEATURE_FAST_DENORMAL_F32|FEATURE_WAVE32},
 };
 
 const GPUInfo *getArchEntry(AMDGPU::GPUKind AK, ArrayRef<GPUInfo> Table) {
@@ -132,7 +132,7 @@ StringRef llvm::AMDGPU::getArchNameR600(GPUKind AK) {
 }
 
 AMDGPU::GPUKind llvm::AMDGPU::parseArchAMDGCN(StringRef CPU) {
-  for (const auto C : AMDGCNGPUs) {
+  for (const auto &C : AMDGCNGPUs) {
     if (CPU == C.Name)
       return C.Kind;
   }
@@ -141,7 +141,7 @@ AMDGPU::GPUKind llvm::AMDGPU::parseArchAMDGCN(StringRef CPU) {
 }
 
 AMDGPU::GPUKind llvm::AMDGPU::parseArchR600(StringRef CPU) {
-  for (const auto C : R600GPUs) {
+  for (const auto &C : R600GPUs) {
     if (CPU == C.Name)
       return C.Kind;
   }
@@ -163,12 +163,12 @@ unsigned AMDGPU::getArchAttrR600(GPUKind AK) {
 
 void AMDGPU::fillValidArchListAMDGCN(SmallVectorImpl<StringRef> &Values) {
   // XXX: Should this only report unique canonical names?
-  for (const auto C : AMDGCNGPUs)
+  for (const auto &C : AMDGCNGPUs)
     Values.push_back(C.Name);
 }
 
 void AMDGPU::fillValidArchListR600(SmallVectorImpl<StringRef> &Values) {
-  for (const auto C : R600GPUs)
+  for (const auto &C : R600GPUs)
     Values.push_back(C.Name);
 }
 

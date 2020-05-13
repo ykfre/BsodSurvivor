@@ -329,7 +329,7 @@ QualType SymbolDerived::getType() const {
 }
 
 QualType SymbolExtent::getType() const {
-  ASTContext &Ctx = R->getMemRegionManager()->getContext();
+  ASTContext &Ctx = R->getMemRegionManager().getContext();
   return Ctx.getSizeType();
 }
 
@@ -339,10 +339,6 @@ QualType SymbolMetadata::getType() const {
 
 QualType SymbolRegionValue::getType() const {
   return R->getValueType();
-}
-
-SymbolManager::~SymbolManager() {
-  llvm::DeleteContainerSeconds(SymbolDependencies);
 }
 
 bool SymbolManager::canSymbolicate(QualType T) {
@@ -362,13 +358,9 @@ bool SymbolManager::canSymbolicate(QualType T) {
 
 void SymbolManager::addSymbolDependency(const SymbolRef Primary,
                                         const SymbolRef Dependent) {
-  SymbolDependTy::iterator I = SymbolDependencies.find(Primary);
-  SymbolRefSmallVectorTy *dependencies = nullptr;
-  if (I == SymbolDependencies.end()) {
-    dependencies = new SymbolRefSmallVectorTy();
-    SymbolDependencies[Primary] = dependencies;
-  } else {
-    dependencies = I->second;
+  auto &dependencies = SymbolDependencies[Primary];
+  if (!dependencies) {
+    dependencies = std::make_unique<SymbolRefSmallVectorTy>();
   }
   dependencies->push_back(Dependent);
 }
@@ -378,7 +370,7 @@ const SymbolRefSmallVectorTy *SymbolManager::getDependentSymbols(
   SymbolDependTy::const_iterator I = SymbolDependencies.find(Primary);
   if (I == SymbolDependencies.end())
     return nullptr;
-  return I->second;
+  return I->second.get();
 }
 
 void SymbolReaper::markDependentsLive(SymbolRef sym) {
@@ -540,6 +532,11 @@ bool SymbolReaper::isLive(const VarRegion *VR, bool includeStoreBindings) const{
   if (VarContext == CurrentContext) {
     // If no statement is provided, everything is live.
     if (!Loc)
+      return true;
+
+    // Anonymous parameters of an inheriting constructor are live for the entire
+    // duration of the constructor.
+    if (isa<CXXInheritedCtorInitExpr>(Loc))
       return true;
 
     if (LCtx->getAnalysis<RelaxedLiveVariables>()->isLive(Loc, VR->getDecl()))

@@ -215,6 +215,7 @@ namespace llvm {
     OptLevelChanger(SelectionDAGISel &ISel,
                     CodeGenOpt::Level NewOptLevel) : IS(ISel) {
       SavedOptLevel = IS.OptLevel;
+      SavedFastISel = IS.TM.Options.EnableFastISel;
       if (NewOptLevel == SavedOptLevel)
         return;
       IS.OptLevel = NewOptLevel;
@@ -223,7 +224,6 @@ namespace llvm {
                         << IS.MF->getFunction().getName() << "\n");
       LLVM_DEBUG(dbgs() << "\tBefore: -O" << SavedOptLevel << " ; After: -O"
                         << NewOptLevel << "\n");
-      SavedFastISel = IS.TM.Options.EnableFastISel;
       if (NewOptLevel == CodeGenOpt::None) {
         IS.TM.setFastISel(IS.TM.getO0WantsFastISel());
         LLVM_DEBUG(
@@ -311,8 +311,9 @@ SelectionDAGISel::SelectionDAGISel(TargetMachine &tm, CodeGenOpt::Level OL)
     : MachineFunctionPass(ID), TM(tm), FuncInfo(new FunctionLoweringInfo()),
       SwiftError(new SwiftErrorValueTracking()),
       CurDAG(new SelectionDAG(tm, OL)),
-      SDB(new SelectionDAGBuilder(*CurDAG, *FuncInfo, *SwiftError, OL)), AA(),
-      GFI(), OptLevel(OL), DAGSize(0) {
+      SDB(std::make_unique<SelectionDAGBuilder>(*CurDAG, *FuncInfo, *SwiftError,
+                                                OL)),
+      AA(), GFI(), OptLevel(OL), DAGSize(0) {
   initializeGCModuleInfoPass(*PassRegistry::getPassRegistry());
   initializeBranchProbabilityInfoWrapperPassPass(
       *PassRegistry::getPassRegistry());
@@ -321,9 +322,7 @@ SelectionDAGISel::SelectionDAGISel(TargetMachine &tm, CodeGenOpt::Level OL)
 }
 
 SelectionDAGISel::~SelectionDAGISel() {
-  delete SDB;
   delete CurDAG;
-  delete FuncInfo;
   delete SwiftError;
 }
 
@@ -514,15 +513,15 @@ bool SelectionDAGISel::runOnMachineFunction(MachineFunction &mf) {
   // registers. If we don't apply the reg fixups before, some registers may
   // appear as unused and will be skipped, resulting in bad MI.
   MachineRegisterInfo &MRI = MF->getRegInfo();
-  for (DenseMap<unsigned, unsigned>::iterator I = FuncInfo->RegFixups.begin(),
+  for (DenseMap<Register, Register>::iterator I = FuncInfo->RegFixups.begin(),
                                               E = FuncInfo->RegFixups.end();
        I != E; ++I) {
-    unsigned From = I->first;
-    unsigned To = I->second;
+    Register From = I->first;
+    Register To = I->second;
     // If To is also scheduled to be replaced, find what its ultimate
     // replacement is.
     while (true) {
-      DenseMap<unsigned, unsigned>::iterator J = FuncInfo->RegFixups.find(To);
+      DenseMap<Register, Register>::iterator J = FuncInfo->RegFixups.find(To);
       if (J == E)
         break;
       To = J->second;
@@ -661,15 +660,15 @@ bool SelectionDAGISel::runOnMachineFunction(MachineFunction &mf) {
 
   // Replace forward-declared registers with the registers containing
   // the desired value.
-  for (DenseMap<unsigned, unsigned>::iterator
+  for (DenseMap<Register, Register>::iterator
        I = FuncInfo->RegFixups.begin(), E = FuncInfo->RegFixups.end();
        I != E; ++I) {
-    unsigned From = I->first;
-    unsigned To = I->second;
+    Register From = I->first;
+    Register To = I->second;
     // If To is also scheduled to be replaced, find what its ultimate
     // replacement is.
     while (true) {
-      DenseMap<unsigned, unsigned>::iterator J = FuncInfo->RegFixups.find(To);
+      DenseMap<Register, Register>::iterator J = FuncInfo->RegFixups.find(To);
       if (J == E) break;
       To = J->second;
     }
@@ -738,23 +737,20 @@ void SelectionDAGISel::SelectBasicBlock(BasicBlock::const_iterator Begin,
 }
 
 void SelectionDAGISel::ComputeLiveOutVRegInfo() {
-  SmallPtrSet<SDNode*, 16> VisitedNodes;
+  SmallPtrSet<SDNode *, 16> Added;
   SmallVector<SDNode*, 128> Worklist;
 
   Worklist.push_back(CurDAG->getRoot().getNode());
+  Added.insert(CurDAG->getRoot().getNode());
 
   KnownBits Known;
 
   do {
     SDNode *N = Worklist.pop_back_val();
 
-    // If we've already seen this node, ignore it.
-    if (!VisitedNodes.insert(N).second)
-      continue;
-
     // Otherwise, add all chain operands to the worklist.
     for (const SDValue &Op : N->op_values())
-      if (Op.getValueType() == MVT::Other)
+      if (Op.getValueType() == MVT::Other && Added.insert(Op.getNode()).second)
         Worklist.push_back(Op.getNode());
 
     // If this is a CopyToReg with a vreg dest, process it.
@@ -1303,20 +1299,20 @@ bool SelectionDAGISel::PrepareEHLandingPad() {
 /// side-effect free and is either dead or folded into a generated instruction.
 /// Return false if it needs to be emitted.
 static bool isFoldedOrDeadInstruction(const Instruction *I,
-                                      FunctionLoweringInfo *FuncInfo) {
+                                      const FunctionLoweringInfo &FuncInfo) {
   return !I->mayWriteToMemory() && // Side-effecting instructions aren't folded.
          !I->isTerminator() &&     // Terminators aren't folded.
-         !isa<DbgInfoIntrinsic>(I) &&  // Debug instructions aren't folded.
-         !I->isEHPad() &&              // EH pad instructions aren't folded.
-         !FuncInfo->isExportedInst(I); // Exported instrs must be computed.
+         !isa<DbgInfoIntrinsic>(I) && // Debug instructions aren't folded.
+         !I->isEHPad() &&             // EH pad instructions aren't folded.
+         !FuncInfo.isExportedInst(I); // Exported instrs must be computed.
 }
 
 /// Collect llvm.dbg.declare information. This is done after argument lowering
 /// in case the declarations refer to arguments.
-static void processDbgDeclares(FunctionLoweringInfo *FuncInfo) {
-  MachineFunction *MF = FuncInfo->MF;
+static void processDbgDeclares(FunctionLoweringInfo &FuncInfo) {
+  MachineFunction *MF = FuncInfo.MF;
   const DataLayout &DL = MF->getDataLayout();
-  for (const BasicBlock &BB : *FuncInfo->Fn) {
+  for (const BasicBlock &BB : *FuncInfo.Fn) {
     for (const Instruction &I : BB) {
       const DbgDeclareInst *DI = dyn_cast<DbgDeclareInst>(&I);
       if (!DI)
@@ -1325,8 +1321,11 @@ static void processDbgDeclares(FunctionLoweringInfo *FuncInfo) {
       assert(DI->getVariable() && "Missing variable");
       assert(DI->getDebugLoc() && "Missing location");
       const Value *Address = DI->getAddress();
-      if (!Address)
+      if (!Address) {
+        LLVM_DEBUG(dbgs() << "processDbgDeclares skipping " << *DI
+                          << " (bad address)\n");
         continue;
+      }
 
       // Look through casts and constant offset GEPs. These mostly come from
       // inalloca.
@@ -1338,11 +1337,11 @@ static void processDbgDeclares(FunctionLoweringInfo *FuncInfo) {
       // intrinsic and handle this during isel like dbg.value.
       int FI = std::numeric_limits<int>::max();
       if (const auto *AI = dyn_cast<AllocaInst>(Address)) {
-        auto SI = FuncInfo->StaticAllocaMap.find(AI);
-        if (SI != FuncInfo->StaticAllocaMap.end())
+        auto SI = FuncInfo.StaticAllocaMap.find(AI);
+        if (SI != FuncInfo.StaticAllocaMap.end())
           FI = SI->second;
       } else if (const auto *Arg = dyn_cast<Argument>(Address))
-        FI = FuncInfo->getArgumentFrameIndex(Arg);
+        FI = FuncInfo.getArgumentFrameIndex(Arg);
 
       if (FI == std::numeric_limits<int>::max())
         continue;
@@ -1351,6 +1350,8 @@ static void processDbgDeclares(FunctionLoweringInfo *FuncInfo) {
       if (Offset.getBoolValue())
         Expr = DIExpression::prepend(Expr, DIExpression::ApplyOffset,
                                      Offset.getZExtValue());
+      LLVM_DEBUG(dbgs() << "processDbgDeclares: setVariableDbgInfo FI=" << FI
+                        << ", " << *DI << "\n");
       MF->setVariableDbgInfo(DI->getVariable(), Expr, FI, DI->getDebugLoc());
     }
   }
@@ -1376,7 +1377,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
   FuncInfo->MBB = FuncInfo->MBBMap[&Fn.getEntryBlock()];
   FuncInfo->InsertPt = FuncInfo->MBB->begin();
 
-  CurDAG->setFunctionLoweringInfo(FuncInfo);
+  CurDAG->setFunctionLoweringInfo(FuncInfo.get());
 
   if (!FastIS) {
     LowerArguments(Fn);
@@ -1416,7 +1417,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
   if (FastIS && Inserted)
     FastIS->setLastLocalValue(&*std::prev(FuncInfo->InsertPt));
 
-  processDbgDeclares(FuncInfo);
+  processDbgDeclares(*FuncInfo);
 
   // Iterate over all basic blocks in the function.
   StackProtector &SP = getAnalysis<StackProtector>();
@@ -1476,7 +1477,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
         const Instruction *Inst = &*std::prev(BI);
 
         // If we no longer require this instruction, skip it.
-        if (isFoldedOrDeadInstruction(Inst, FuncInfo) ||
+        if (isFoldedOrDeadInstruction(Inst, *FuncInfo) ||
             ElidedArgCopyInstrs.count(Inst)) {
           --NumFastIselRemaining;
           continue;
@@ -1496,7 +1497,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
           const Instruction *BeforeInst = Inst;
           while (BeforeInst != &*Begin) {
             BeforeInst = &*std::prev(BasicBlock::const_iterator(BeforeInst));
-            if (!isFoldedOrDeadInstruction(BeforeInst, FuncInfo))
+            if (!isFoldedOrDeadInstruction(BeforeInst, *FuncInfo))
               break;
           }
           if (BeforeInst != Inst && isa<LoadInst>(BeforeInst) &&
@@ -1536,7 +1537,7 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
 
           if (!Inst->getType()->isVoidTy() && !Inst->getType()->isTokenTy() &&
               !Inst->use_empty()) {
-            unsigned &R = FuncInfo->ValueMap[Inst];
+            Register &R = FuncInfo->ValueMap[Inst];
             if (!R)
               R = FuncInfo->CreateRegs(Inst);
           }
@@ -2238,14 +2239,14 @@ bool SelectionDAGISel::IsLegalToFold(SDValue N, SDNode *U, SDNode *Root,
   return !findNonImmUse(Root, N.getNode(), U, IgnoreChains);
 }
 
-void SelectionDAGISel::Select_INLINEASM(SDNode *N, bool Branch) {
+void SelectionDAGISel::Select_INLINEASM(SDNode *N) {
   SDLoc DL(N);
 
   std::vector<SDValue> Ops(N->op_begin(), N->op_end());
   SelectInlineAsmMemoryOperands(Ops, DL);
 
   const EVT VTs[] = {MVT::Other, MVT::Glue};
-  SDValue New = CurDAG->getNode(Branch ? ISD::INLINEASM_BR : ISD::INLINEASM, DL, VTs, Ops);
+  SDValue New = CurDAG->getNode(N->getOpcode(), DL, VTs, Ops);
   New->setNodeId(-1);
   ReplaceUses(N, New.getNode());
   CurDAG->RemoveDeadNode(N);
@@ -2253,10 +2254,13 @@ void SelectionDAGISel::Select_INLINEASM(SDNode *N, bool Branch) {
 
 void SelectionDAGISel::Select_READ_REGISTER(SDNode *Op) {
   SDLoc dl(Op);
-  MDNodeSDNode *MD = dyn_cast<MDNodeSDNode>(Op->getOperand(1));
-  const MDString *RegStr = dyn_cast<MDString>(MD->getMD()->getOperand(0));
+  MDNodeSDNode *MD = cast<MDNodeSDNode>(Op->getOperand(1));
+  const MDString *RegStr = cast<MDString>(MD->getMD()->getOperand(0));
+
+  EVT VT = Op->getValueType(0);
+  LLT Ty = VT.isSimple() ? getLLTForMVT(VT.getSimpleVT()) : LLT();
   Register Reg =
-      TLI->getRegisterByName(RegStr->getString().data(), Op->getValueType(0),
+      TLI->getRegisterByName(RegStr->getString().data(), Ty,
                              CurDAG->getMachineFunction());
   SDValue New = CurDAG->getCopyFromReg(
                         Op->getOperand(0), dl, Reg, Op->getValueType(0));
@@ -2267,10 +2271,13 @@ void SelectionDAGISel::Select_READ_REGISTER(SDNode *Op) {
 
 void SelectionDAGISel::Select_WRITE_REGISTER(SDNode *Op) {
   SDLoc dl(Op);
-  MDNodeSDNode *MD = dyn_cast<MDNodeSDNode>(Op->getOperand(1));
-  const MDString *RegStr = dyn_cast<MDString>(MD->getMD()->getOperand(0));
-  Register Reg = TLI->getRegisterByName(RegStr->getString().data(),
-                                        Op->getOperand(2).getValueType(),
+  MDNodeSDNode *MD = cast<MDNodeSDNode>(Op->getOperand(1));
+  const MDString *RegStr = cast<MDString>(MD->getMD()->getOperand(0));
+
+  EVT VT = Op->getOperand(2).getValueType();
+  LLT Ty = VT.isSimple() ? getLLTForMVT(VT.getSimpleVT()) : LLT();
+
+  Register Reg = TLI->getRegisterByName(RegStr->getString().data(), Ty,
                                         CurDAG->getMachineFunction());
   SDValue New = CurDAG->getCopyToReg(
                         Op->getOperand(0), dl, Reg, Op->getOperand(2));
@@ -2281,6 +2288,14 @@ void SelectionDAGISel::Select_WRITE_REGISTER(SDNode *Op) {
 
 void SelectionDAGISel::Select_UNDEF(SDNode *N) {
   CurDAG->SelectNodeTo(N, TargetOpcode::IMPLICIT_DEF, N->getValueType(0));
+}
+
+void SelectionDAGISel::Select_FREEZE(SDNode *N) {
+  // TODO: We don't have FREEZE pseudo-instruction in MachineInstr-level now.
+  // If FREEZE instruction is added later, the code below must be changed as
+  // well.
+  CurDAG->SelectNodeTo(N, TargetOpcode::COPY, N->getValueType(0),
+                       N->getOperand(0));
 }
 
 /// GetVBR - decode a vbr encoding whose top bit is set.
@@ -2807,8 +2822,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
     return;
   case ISD::INLINEASM:
   case ISD::INLINEASM_BR:
-    Select_INLINEASM(NodeToMatch,
-                     NodeToMatch->getOpcode() == ISD::INLINEASM_BR);
+    Select_INLINEASM(NodeToMatch);
     return;
   case ISD::READ_REGISTER:
     Select_READ_REGISTER(NodeToMatch);
@@ -2818,6 +2832,9 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
     return;
   case ISD::UNDEF:
     Select_UNDEF(NodeToMatch);
+    return;
+  case ISD::FREEZE:
+    Select_FREEZE(NodeToMatch);
     return;
   }
 
@@ -3462,6 +3479,17 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
       if ((EmitNodeInfo & OPFL_GlueInput) && InputGlue.getNode() != nullptr)
         Ops.push_back(InputGlue);
 
+      // Check whether any matched node could raise an FP exception.  Since all
+      // such nodes must have a chain, it suffices to check ChainNodesMatched.
+      // We need to perform this check before potentially modifying one of the
+      // nodes via MorphNode.
+      bool MayRaiseFPException = false;
+      for (auto *N : ChainNodesMatched)
+        if (mayRaiseFPException(N) && !N->getFlags().hasNoFPExcept()) {
+          MayRaiseFPException = true;
+          break;
+        }
+
       // Create the node.
       MachineSDNode *Res = nullptr;
       bool IsMorphNodeTo = Opcode == OPC_MorphNodeTo ||
@@ -3491,6 +3519,14 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
         });
         Res = cast<MachineSDNode>(MorphNode(NodeToMatch, TargetOpc, VTList,
                                             Ops, EmitNodeInfo));
+      }
+
+      // Set the NoFPExcept flag when no original matched node could
+      // raise an FP exception, but the new node potentially might.
+      if (!MayRaiseFPException && mayRaiseFPException(Res)) {
+        SDNodeFlags Flags = Res->getFlags();
+        Flags.setNoFPExcept(true);
+        Res->setFlags(Flags);
       }
 
       // If the node had chain/glue results, update our notion of the current
@@ -3648,6 +3684,21 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
   }
 }
 
+/// Return whether the node may raise an FP exception.
+bool SelectionDAGISel::mayRaiseFPException(SDNode *N) const {
+  // For machine opcodes, consult the MCID flag.
+  if (N->isMachineOpcode()) {
+    const MCInstrDesc &MCID = TII->get(N->getMachineOpcode());
+    return MCID.mayRaiseFPException();
+  }
+
+  // For ISD opcodes, only StrictFP opcodes may raise an FP
+  // exception.
+  if (N->isTargetOpcode())
+    return N->isTargetStrictFPOpcode();
+  return N->isStrictFPOpcode();
+}
+
 bool SelectionDAGISel::isOrEquivalentToAdd(const SDNode *N) const {
   assert(N->getOpcode() == ISD::OR && "Unexpected opcode");
   auto *C = dyn_cast<ConstantSDNode>(N->getOperand(1));
@@ -3657,12 +3708,11 @@ bool SelectionDAGISel::isOrEquivalentToAdd(const SDNode *N) const {
   // Detect when "or" is used to add an offset to a stack object.
   if (auto *FN = dyn_cast<FrameIndexSDNode>(N->getOperand(0))) {
     MachineFrameInfo &MFI = MF->getFrameInfo();
-    unsigned A = MFI.getObjectAlignment(FN->getIndex());
-    assert(isPowerOf2_32(A) && "Unexpected alignment");
+    Align A = MFI.getObjectAlign(FN->getIndex());
     int32_t Off = C->getSExtValue();
     // If the alleged offset fits in the zero bits guaranteed by
     // the alignment, then this or is really an add.
-    return (Off >= 0) && (((A - 1) & Off) == unsigned(Off));
+    return (Off >= 0) && (((A.value() - 1) & Off) == unsigned(Off));
   }
   return false;
 }

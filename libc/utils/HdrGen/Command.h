@@ -1,4 +1,4 @@
-//===-------- Base class for header generation commands ---------*- C++ -*-===//
+//===-- Base class for header generation commands ---------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -41,6 +41,8 @@ public:
       std::exit(1);
     }
   };
+
+  virtual ~Command();
 
   virtual void run(llvm::raw_ostream &OS, const ArgVector &Args,
                    llvm::StringRef StdHeader, llvm::RecordKeeper &Records,

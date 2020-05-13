@@ -65,7 +65,7 @@ std::string CleanPath(StringRef PathRef) {
   llvm::sys::path::remove_dots(Path, /*remove_dot_dot=*/true);
   // FIXME: figure out why this is necessary.
   llvm::sys::path::native(Path);
-  return Path.str();
+  return std::string(Path.str());
 }
 
 // Make the Path absolute using the CurrentDir if the Path is not an absolute
@@ -145,7 +145,7 @@ private:
   ClangMoveTool *const MoveTool;
 };
 
-/// Add a declatration being moved to new.h/cc. Note that the declaration will
+/// Add a declaration being moved to new.h/cc. Note that the declaration will
 /// also be deleted in old.h/cc.
 void MoveDeclFromOldFileToNewFile(ClangMoveTool *MoveTool, const NamedDecl *D) {
   MoveTool->getMovedDecls().push_back(D);
@@ -453,7 +453,7 @@ createInsertedReplacements(const std::vector<std::string> &Includes,
 }
 
 // Return a set of all decls which are used/referenced by the given Decls.
-// Specically, given a class member declaration, this method will return all
+// Specifically, given a class member declaration, this method will return all
 // decls which are used by the whole class.
 llvm::DenseSet<const Decl *>
 getUsedDecls(const HelperDeclRefGraph *RG,
@@ -767,7 +767,7 @@ void ClangMoveTool::removeDeclsInOldFiles() {
       // FIXME: Minimize the include path like clang-include-fixer.
       std::string IncludeNewH =
           "#include \"" + Context->Spec.NewHeader + "\"\n";
-      // This replacment for inserting header will be cleaned up at the end.
+      // This replacement for inserting header will be cleaned up at the end.
       auto Err = FileAndReplacements.second.add(
           tooling::Replacement(FilePath, UINT_MAX, 0, IncludeNewH));
       if (Err)
@@ -785,13 +785,13 @@ void ClangMoveTool::removeDeclsInOldFiles() {
       continue;
     }
     auto CleanReplacements = format::cleanupAroundReplacements(
-        Code, Context->FileToReplacements[FilePath], *Style);
+        Code, Context->FileToReplacements[std::string(FilePath)], *Style);
 
     if (!CleanReplacements) {
       llvm::errs() << llvm::toString(CleanReplacements.takeError()) << "\n";
       continue;
     }
-    Context->FileToReplacements[FilePath] = *CleanReplacements;
+    Context->FileToReplacements[std::string(FilePath)] = *CleanReplacements;
   }
 }
 
@@ -810,7 +810,7 @@ void ClangMoveTool::moveDeclsToNewFiles() {
   std::vector<const NamedDecl *> ActualNewCCDecls;
 
   // Filter out all unused helpers in NewCCDecls.
-  // We only move the used helpers (including transively used helpers) and the
+  // We only move the used helpers (including transitively used helpers) and the
   // given symbols being moved.
   for (const auto *D : NewCCDecls) {
     if (llvm::is_contained(HelperDeclarations, D) &&
@@ -870,7 +870,7 @@ void ClangMoveTool::moveAll(SourceManager &SM, StringRef OldFile,
     else if (Context->Spec.NewHeader == NewFile &&
              OldHeaderIncludeRangeInHeader.isValid())
       ReplaceOldInclude(OldHeaderIncludeRangeInHeader);
-    Context->FileToReplacements[NewFile] = std::move(AllCode);
+    Context->FileToReplacements[std::string(NewFile)] = std::move(AllCode);
   }
 }
 

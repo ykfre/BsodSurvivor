@@ -1,4 +1,4 @@
-//===-- VOP1Instructions.td - Vector Instruction Defintions ---------------===//
+//===-- VOP1Instructions.td - Vector Instruction Definitions --------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -89,9 +89,7 @@ class VOP1_DPP_Pseudo <string OpName, VOPProfile P, list<dag> pattern=[]> :
 class getVOP1Pat64 <SDPatternOperator node, VOPProfile P> : LetDummies {
   list<dag> ret =
     !if(P.HasModifiers,
-        [(set P.DstVT:$vdst, (node (P.Src0VT (VOP3Mods0 P.Src0VT:$src0,
-                                              i32:$src0_modifiers,
-                                              i1:$clamp, i32:$omod))))],
+        [(set P.DstVT:$vdst, (node (P.Src0VT (VOP3Mods P.Src0VT:$src0, i32:$src0_modifiers))))],
         !if(P.HasOMod,
             [(set P.DstVT:$vdst, (node (P.Src0VT (VOP3OMods P.Src0VT:$src0,
                                                   i1:$clamp, i32:$omod))))],
@@ -156,7 +154,7 @@ def V_READFIRSTLANE_B32 :
   InstSI <(outs SReg_32:$vdst),
     (ins VRegOrLds_32:$src0),
     "v_readfirstlane_b32 $vdst, $src0",
-    [(set i32:$vdst, (int_amdgcn_readfirstlane i32:$src0))]>,
+    [(set i32:$vdst, (int_amdgcn_readfirstlane (i32 VRegOrLds_32:$src0)))]>,
   Enc32 {
 
   let isCodeGenOnly = 0;
@@ -190,7 +188,7 @@ defm V_CVT_U32_F64 : VOP1Inst <"v_cvt_u32_f64", VOP_I32_F64,  fp_to_uint>;
 defm V_CVT_F64_U32 : VOP1Inst <"v_cvt_f64_u32", VOP1_F64_I32, uint_to_fp>;
 } // End SchedRW = [WriteDoubleCvt]
 
-let SchedRW = [WriteQuarterRate32] in {
+let SchedRW = [WriteFloatCvt] in {
 defm V_CVT_F32_I32 : VOP1Inst <"v_cvt_f32_i32", VOP1_F32_I32, sint_to_fp>;
 defm V_CVT_F32_U32 : VOP1Inst <"v_cvt_f32_u32", VOP1_F32_I32, uint_to_fp>;
 defm V_CVT_U32_F32 : VOP1Inst <"v_cvt_u32_f32", VOP_I32_F32, fp_to_uint>;
@@ -202,7 +200,7 @@ defm V_CVT_F32_F16 : VOP1Inst <"v_cvt_f32_f16", VOP_F32_F16, fpextend>;
 defm V_CVT_RPI_I32_F32 : VOP1Inst <"v_cvt_rpi_i32_f32", VOP_I32_F32, cvt_rpi_i32_f32>;
 defm V_CVT_FLR_I32_F32 : VOP1Inst <"v_cvt_flr_i32_f32", VOP_I32_F32, cvt_flr_i32_f32>;
 defm V_CVT_OFF_F32_I4 : VOP1Inst  <"v_cvt_off_f32_i4", VOP1_F32_I32>;
-} // End SchedRW = [WriteQuarterRate32]
+} // End SchedRW = [WriteFloatCvt]
 
 defm V_CVT_F32_UBYTE0 : VOP1Inst <"v_cvt_f32_ubyte0", VOP1_F32_I32, AMDGPUcvt_f32_ubyte0>;
 defm V_CVT_F32_UBYTE1 : VOP1Inst <"v_cvt_f32_ubyte1", VOP1_F32_I32, AMDGPUcvt_f32_ubyte1>;
@@ -241,7 +239,7 @@ defm V_COS_F32 : VOP1Inst <"v_cos_f32", VOP_F32_F32, AMDGPUcos>;
 defm V_NOT_B32 : VOP1Inst <"v_not_b32", VOP_I32_I32>;
 defm V_BFREV_B32 : VOP1Inst <"v_bfrev_b32", VOP_I32_I32, bitreverse>;
 defm V_FFBH_U32 : VOP1Inst <"v_ffbh_u32", VOP_I32_I32, AMDGPUffbh_u32>;
-defm V_FFBL_B32 : VOP1Inst <"v_ffbl_b32", VOP_I32_I32>;
+defm V_FFBL_B32 : VOP1Inst <"v_ffbl_b32", VOP_I32_I32, AMDGPUffbl_b32>;
 defm V_FFBH_I32 : VOP1Inst <"v_ffbh_i32", VOP_I32_I32, AMDGPUffbh_i32>;
 
 let SchedRW = [WriteDoubleAdd] in {
@@ -327,7 +325,7 @@ let SubtargetPredicate = isGFX6GFX7 in {
     defm V_RSQ_CLAMP_F32 :
       VOP1Inst<"v_rsq_clamp_f32", VOP_F32_F32, AMDGPUrsq_clamp>;
     defm V_RSQ_LEGACY_F32 :
-      VOP1Inst<"v_rsq_legacy_f32", VOP_F32_F32, AMDGPUrsq_legacy>;
+      VOP1Inst<"v_rsq_legacy_f32", VOP_F32_F32, int_amdgcn_rsq_legacy>;
   } // End SchedRW = [WriteQuarterRate32]
 
   let SchedRW = [WriteDouble] in {
@@ -458,7 +456,7 @@ class VOP1_DPP<bits<8> op, VOP1_DPP_Pseudo ps, VOPProfile p = ps.Pfl, bit isDPP1
 class VOP1_DPP16<bits<8> op, VOP1_DPP_Pseudo ps, VOPProfile p = ps.Pfl> :
     VOP1_DPP<op, ps, p, 1>,
     SIMCInstr <ps.PseudoInstr, SIEncodingFamily.GFX10> {
-  let AssemblerPredicate = !if(p.HasExt, HasDPP16, DisableInst);
+  let AssemblerPredicate = HasDPP16;
   let SubtargetPredicate = HasDPP16;
 }
 
@@ -475,7 +473,7 @@ class VOP1_DPP8<bits<8> op, VOP1_Pseudo ps, VOPProfile p = ps.Pfl> :
   let Inst{24-17} = !if(p.EmitDst, vdst{7-0}, 0);
   let Inst{31-25} = 0x3f;
 
-  let AssemblerPredicate = !if(p.HasExt, HasDPP8, DisableInst);
+  let AssemblerPredicate = HasDPP8;
   let SubtargetPredicate = HasDPP8;
 }
 
@@ -812,42 +810,23 @@ def V_MOV_B32_indirect : VPseudoInstSI<(outs),
   let SubtargetPredicate = isGFX8GFX9;
 }
 
-// This is a pseudo variant of the v_movreld_b32 instruction in which the
-// vector operand appears only twice, once as def and once as use. Using this
-// pseudo avoids problems with the Two Address instructions pass.
-class V_MOVRELD_B32_pseudo<RegisterClass rc> : VPseudoInstSI <
-  (outs rc:$vdst),
-  (ins rc:$vsrc, VSrc_b32:$val, i32imm:$offset)> {
-  let VOP1 = 1;
-
-  let Constraints = "$vsrc = $vdst";
-  let Uses = [M0, EXEC];
-
-  let SubtargetPredicate = HasMovrel;
-}
-
-def V_MOVRELD_B32_V1 : V_MOVRELD_B32_pseudo<VGPR_32>;
-def V_MOVRELD_B32_V2 : V_MOVRELD_B32_pseudo<VReg_64>;
-def V_MOVRELD_B32_V4 : V_MOVRELD_B32_pseudo<VReg_128>;
-def V_MOVRELD_B32_V8 : V_MOVRELD_B32_pseudo<VReg_256>;
-def V_MOVRELD_B32_V16 : V_MOVRELD_B32_pseudo<VReg_512>;
-
 let OtherPredicates = [isGFX8Plus] in {
 
 def : GCNPat <
-  (i32 (int_amdgcn_mov_dpp i32:$src, timm:$dpp_ctrl, timm:$row_mask, timm:$bank_mask,
-                      timm:$bound_ctrl)),
-  (V_MOV_B32_dpp $src, $src, (as_i32imm $dpp_ctrl),
-                       (as_i32imm $row_mask), (as_i32imm $bank_mask),
-                       (as_i1imm $bound_ctrl))
+  (i32 (int_amdgcn_mov_dpp i32:$src, timm:$dpp_ctrl, timm:$row_mask,
+                           timm:$bank_mask, timm:$bound_ctrl)),
+  (V_MOV_B32_dpp VGPR_32:$src, VGPR_32:$src, (as_i32timm $dpp_ctrl),
+                       (as_i32timm $row_mask), (as_i32timm $bank_mask),
+                       (as_i1timm $bound_ctrl))
 >;
 
 def : GCNPat <
-  (i32 (int_amdgcn_update_dpp i32:$old, i32:$src, timm:$dpp_ctrl, timm:$row_mask,
-                      timm:$bank_mask, timm:$bound_ctrl)),
-  (V_MOV_B32_dpp $old, $src, (as_i32imm $dpp_ctrl),
-                       (as_i32imm $row_mask), (as_i32imm $bank_mask),
-                       (as_i1imm $bound_ctrl))
+  (i32 (int_amdgcn_update_dpp i32:$old, i32:$src, timm:$dpp_ctrl,
+                              timm:$row_mask, timm:$bank_mask,
+                              timm:$bound_ctrl)),
+  (V_MOV_B32_dpp VGPR_32:$old, VGPR_32:$src, (as_i32timm $dpp_ctrl),
+                 (as_i32timm $row_mask), (as_i32timm $bank_mask),
+                 (as_i1timm $bound_ctrl))
 >;
 
 } // End OtherPredicates = [isGFX8Plus]
@@ -907,6 +886,7 @@ defm V_SCREEN_PARTITION_4SE_B32 : VOP1_Real_gfx9 <0x37>;
 let OtherPredicates = [isGFX10Plus] in {
 def : GCNPat <
   (i32 (int_amdgcn_mov_dpp8 i32:$src, timm:$dpp8)),
-  (V_MOV_B32_dpp8_gfx10 $src, $src, (as_i32imm $dpp8), (i32 DPP8Mode.FI_0))
+  (V_MOV_B32_dpp8_gfx10 VGPR_32:$src, VGPR_32:$src,
+                        (as_i32timm $dpp8), (i32 DPP8Mode.FI_0))
 >;
 } // End OtherPredicates = [isGFX10Plus]

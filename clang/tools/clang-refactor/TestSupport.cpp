@@ -14,6 +14,7 @@
 
 #include "TestSupport.h"
 #include "clang/Basic/DiagnosticError.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/STLExtras.h"
@@ -74,7 +75,7 @@ bool areChangesSame(const tooling::AtomicChanges &LHS,
                     const tooling::AtomicChanges &RHS) {
   if (LHS.size() != RHS.size())
     return false;
-  for (const auto &I : llvm::zip(LHS, RHS)) {
+  for (auto I : llvm::zip(LHS, RHS)) {
     if (!(std::get<0>(I) == std::get<1>(I)))
       return false;
   }
@@ -190,7 +191,7 @@ bool TestRefactoringResultConsumer::handleAllResults() {
               const PartialDiagnosticAt &Diag = Err.getDiagnostic();
               llvm::SmallString<100> DiagText;
               Diag.second.EmitToString(getDiags(), DiagText);
-              ErrorMessage = DiagText.str().str();
+              ErrorMessage = std::string(DiagText);
             });
       }
       if (!CanonicalResult && !CanonicalErrorMessage) {

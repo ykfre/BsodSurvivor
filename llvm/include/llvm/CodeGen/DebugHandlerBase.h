@@ -18,8 +18,8 @@
 #include "llvm/CodeGen/AsmPrinterHandler.h"
 #include "llvm/CodeGen/DbgEntityHistoryCalculator.h"
 #include "llvm/CodeGen/LexicalScopes.h"
-#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/DebugLoc.h"
 
 namespace llvm {
 
@@ -123,10 +123,6 @@ public:
 
   /// Return Label immediately following the instruction.
   MCSymbol *getLabelAfterInsn(const MachineInstr *MI);
-
-  /// Return the function-local offset of an instruction. A label for the
-  /// instruction \p MI should exist (\ref getLabelAfterInsn).
-  const MCExpr *getFunctionLocalOffsetAfterInsn(const MachineInstr *MI);
 
   /// If this type is derived from a base type then return base type size.
   static uint64_t getBaseTypeSize(const DIType *Ty);

@@ -15,18 +15,17 @@
 #define LLVM_CODEGEN_TARGETLOWERINGOBJECTFILEIMPL_H
 
 #include "llvm/BinaryFormat/XCOFF.h"
-#include "llvm/IR/Module.h"
-#include "llvm/MC/MCExpr.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 
 namespace llvm {
 
 class GlobalValue;
 class MachineModuleInfo;
-class Mangler;
 class MCContext;
+class MCExpr;
 class MCSection;
 class MCSymbol;
+class Module;
 class TargetMachine;
 
 class TargetLoweringObjectFileELF : public TargetLoweringObjectFile {
@@ -64,6 +63,11 @@ public:
 
   MCSection *getSectionForJumpTable(const Function &F,
                                     const TargetMachine &TM) const override;
+
+  MCSection *
+  getSectionForMachineBasicBlock(const Function &F,
+                                 const MachineBasicBlock &MBB,
+                                 const TargetMachine &TM) const override;
 
   bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
                                            const Function &F) const override;
@@ -243,6 +247,21 @@ public:
                                    unsigned &Align) const override;
 
   static XCOFF::StorageClass getStorageClassForGlobal(const GlobalObject *GO);
+
+  MCSection *
+  getSectionForFunctionDescriptor(const Function *F,
+                                  const TargetMachine &TM) const override;
+  MCSection *getSectionForTOCEntry(const MCSymbol *Sym) const override;
+
+  /// For external functions, this will always return a function descriptor
+  /// csect.
+  MCSection *
+  getSectionForExternalReference(const GlobalObject *GO,
+                                 const TargetMachine &TM) const override;
+
+  /// For functions, this will always return a function descriptor symbol.
+  MCSymbol *getTargetSymbol(const GlobalValue *GV,
+                            const TargetMachine &TM) const override;
 };
 
 } // end namespace llvm

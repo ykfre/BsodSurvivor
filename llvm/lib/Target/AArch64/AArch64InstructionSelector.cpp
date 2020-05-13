@@ -63,6 +63,9 @@ public:
     // cache it here for each run of the selector.
     ProduceNonFlagSettingCondBr =
         !MF.getFunction().hasFnAttribute(Attribute::SpeculativeLoadHardening);
+    MFReturnAddr = Register();
+
+    processPHIs(MF);
   }
 
 private:
@@ -71,23 +74,33 @@ private:
   bool selectImpl(MachineInstr &I, CodeGenCoverage &CoverageInfo) const;
 
   // A lowering phase that runs before any selection attempts.
-
-  void preISelLower(MachineInstr &I) const;
+  // Returns true if the instruction was modified.
+  bool preISelLower(MachineInstr &I);
 
   // An early selection function that runs before the selectImpl() call.
   bool earlySelect(MachineInstr &I) const;
 
+  // Do some preprocessing of G_PHIs before we begin selection.
+  void processPHIs(MachineFunction &MF);
+
   bool earlySelectSHL(MachineInstr &I, MachineRegisterInfo &MRI) const;
 
   /// Eliminate same-sized cross-bank copies into stores before selectImpl().
-  void contractCrossBankCopyIntoStore(MachineInstr &I,
-                                      MachineRegisterInfo &MRI) const;
+  bool contractCrossBankCopyIntoStore(MachineInstr &I,
+                                      MachineRegisterInfo &MRI);
+
+  bool convertPtrAddToAdd(MachineInstr &I, MachineRegisterInfo &MRI);
 
   bool selectVaStartAAPCS(MachineInstr &I, MachineFunction &MF,
                           MachineRegisterInfo &MRI) const;
   bool selectVaStartDarwin(MachineInstr &I, MachineFunction &MF,
                            MachineRegisterInfo &MRI) const;
 
+  bool tryOptAndIntoCompareBranch(MachineInstr *LHS,
+                                  int64_t CmpConstant,
+                                  const CmpInst::Predicate &Pred,
+                                  MachineBasicBlock *DstMBB,
+                                  MachineIRBuilder &MIB) const;
   bool selectCompareBranch(MachineInstr &I, MachineFunction &MF,
                            MachineRegisterInfo &MRI) const;
 
@@ -123,7 +136,7 @@ private:
                                 MachineRegisterInfo &MRI) const;
   bool selectIntrinsicWithSideEffects(MachineInstr &I,
                                       MachineRegisterInfo &MRI) const;
-  bool selectIntrinsic(MachineInstr &I, MachineRegisterInfo &MRI) const;
+  bool selectIntrinsic(MachineInstr &I, MachineRegisterInfo &MRI);
   bool selectVectorICmp(MachineInstr &I, MachineRegisterInfo &MRI) const;
   bool selectIntrinsicTrunc(MachineInstr &I, MachineRegisterInfo &MRI) const;
   bool selectIntrinsicRound(MachineInstr &I, MachineRegisterInfo &MRI) const;
@@ -139,9 +152,14 @@ private:
   MachineInstr *emitVectorConcat(Optional<Register> Dst, Register Op1,
                                  Register Op2,
                                  MachineIRBuilder &MIRBuilder) const;
-  MachineInstr *emitIntegerCompare(MachineOperand &LHS, MachineOperand &RHS,
-                                   MachineOperand &Predicate,
-                                   MachineIRBuilder &MIRBuilder) const;
+
+  // Emit an integer compare between LHS and RHS, which checks for Predicate.
+  //
+  // This may update Predicate when emitting the compare.
+  std::pair<MachineInstr *, CmpInst::Predicate>
+  emitIntegerCompare(MachineOperand &LHS, MachineOperand &RHS,
+                     MachineOperand &Predicate,
+                     MachineIRBuilder &MIRBuilder) const;
   MachineInstr *emitADD(Register DefReg, MachineOperand &LHS, MachineOperand &RHS,
                         MachineIRBuilder &MIRBuilder) const;
   MachineInstr *emitCMN(MachineOperand &LHS, MachineOperand &RHS,
@@ -162,6 +180,13 @@ private:
   /// Emit a CSet for a compare.
   MachineInstr *emitCSetForICMP(Register DefReg, unsigned Pred,
                                 MachineIRBuilder &MIRBuilder) const;
+
+  /// Emit a TB(N)Z instruction which tests \p Bit in \p TestReg.
+  /// \p IsNegative is true if the test should be "not zero".
+  /// This will also optimize the test bit instruction when possible.
+  MachineInstr *emitTestBit(Register TestReg, uint64_t Bit, bool IsNegative,
+                            MachineBasicBlock *DstMBB,
+                            MachineIRBuilder &MIB) const;
 
   // Equivalent to the i32shift_a and friends from AArch64InstrInfo.td.
   // We use these manually instead of using the importer since it doesn't
@@ -206,12 +231,27 @@ private:
   ComplexRendererFns
   selectAddrModeShiftedExtendXReg(MachineOperand &Root,
                                   unsigned SizeInBytes) const;
+
+  /// Returns a \p ComplexRendererFns which contains a base, offset, and whether
+  /// or not a shift + extend should be folded into an addressing mode. Returns
+  /// None when this is not profitable or possible.
+  ComplexRendererFns
+  selectExtendedSHL(MachineOperand &Root, MachineOperand &Base,
+                    MachineOperand &Offset, unsigned SizeInBytes,
+                    bool WantsExt) const;
   ComplexRendererFns selectAddrModeRegisterOffset(MachineOperand &Root) const;
   ComplexRendererFns selectAddrModeXRO(MachineOperand &Root,
                                        unsigned SizeInBytes) const;
   template <int Width>
   ComplexRendererFns selectAddrModeXRO(MachineOperand &Root) const {
     return selectAddrModeXRO(Root, Width / 8);
+  }
+
+  ComplexRendererFns selectAddrModeWRO(MachineOperand &Root,
+                                       unsigned SizeInBytes) const;
+  template <int Width>
+  ComplexRendererFns selectAddrModeWRO(MachineOperand &Root) const {
+    return selectAddrModeWRO(Root, Width / 8);
   }
 
   ComplexRendererFns selectShiftedRegister(MachineOperand &Root) const;
@@ -228,17 +268,31 @@ private:
     return selectShiftedRegister(Root);
   }
 
+  /// Given an extend instruction, determine the correct shift-extend type for
+  /// that instruction.
+  ///
+  /// If the instruction is going to be used in a load or store, pass
+  /// \p IsLoadStore = true.
+  AArch64_AM::ShiftExtendType
+  getExtendTypeForInst(MachineInstr &MI, MachineRegisterInfo &MRI,
+                       bool IsLoadStore = false) const;
+
   /// Instructions that accept extend modifiers like UXTW expect the register
   /// being extended to be a GPR32. Narrow ExtReg to a 32-bit register using a
   /// subregister copy if necessary. Return either ExtReg, or the result of the
   /// new copy.
   Register narrowExtendRegIfNeeded(Register ExtReg,
                                              MachineIRBuilder &MIB) const;
+  Register widenGPRBankRegIfNeeded(Register Reg, unsigned Size,
+                                   MachineIRBuilder &MIB) const;
   ComplexRendererFns selectArithExtendedRegister(MachineOperand &Root) const;
 
-  void renderTruncImm(MachineInstrBuilder &MIB, const MachineInstr &MI) const;
-  void renderLogicalImm32(MachineInstrBuilder &MIB, const MachineInstr &I) const;
-  void renderLogicalImm64(MachineInstrBuilder &MIB, const MachineInstr &I) const;
+  void renderTruncImm(MachineInstrBuilder &MIB, const MachineInstr &MI,
+                      int OpIdx = -1) const;
+  void renderLogicalImm32(MachineInstrBuilder &MIB, const MachineInstr &I,
+                          int OpIdx = -1) const;
+  void renderLogicalImm64(MachineInstrBuilder &MIB, const MachineInstr &I,
+                          int OpIdx = -1) const;
 
   // Materialize a GlobalValue or BlockAddress using a movz+movk sequence.
   void materializeLargeCMVal(MachineInstr &I, const Value *V,
@@ -251,6 +305,13 @@ private:
   MachineInstr *tryFoldIntegerCompare(MachineOperand &LHS, MachineOperand &RHS,
                                       MachineOperand &Predicate,
                                       MachineIRBuilder &MIRBuilder) const;
+  MachineInstr *tryOptArithImmedIntegerCompare(MachineOperand &LHS,
+                                               MachineOperand &RHS,
+                                               MachineOperand &Predicate,
+                                               MachineIRBuilder &MIB) const;
+  MachineInstr *tryOptArithShiftedCompare(MachineOperand &LHS,
+                                          MachineOperand &RHS,
+                                          MachineIRBuilder &MIB) const;
 
   /// Return true if \p MI is a load or store of \p NumBytes bytes.
   bool isLoadStoreOfNumBytes(const MachineInstr &MI, unsigned NumBytes) const;
@@ -267,6 +328,11 @@ private:
   const AArch64RegisterBankInfo &RBI;
 
   bool ProduceNonFlagSettingCondBr = false;
+
+  // Some cached values used during selection.
+  // We use LR as a live-in register, and we keep track of it here as it can be
+  // clobbered by calls.
+  Register MFReturnAddr;
 
 #define GET_GLOBALISEL_PREDICATES_DECL
 #include "AArch64GenGlobalISel.inc"
@@ -392,6 +458,39 @@ static bool getSubRegForClass(const TargetRegisterClass *RC,
   }
 
   return true;
+}
+
+/// Returns the minimum size the given register bank can hold.
+static unsigned getMinSizeForRegBank(const RegisterBank &RB) {
+  switch (RB.getID()) {
+  case AArch64::GPRRegBankID:
+    return 32;
+  case AArch64::FPRRegBankID:
+    return 8;
+  default:
+    llvm_unreachable("Tried to get minimum size for unknown register bank.");
+  }
+}
+
+static Optional<uint64_t> getImmedFromMO(const MachineOperand &Root) {
+  auto &MI = *Root.getParent();
+  auto &MBB = *MI.getParent();
+  auto &MF = *MBB.getParent();
+  auto &MRI = MF.getRegInfo();
+  uint64_t Immed;
+  if (Root.isImm())
+    Immed = Root.getImm();
+  else if (Root.isCImm())
+    Immed = Root.getCImm()->getZExtValue();
+  else if (Root.isReg()) {
+    auto ValAndVReg =
+        getConstantVRegValWithLookThrough(Root.getReg(), MRI, true);
+    if (!ValAndVReg)
+      return None;
+    Immed = ValAndVReg->Value;
+  } else
+    return None;
+  return Immed;
 }
 
 /// Check whether \p I is a currently unsupported binary operation:
@@ -582,23 +681,20 @@ static bool isValidCopy(const MachineInstr &I, const RegisterBank &DstBank,
 }
 #endif
 
-/// Helper function for selectCopy. Inserts a subregister copy from
-/// \p *From to \p *To, linking it up to \p I.
+/// Helper function for selectCopy. Inserts a subregister copy from \p SrcReg
+/// to \p *To.
 ///
-/// e.g, given I = "Dst = COPY SrcReg", we'll transform that into
-///
-/// CopyReg (From class) = COPY SrcReg
-/// SubRegCopy (To class) = COPY CopyReg:SubReg
-/// Dst = COPY SubRegCopy
-static bool selectSubregisterCopy(MachineInstr &I, MachineRegisterInfo &MRI,
-                                  const RegisterBankInfo &RBI, Register SrcReg,
-                                  const TargetRegisterClass *From,
-                                  const TargetRegisterClass *To,
-                                  unsigned SubReg) {
+/// E.g "To = COPY SrcReg:SubReg"
+static bool copySubReg(MachineInstr &I, MachineRegisterInfo &MRI,
+                       const RegisterBankInfo &RBI, Register SrcReg,
+                       const TargetRegisterClass *To, unsigned SubReg) {
+  assert(SrcReg.isValid() && "Expected a valid source register?");
+  assert(To && "Destination register class cannot be null");
+  assert(SubReg && "Expected a valid subregister");
+
   MachineIRBuilder MIB(I);
-  auto Copy = MIB.buildCopy({From}, {SrcReg});
-  auto SubRegCopy = MIB.buildInstr(TargetOpcode::COPY, {To}, {})
-                        .addReg(Copy.getReg(0), 0, SubReg);
+  auto SubRegCopy =
+      MIB.buildInstr(TargetOpcode::COPY, {To}, {}).addReg(SrcReg, 0, SubReg);
   MachineOperand &RegOp = I.getOperand(1);
   RegOp.setReg(SubRegCopy.getReg(0));
 
@@ -643,7 +739,6 @@ getRegClassesForCopy(MachineInstr &I, const TargetInstrInfo &TII,
 static bool selectCopy(MachineInstr &I, const TargetInstrInfo &TII,
                        MachineRegisterInfo &MRI, const TargetRegisterInfo &TRI,
                        const RegisterBankInfo &RBI) {
-
   Register DstReg = I.getOperand(0).getReg();
   Register SrcReg = I.getOperand(1).getReg();
   const RegisterBank &DstRegBank = *RBI.getRegBank(DstReg, MRI, TRI);
@@ -676,13 +771,15 @@ static bool selectCopy(MachineInstr &I, const TargetInstrInfo &TII,
             (!Register::isPhysicalRegister(I.getOperand(0).getReg()) &&
              !Register::isPhysicalRegister(I.getOperand(1).getReg()))) &&
            "No phys reg on generic operator!");
-    assert(KnownValid || isValidCopy(I, DstRegBank, MRI, TRI, RBI));
-    (void)KnownValid;
-    return true;
+    bool ValidCopy = true;
+#ifndef NDEBUG
+    ValidCopy = KnownValid || isValidCopy(I, DstRegBank, MRI, TRI, RBI);
+    assert(ValidCopy && "Invalid copy.");
+#endif
+    return ValidCopy;
   };
 
-  // Is this a copy? If so, then we may need to insert a subregister copy, or
-  // a SUBREG_TO_REG.
+  // Is this a copy? If so, then we may need to insert a subregister copy.
   if (I.isCopy()) {
     // Yes. Check if there's anything to fix up.
     if (!SrcRC) {
@@ -692,48 +789,43 @@ static bool selectCopy(MachineInstr &I, const TargetInstrInfo &TII,
 
     unsigned SrcSize = TRI.getRegSizeInBits(*SrcRC);
     unsigned DstSize = TRI.getRegSizeInBits(*DstRC);
+    unsigned SubReg;
 
-    // If we're doing a cross-bank copy on different-sized registers, we need
-    // to do a bit more work.
-    if (SrcSize > DstSize) {
-      // We're doing a cross-bank copy into a smaller register. We need a
-      // subregister copy. First, get a register class that's on the same bank
-      // as the destination, but the same size as the source.
-      const TargetRegisterClass *SubregRC =
-          getMinClassForRegBank(DstRegBank, SrcSize, true);
-      assert(SubregRC && "Didn't get a register class for subreg?");
+    // If the source bank doesn't support a subregister copy small enough,
+    // then we first need to copy to the destination bank.
+    if (getMinSizeForRegBank(SrcRegBank) > DstSize) {
+      const TargetRegisterClass *DstTempRC =
+          getMinClassForRegBank(DstRegBank, SrcSize, /* GetAllRegSet */ true);
+      getSubRegForClass(DstRC, TRI, SubReg);
 
-      // Get the appropriate subregister for the destination.
-      unsigned SubReg = 0;
-      if (!getSubRegForClass(DstRC, TRI, SubReg)) {
-        LLVM_DEBUG(dbgs() << "Couldn't determine subregister for copy.\n");
-        return false;
-      }
+      MachineIRBuilder MIB(I);
+      auto Copy = MIB.buildCopy({DstTempRC}, {SrcReg});
+      copySubReg(I, MRI, RBI, Copy.getReg(0), DstRC, SubReg);
+    } else if (SrcSize > DstSize) {
+      // If the source register is bigger than the destination we need to
+      // perform a subregister copy.
+      const TargetRegisterClass *SubRegRC =
+          getMinClassForRegBank(SrcRegBank, DstSize, /* GetAllRegSet */ true);
+      getSubRegForClass(SubRegRC, TRI, SubReg);
+      copySubReg(I, MRI, RBI, SrcReg, DstRC, SubReg);
+    } else if (DstSize > SrcSize) {
+      // If the destination register is bigger than the source we need to do
+      // a promotion using SUBREG_TO_REG.
+      const TargetRegisterClass *PromotionRC =
+          getMinClassForRegBank(SrcRegBank, DstSize, /* GetAllRegSet */ true);
+      getSubRegForClass(SrcRC, TRI, SubReg);
 
-      // Now, insert a subregister copy using the new register class.
-      selectSubregisterCopy(I, MRI, RBI, SrcReg, SubregRC, DstRC, SubReg);
-      return CheckCopy();
-    }
+      Register PromoteReg = MRI.createVirtualRegister(PromotionRC);
+      BuildMI(*I.getParent(), I, I.getDebugLoc(),
+              TII.get(AArch64::SUBREG_TO_REG), PromoteReg)
+          .addImm(0)
+          .addUse(SrcReg)
+          .addImm(SubReg);
+      MachineOperand &RegOp = I.getOperand(1);
+      RegOp.setReg(PromoteReg);
 
-    // Is this a cross-bank copy?
-    if (DstRegBank.getID() != SrcRegBank.getID()) {
-      if (DstRegBank.getID() == AArch64::GPRRegBankID && DstSize == 32 &&
-          SrcSize == 16) {
-        // Special case for FPR16 to GPR32.
-        // FIXME: This can probably be generalized like the above case.
-        Register PromoteReg =
-            MRI.createVirtualRegister(&AArch64::FPR32RegClass);
-        BuildMI(*I.getParent(), I, I.getDebugLoc(),
-                TII.get(AArch64::SUBREG_TO_REG), PromoteReg)
-            .addImm(0)
-            .addUse(SrcReg)
-            .addImm(AArch64::hsub);
-        MachineOperand &RegOp = I.getOperand(1);
-        RegOp.setReg(PromoteReg);
-
-        // Promise that the copy is implicitly validated by the SUBREG_TO_REG.
-        KnownValid = true;
-      }
+      // Promise that the copy is implicitly validated by the SUBREG_TO_REG.
+      KnownValid = true;
     }
 
     // If the destination is a physical register, then there's nothing to
@@ -950,6 +1042,216 @@ static void changeFCMPPredToAArch64CC(CmpInst::Predicate P,
   }
 }
 
+/// Return a register which can be used as a bit to test in a TB(N)Z.
+static Register getTestBitReg(Register Reg, uint64_t &Bit, bool &Invert,
+                              MachineRegisterInfo &MRI) {
+  assert(Reg.isValid() && "Expected valid register!");
+  while (MachineInstr *MI = getDefIgnoringCopies(Reg, MRI)) {
+    unsigned Opc = MI->getOpcode();
+
+    if (!MI->getOperand(0).isReg() ||
+        !MRI.hasOneNonDBGUse(MI->getOperand(0).getReg()))
+      break;
+
+    // (tbz (any_ext x), b) -> (tbz x, b) if we don't use the extended bits.
+    //
+    // (tbz (trunc x), b) -> (tbz x, b) is always safe, because the bit number
+    // on the truncated x is the same as the bit number on x.
+    if (Opc == TargetOpcode::G_ANYEXT || Opc == TargetOpcode::G_ZEXT ||
+        Opc == TargetOpcode::G_TRUNC) {
+      Register NextReg = MI->getOperand(1).getReg();
+      // Did we find something worth folding?
+      if (!NextReg.isValid() || !MRI.hasOneNonDBGUse(NextReg))
+        break;
+
+      // NextReg is worth folding. Keep looking.
+      Reg = NextReg;
+      continue;
+    }
+
+    // Attempt to find a suitable operation with a constant on one side.
+    Optional<uint64_t> C;
+    Register TestReg;
+    switch (Opc) {
+    default:
+      break;
+    case TargetOpcode::G_AND:
+    case TargetOpcode::G_XOR: {
+      TestReg = MI->getOperand(1).getReg();
+      Register ConstantReg = MI->getOperand(2).getReg();
+      auto VRegAndVal = getConstantVRegValWithLookThrough(ConstantReg, MRI);
+      if (!VRegAndVal) {
+        // AND commutes, check the other side for a constant.
+        // FIXME: Can we canonicalize the constant so that it's always on the
+        // same side at some point earlier?
+        std::swap(ConstantReg, TestReg);
+        VRegAndVal = getConstantVRegValWithLookThrough(ConstantReg, MRI);
+      }
+      if (VRegAndVal)
+        C = VRegAndVal->Value;
+      break;
+    }
+    case TargetOpcode::G_ASHR:
+    case TargetOpcode::G_LSHR:
+    case TargetOpcode::G_SHL: {
+      TestReg = MI->getOperand(1).getReg();
+      auto VRegAndVal =
+          getConstantVRegValWithLookThrough(MI->getOperand(2).getReg(), MRI);
+      if (VRegAndVal)
+        C = VRegAndVal->Value;
+      break;
+    }
+    }
+
+    // Didn't find a constant or viable register. Bail out of the loop.
+    if (!C || !TestReg.isValid())
+      break;
+
+    // We found a suitable instruction with a constant. Check to see if we can
+    // walk through the instruction.
+    Register NextReg;
+    unsigned TestRegSize = MRI.getType(TestReg).getSizeInBits();
+    switch (Opc) {
+    default:
+      break;
+    case TargetOpcode::G_AND:
+      // (tbz (and x, m), b) -> (tbz x, b) when the b-th bit of m is set.
+      if ((*C >> Bit) & 1)
+        NextReg = TestReg;
+      break;
+    case TargetOpcode::G_SHL:
+      // (tbz (shl x, c), b) -> (tbz x, b-c) when b-c is positive and fits in
+      // the type of the register.
+      if (*C <= Bit && (Bit - *C) < TestRegSize) {
+        NextReg = TestReg;
+        Bit = Bit - *C;
+      }
+      break;
+    case TargetOpcode::G_ASHR:
+      // (tbz (ashr x, c), b) -> (tbz x, b+c) or (tbz x, msb) if b+c is > # bits
+      // in x
+      NextReg = TestReg;
+      Bit = Bit + *C;
+      if (Bit >= TestRegSize)
+        Bit = TestRegSize - 1;
+      break;
+    case TargetOpcode::G_LSHR:
+      // (tbz (lshr x, c), b) -> (tbz x, b+c) when b + c is < # bits in x
+      if ((Bit + *C) < TestRegSize) {
+        NextReg = TestReg;
+        Bit = Bit + *C;
+      }
+      break;
+    case TargetOpcode::G_XOR:
+      // We can walk through a G_XOR by inverting whether we use tbz/tbnz when
+      // appropriate.
+      //
+      // e.g. If x' = xor x, c, and the b-th bit is set in c then
+      //
+      // tbz x', b -> tbnz x, b
+      //
+      // Because x' only has the b-th bit set if x does not.
+      if ((*C >> Bit) & 1)
+        Invert = !Invert;
+      NextReg = TestReg;
+      break;
+    }
+
+    // Check if we found anything worth folding.
+    if (!NextReg.isValid())
+      return Reg;
+    Reg = NextReg;
+  }
+
+  return Reg;
+}
+
+MachineInstr *AArch64InstructionSelector::emitTestBit(
+    Register TestReg, uint64_t Bit, bool IsNegative, MachineBasicBlock *DstMBB,
+    MachineIRBuilder &MIB) const {
+  assert(TestReg.isValid());
+  assert(ProduceNonFlagSettingCondBr &&
+         "Cannot emit TB(N)Z with speculation tracking!");
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+
+  // Attempt to optimize the test bit by walking over instructions.
+  TestReg = getTestBitReg(TestReg, Bit, IsNegative, MRI);
+  LLT Ty = MRI.getType(TestReg);
+  unsigned Size = Ty.getSizeInBits();
+  assert(!Ty.isVector() && "Expected a scalar!");
+  assert(Bit < 64 && "Bit is too large!");
+
+  // When the test register is a 64-bit register, we have to narrow to make
+  // TBNZW work.
+  bool UseWReg = Bit < 32;
+  unsigned NecessarySize = UseWReg ? 32 : 64;
+  if (Size < NecessarySize)
+    TestReg = widenGPRBankRegIfNeeded(TestReg, NecessarySize, MIB);
+  else if (Size > NecessarySize)
+    TestReg = narrowExtendRegIfNeeded(TestReg, MIB);
+
+  static const unsigned OpcTable[2][2] = {{AArch64::TBZX, AArch64::TBNZX},
+                                          {AArch64::TBZW, AArch64::TBNZW}};
+  unsigned Opc = OpcTable[UseWReg][IsNegative];
+  auto TestBitMI =
+      MIB.buildInstr(Opc).addReg(TestReg).addImm(Bit).addMBB(DstMBB);
+  constrainSelectedInstRegOperands(*TestBitMI, TII, TRI, RBI);
+  return &*TestBitMI;
+}
+
+bool AArch64InstructionSelector::tryOptAndIntoCompareBranch(
+    MachineInstr *AndInst, int64_t CmpConstant, const CmpInst::Predicate &Pred,
+    MachineBasicBlock *DstMBB, MachineIRBuilder &MIB) const {
+  // Given something like this:
+  //
+  //  %x = ...Something...
+  //  %one = G_CONSTANT i64 1
+  //  %zero = G_CONSTANT i64 0
+  //  %and = G_AND %x, %one
+  //  %cmp = G_ICMP intpred(ne), %and, %zero
+  //  %cmp_trunc = G_TRUNC %cmp
+  //  G_BRCOND %cmp_trunc, %bb.3
+  //
+  // We want to try and fold the AND into the G_BRCOND and produce either a
+  // TBNZ (when we have intpred(ne)) or a TBZ (when we have intpred(eq)).
+  //
+  // In this case, we'd get
+  //
+  // TBNZ %x %bb.3
+  //
+  if (!AndInst || AndInst->getOpcode() != TargetOpcode::G_AND)
+    return false;
+
+  // Need to be comparing against 0 to fold.
+  if (CmpConstant != 0)
+    return false;
+
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+
+  // Only support EQ and NE. If we have LT, then it *is* possible to fold, but
+  // we don't want to do this. When we have an AND and LT, we need a TST/ANDS,
+  // so folding would be redundant.
+  if (Pred != CmpInst::Predicate::ICMP_EQ &&
+      Pred != CmpInst::Predicate::ICMP_NE)
+    return false;
+
+  // Check if the AND has a constant on its RHS which we can use as a mask.
+  // If it's a power of 2, then it's the same as checking a specific bit.
+  // (e.g, ANDing with 8 == ANDing with 000...100 == testing if bit 3 is set)
+  auto MaybeBit =
+      getConstantVRegValWithLookThrough(AndInst->getOperand(2).getReg(), MRI);
+  if (!MaybeBit || !isPowerOf2_64(MaybeBit->Value))
+    return false;
+
+  uint64_t Bit = Log2_64(static_cast<uint64_t>(MaybeBit->Value));
+  Register TestReg = AndInst->getOperand(1).getReg();
+  bool Invert = Pred == CmpInst::Predicate::ICMP_NE;
+
+  // Emit a TB(N)Z.
+  emitTestBit(TestReg, Bit, Invert, DstMBB, MIB);
+  return true;
+}
+
 bool AArch64InstructionSelector::selectCompareBranch(
     MachineInstr &I, MachineFunction &MF, MachineRegisterInfo &MRI) const {
 
@@ -964,19 +1266,60 @@ bool AArch64InstructionSelector::selectCompareBranch(
   Register LHS = CCMI->getOperand(2).getReg();
   Register RHS = CCMI->getOperand(3).getReg();
   auto VRegAndVal = getConstantVRegValWithLookThrough(RHS, MRI);
-  if (!VRegAndVal)
-    std::swap(RHS, LHS);
+  MachineIRBuilder MIB(I);
+  CmpInst::Predicate Pred =
+      (CmpInst::Predicate)CCMI->getOperand(1).getPredicate();
+  MachineInstr *LHSMI = getDefIgnoringCopies(LHS, MRI);
 
-  VRegAndVal = getConstantVRegValWithLookThrough(RHS, MRI);
+  // When we can emit a TB(N)Z, prefer that.
+  //
+  // Handle non-commutative condition codes first.
+  // Note that we don't want to do this when we have a G_AND because it can
+  // become a tst. The tst will make the test bit in the TB(N)Z redundant.
+  if (VRegAndVal && LHSMI->getOpcode() != TargetOpcode::G_AND) {
+    int64_t C = VRegAndVal->Value;
+
+    // When we have a greater-than comparison, we can just test if the msb is
+    // zero.
+    if (C == -1 && Pred == CmpInst::ICMP_SGT) {
+      uint64_t Bit = MRI.getType(LHS).getSizeInBits() - 1;
+      emitTestBit(LHS, Bit, /*IsNegative = */ false, DestMBB, MIB);
+      I.eraseFromParent();
+      return true;
+    }
+
+    // When we have a less than comparison, we can just test if the msb is not
+    // zero.
+    if (C == 0 && Pred == CmpInst::ICMP_SLT) {
+      uint64_t Bit = MRI.getType(LHS).getSizeInBits() - 1;
+      emitTestBit(LHS, Bit, /*IsNegative = */ true, DestMBB, MIB);
+      I.eraseFromParent();
+      return true;
+    }
+  }
+
+  if (!VRegAndVal) {
+    std::swap(RHS, LHS);
+    VRegAndVal = getConstantVRegValWithLookThrough(RHS, MRI);
+    LHSMI = getDefIgnoringCopies(LHS, MRI);
+  }
+
   if (!VRegAndVal || VRegAndVal->Value != 0) {
-    MachineIRBuilder MIB(I);
     // If we can't select a CBZ then emit a cmp + Bcc.
-    if (!emitIntegerCompare(CCMI->getOperand(2), CCMI->getOperand(3),
-                            CCMI->getOperand(1), MIB))
+    MachineInstr *Cmp;
+    std::tie(Cmp, Pred) = emitIntegerCompare(
+        CCMI->getOperand(2), CCMI->getOperand(3), CCMI->getOperand(1), MIB);
+    if (!Cmp)
       return false;
-    const AArch64CC::CondCode CC = changeICMPPredToAArch64CC(
-        (CmpInst::Predicate)CCMI->getOperand(1).getPredicate());
+    const AArch64CC::CondCode CC = changeICMPPredToAArch64CC(Pred);
     MIB.buildInstr(AArch64::Bcc, {}, {}).addImm(CC).addMBB(DestMBB);
+    I.eraseFromParent();
+    return true;
+  }
+
+  // Try to emit a TB(N)Z for an eq or ne condition.
+  if (tryOptAndIntoCompareBranch(LHSMI, VRegAndVal->Value, Pred, DestMBB,
+                                 MIB)) {
     I.eraseFromParent();
     return true;
   }
@@ -984,8 +1327,6 @@ bool AArch64InstructionSelector::selectCompareBranch(
   const RegisterBank &RB = *RBI.getRegBank(LHS, MRI, TRI);
   if (RB.getID() != AArch64::GPRRegBankID)
     return false;
-
-  const auto Pred = (CmpInst::Predicate)CCMI->getOperand(1).getPredicate();
   if (Pred != CmpInst::ICMP_NE && Pred != CmpInst::ICMP_EQ)
     return false;
 
@@ -1220,7 +1561,7 @@ void AArch64InstructionSelector::materializeLargeCMVal(
   return;
 }
 
-void AArch64InstructionSelector::preISelLower(MachineInstr &I) const {
+bool AArch64InstructionSelector::preISelLower(MachineInstr &I) {
   MachineBasicBlock &MBB = *I.getParent();
   MachineFunction &MF = *MBB.getParent();
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -1240,10 +1581,10 @@ void AArch64InstructionSelector::preISelLower(MachineInstr &I) const {
     const LLT ShiftTy = MRI.getType(ShiftReg);
     const LLT SrcTy = MRI.getType(SrcReg);
     if (SrcTy.isVector())
-      return;
+      return false;
     assert(!ShiftTy.isVector() && "unexpected vector shift ty");
     if (SrcTy.getSizeInBits() != 32 || ShiftTy.getSizeInBits() != 64)
-      return;
+      return false;
     auto *AmtMI = MRI.getVRegDef(ShiftReg);
     assert(AmtMI && "could not find a vreg definition for shift amount");
     if (AmtMI->getOpcode() != TargetOpcode::G_CONSTANT) {
@@ -1254,14 +1595,54 @@ void AArch64InstructionSelector::preISelLower(MachineInstr &I) const {
       MRI.setRegBank(Trunc.getReg(0), RBI.getRegBank(AArch64::GPRRegBankID));
       I.getOperand(2).setReg(Trunc.getReg(0));
     }
-    return;
+    return true;
   }
   case TargetOpcode::G_STORE:
-    contractCrossBankCopyIntoStore(I, MRI);
-    return;
+    return contractCrossBankCopyIntoStore(I, MRI);
+  case TargetOpcode::G_PTR_ADD:
+    return convertPtrAddToAdd(I, MRI);
   default:
-    return;
+    return false;
   }
+}
+
+/// This lowering tries to look for G_PTR_ADD instructions and then converts
+/// them to a standard G_ADD with a COPY on the source.
+///
+/// The motivation behind this is to expose the add semantics to the imported
+/// tablegen patterns. We shouldn't need to check for uses being loads/stores,
+/// because the selector works bottom up, uses before defs. By the time we
+/// end up trying to select a G_PTR_ADD, we should have already attempted to
+/// fold this into addressing modes and were therefore unsuccessful.
+bool AArch64InstructionSelector::convertPtrAddToAdd(
+    MachineInstr &I, MachineRegisterInfo &MRI) {
+  assert(I.getOpcode() == TargetOpcode::G_PTR_ADD && "Expected G_PTR_ADD");
+  Register DstReg = I.getOperand(0).getReg();
+  Register AddOp1Reg = I.getOperand(1).getReg();
+  const LLT PtrTy = MRI.getType(DstReg);
+  if (PtrTy.getAddressSpace() != 0)
+    return false;
+
+  // Only do this for scalars for now.
+  if (PtrTy.isVector())
+    return false;
+
+  MachineIRBuilder MIB(I);
+  const LLT s64 = LLT::scalar(64);
+  auto PtrToInt = MIB.buildPtrToInt(s64, AddOp1Reg);
+  // Set regbanks on the registers.
+  MRI.setRegBank(PtrToInt.getReg(0), RBI.getRegBank(AArch64::GPRRegBankID));
+
+  // Now turn the %dst(p0) = G_PTR_ADD %base, off into:
+  // %dst(s64) = G_ADD %intbase, off
+  I.setDesc(TII.get(TargetOpcode::G_ADD));
+  MRI.setType(DstReg, s64);
+  I.getOperand(1).setReg(PtrToInt.getReg(0));
+  if (!select(*PtrToInt)) {
+    LLVM_DEBUG(dbgs() << "Failed to select G_PTRTOINT in convertPtrAddToAdd");
+    return false;
+  }
+  return true;
 }
 
 bool AArch64InstructionSelector::earlySelectSHL(
@@ -1299,8 +1680,8 @@ bool AArch64InstructionSelector::earlySelectSHL(
   return constrainSelectedInstRegOperands(*NewI, TII, TRI, RBI);
 }
 
-void AArch64InstructionSelector::contractCrossBankCopyIntoStore(
-    MachineInstr &I, MachineRegisterInfo &MRI) const {
+bool AArch64InstructionSelector::contractCrossBankCopyIntoStore(
+    MachineInstr &I, MachineRegisterInfo &MRI) {
   assert(I.getOpcode() == TargetOpcode::G_STORE && "Expected G_STORE");
   // If we're storing a scalar, it doesn't matter what register bank that
   // scalar is on. All that matters is the size.
@@ -1316,10 +1697,9 @@ void AArch64InstructionSelector::contractCrossBankCopyIntoStore(
   // G_STORE %x:gpr(s32)
   //
   // And then continue the selection process normally.
-  MachineInstr *Def = getDefIgnoringCopies(I.getOperand(0).getReg(), MRI);
-  if (!Def)
-    return;
-  Register DefDstReg = Def->getOperand(0).getReg();
+  Register DefDstReg = getSrcRegIgnoringCopies(I.getOperand(0).getReg(), MRI);
+  if (!DefDstReg.isValid())
+    return false;
   LLT DefDstTy = MRI.getType(DefDstReg);
   Register StoreSrcReg = I.getOperand(0).getReg();
   LLT StoreSrcTy = MRI.getType(StoreSrcReg);
@@ -1327,18 +1707,19 @@ void AArch64InstructionSelector::contractCrossBankCopyIntoStore(
   // If we get something strange like a physical register, then we shouldn't
   // go any further.
   if (!DefDstTy.isValid())
-    return;
+    return false;
 
   // Are the source and dst types the same size?
   if (DefDstTy.getSizeInBits() != StoreSrcTy.getSizeInBits())
-    return;
+    return false;
 
   if (RBI.getRegBank(StoreSrcReg, MRI, TRI) ==
       RBI.getRegBank(DefDstReg, MRI, TRI))
-    return;
+    return false;
 
   // We have a cross-bank copy, which is entering a store. Let's fold it.
   I.getOperand(0).setReg(DefDstReg);
+  return true;
 }
 
 bool AArch64InstructionSelector::earlySelect(MachineInstr &I) const {
@@ -1364,16 +1745,15 @@ bool AArch64InstructionSelector::earlySelect(MachineInstr &I) const {
 
     Register DefReg = I.getOperand(0).getReg();
     LLT Ty = MRI.getType(DefReg);
-    if (Ty != LLT::scalar(64) && Ty != LLT::scalar(32))
-      return false;
-
-    if (Ty == LLT::scalar(64)) {
+    if (Ty.getSizeInBits() == 64) {
       I.getOperand(1).ChangeToRegister(AArch64::XZR, false);
       RBI.constrainGenericRegister(DefReg, AArch64::GPR64RegClass, MRI);
-    } else {
+    } else if (Ty.getSizeInBits() == 32) {
       I.getOperand(1).ChangeToRegister(AArch64::WZR, false);
       RBI.constrainGenericRegister(DefReg, AArch64::GPR32RegClass, MRI);
-    }
+    } else
+      return false;
+
     I.setDesc(TII.get(TargetOpcode::COPY));
     return true;
   }
@@ -1389,6 +1769,14 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
   MachineBasicBlock &MBB = *I.getParent();
   MachineFunction &MF = *MBB.getParent();
   MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  const AArch64Subtarget *Subtarget =
+      &static_cast<const AArch64Subtarget &>(MF.getSubtarget());
+  if (Subtarget->requiresStrictAlign()) {
+    // We don't support this feature yet.
+    LLVM_DEBUG(dbgs() << "AArch64 GISel does not support strict-align yet\n");
+    return false;
+  }
 
   unsigned Opcode = I.getOpcode();
   // G_PHI requires same handling as PHI
@@ -1441,7 +1829,9 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
   // Try to do some lowering before we start instruction selecting. These
   // lowerings are purely transformations on the input G_MIR and so selection
   // must continue after any modification of the instruction.
-  preISelLower(I);
+  if (preISelLower(I)) {
+    Opcode = I.getOpcode(); // The opcode may have been modified, refresh it.
+  }
 
   // There may be patterns where the importer can't deal with them optimally,
   // but does select it to a suboptimal sequence so our custom C++ selection
@@ -1476,8 +1866,6 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
     // Speculation tracking/SLH assumes that optimized TB(N)Z/CB(N)Z
     // instructions will not be produced, as they are conditional branch
     // instructions that do not set flags.
-    bool ProduceNonFlagSettingCondBr =
-        !MF.getFunction().hasFnAttribute(Attribute::SpeculativeLoadHardening);
     if (ProduceNonFlagSettingCondBr && selectCompareBranch(I, MF, MRI))
       return true;
 
@@ -1978,9 +2366,8 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
     // Add and set the set condition flag.
     unsigned AddsOpc = OpSize == 32 ? AArch64::ADDSWrr : AArch64::ADDSXrr;
     MachineIRBuilder MIRBuilder(I);
-    auto AddsMI = MIRBuilder.buildInstr(
-        AddsOpc, {I.getOperand(0).getReg()},
-        {I.getOperand(2).getReg(), I.getOperand(3).getReg()});
+    auto AddsMI = MIRBuilder.buildInstr(AddsOpc, {I.getOperand(0)},
+                                        {I.getOperand(2), I.getOperand(3)});
     constrainSelectedInstRegOperands(*AddsMI, TII, TRI, RBI);
 
     // Now, put the overflow result in the register given by the first operand
@@ -2267,11 +2654,13 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
     }
 
     MachineIRBuilder MIRBuilder(I);
-    if (!emitIntegerCompare(I.getOperand(2), I.getOperand(3), I.getOperand(1),
-                            MIRBuilder))
+    MachineInstr *Cmp;
+    CmpInst::Predicate Pred;
+    std::tie(Cmp, Pred) = emitIntegerCompare(I.getOperand(2), I.getOperand(3),
+                                             I.getOperand(1), MIRBuilder);
+    if (!Cmp)
       return false;
-    emitCSetForICMP(I.getOperand(0).getReg(), I.getOperand(1).getPredicate(),
-                    MIRBuilder);
+    emitCSetForICMP(I.getOperand(0).getReg(), Pred, MIRBuilder);
     I.eraseFromParent();
     return true;
   }
@@ -2408,14 +2797,13 @@ bool AArch64InstructionSelector::selectBrJT(MachineInstr &I,
 
   Register TargetReg = MRI.createVirtualRegister(&AArch64::GPR64RegClass);
   Register ScratchReg = MRI.createVirtualRegister(&AArch64::GPR64spRegClass);
-  MIB.buildInstr(AArch64::JumpTableDest32, {TargetReg, ScratchReg},
-                 {JTAddr, Index})
-      .addJumpTableIndex(JTI);
-
+  auto JumpTableInst = MIB.buildInstr(AArch64::JumpTableDest32,
+                                      {TargetReg, ScratchReg}, {JTAddr, Index})
+                           .addJumpTableIndex(JTI);
   // Build the indirect branch.
   MIB.buildInstr(AArch64::BR, {}, {TargetReg});
   I.eraseFromParent();
-  return true;
+  return constrainSelectedInstRegOperands(*JumpTableInst, TII, TRI, RBI);
 }
 
 bool AArch64InstructionSelector::selectJumpTable(
@@ -3134,12 +3522,10 @@ unsigned
 AArch64InstructionSelector::emitConstantPoolEntry(Constant *CPVal,
                                                   MachineFunction &MF) const {
   Type *CPTy = CPVal->getType();
-  unsigned Align = MF.getDataLayout().getPrefTypeAlignment(CPTy);
-  if (Align == 0)
-    Align = MF.getDataLayout().getTypeAllocSize(CPTy);
+  Align Alignment = MF.getDataLayout().getPrefTypeAlign(CPTy);
 
   MachineConstantPool *MCP = MF.getConstantPool();
-  return MCP->getConstantPoolIndex(CPVal, Align);
+  return MCP->getConstantPoolIndex(CPVal, Alignment);
 }
 
 MachineInstr *AArch64InstructionSelector::emitLoadFromConstantPool(
@@ -3221,7 +3607,7 @@ AArch64InstructionSelector::emitADD(Register DefReg, MachineOperand &LHS,
   bool Is32Bit = MRI.getType(LHS.getReg()).getSizeInBits() == 32;
   auto ImmFns = selectArithImmed(RHS);
   unsigned Opc = OpcTable[Is32Bit][ImmFns.hasValue()];
-  auto AddMI = MIRBuilder.buildInstr(Opc, {DefReg}, {LHS.getReg()});
+  auto AddMI = MIRBuilder.buildInstr(Opc, {DefReg}, {LHS});
 
   // If we matched a valid constant immediate, add those operands.
   if (ImmFns) {
@@ -3247,7 +3633,7 @@ AArch64InstructionSelector::emitCMN(MachineOperand &LHS, MachineOperand &RHS,
   unsigned Opc = OpcTable[Is32Bit][ImmFns.hasValue()];
   Register ZReg = Is32Bit ? AArch64::WZR : AArch64::XZR;
 
-  auto CmpMI = MIRBuilder.buildInstr(Opc, {ZReg}, {LHS.getReg()});
+  auto CmpMI = MIRBuilder.buildInstr(Opc, {ZReg}, {LHS});
 
   // If we matched a valid constant immediate, add those operands.
   if (ImmFns) {
@@ -3289,7 +3675,8 @@ AArch64InstructionSelector::emitTST(const Register &LHS, const Register &RHS,
   return &*TstMI;
 }
 
-MachineInstr *AArch64InstructionSelector::emitIntegerCompare(
+std::pair<MachineInstr *, CmpInst::Predicate>
+AArch64InstructionSelector::emitIntegerCompare(
     MachineOperand &LHS, MachineOperand &RHS, MachineOperand &Predicate,
     MachineIRBuilder &MIRBuilder) const {
   assert(LHS.isReg() && RHS.isReg() && "Expected LHS and RHS to be registers!");
@@ -3299,7 +3686,7 @@ MachineInstr *AArch64InstructionSelector::emitIntegerCompare(
   MachineInstr *FoldCmp =
       tryFoldIntegerCompare(LHS, RHS, Predicate, MIRBuilder);
   if (FoldCmp)
-    return FoldCmp;
+    return {FoldCmp, (CmpInst::Predicate)Predicate.getPredicate()};
 
   // Can't fold into a CMN. Just emit a normal compare.
   unsigned CmpOpc = 0;
@@ -3315,26 +3702,26 @@ MachineInstr *AArch64InstructionSelector::emitIntegerCompare(
     CmpOpc = AArch64::SUBSXrr;
     ZReg = AArch64::XZR;
   } else {
-    return nullptr;
+    return {nullptr, CmpInst::Predicate::BAD_ICMP_PREDICATE};
   }
 
   // Try to match immediate forms.
-  auto ImmFns = selectArithImmed(RHS);
-  if (ImmFns)
-    CmpOpc = CmpOpc == AArch64::SUBSWrr ? AArch64::SUBSWri : AArch64::SUBSXri;
+  MachineInstr *ImmedCmp =
+      tryOptArithImmedIntegerCompare(LHS, RHS, Predicate, MIRBuilder);
+  if (ImmedCmp)
+    return {ImmedCmp, (CmpInst::Predicate)Predicate.getPredicate()};
 
-  auto CmpMI = MIRBuilder.buildInstr(CmpOpc).addDef(ZReg).addUse(LHS.getReg());
-  // If we matched a valid constant immediate, add those operands.
-  if (ImmFns) {
-    for (auto &RenderFn : *ImmFns)
-      RenderFn(CmpMI);
-  } else {
-    CmpMI.addUse(RHS.getReg());
-  }
+  // If we don't have an immediate, we may have a shift which can be folded
+  // into the compare.
+  MachineInstr *ShiftedCmp = tryOptArithShiftedCompare(LHS, RHS, MIRBuilder);
+  if (ShiftedCmp)
+    return {ShiftedCmp, (CmpInst::Predicate)Predicate.getPredicate()};
 
+  auto CmpMI =
+      MIRBuilder.buildInstr(CmpOpc, {ZReg}, {LHS.getReg(), RHS.getReg()});
   // Make sure that we can constrain the compare that we emitted.
   constrainSelectedInstRegOperands(*CmpMI, TII, TRI, RBI);
-  return &*CmpMI;
+  return {&*CmpMI, (CmpInst::Predicate)Predicate.getPredicate()};
 }
 
 MachineInstr *AArch64InstructionSelector::emitVectorConcat(
@@ -3470,8 +3857,16 @@ bool AArch64InstructionSelector::tryOptSelect(MachineInstr &I) const {
   MachineInstr *CondDef = MRI.getVRegDef(I.getOperand(1).getReg());
   while (CondDef) {
     // We can only fold if all of the defs have one use.
-    if (!MRI.hasOneUse(CondDef->getOperand(0).getReg()))
-      return false;
+    Register CondDefReg = CondDef->getOperand(0).getReg();
+    if (!MRI.hasOneNonDBGUse(CondDefReg)) {
+      // Unless it's another select.
+      for (const MachineInstr &UI : MRI.use_nodbg_instructions(CondDefReg)) {
+        if (CondDef == &UI)
+          continue;
+        if (UI.getOpcode() != TargetOpcode::G_SELECT)
+          return false;
+      }
+    }
 
     // We can skip over G_TRUNC since the condition is 1-bit.
     // Truncating/extending can have no impact on the value.
@@ -3497,13 +3892,21 @@ bool AArch64InstructionSelector::tryOptSelect(MachineInstr &I) const {
 
   AArch64CC::CondCode CondCode;
   if (CondOpc == TargetOpcode::G_ICMP) {
-    CondCode = changeICMPPredToAArch64CC(
-        (CmpInst::Predicate)CondDef->getOperand(1).getPredicate());
-    if (!emitIntegerCompare(CondDef->getOperand(2), CondDef->getOperand(3),
-                            CondDef->getOperand(1), MIB)) {
+    MachineInstr *Cmp;
+    CmpInst::Predicate Pred;
+
+    std::tie(Cmp, Pred) =
+        emitIntegerCompare(CondDef->getOperand(2), CondDef->getOperand(3),
+                           CondDef->getOperand(1), MIB);
+
+    if (!Cmp) {
       LLVM_DEBUG(dbgs() << "Couldn't emit compare for select!\n");
       return false;
     }
+
+    // Have to collect the CondCode after emitIntegerCompare, since it can
+    // update the predicate.
+    CondCode = changeICMPPredToAArch64CC(Pred);
   } else {
     // Get the condition code for the select.
     AArch64CC::CondCode CondCode2;
@@ -3633,6 +4036,148 @@ MachineInstr *AArch64InstructionSelector::tryFoldIntegerCompare(
   return nullptr;
 }
 
+MachineInstr *AArch64InstructionSelector::tryOptArithImmedIntegerCompare(
+    MachineOperand &LHS, MachineOperand &RHS, MachineOperand &Predicate,
+    MachineIRBuilder &MIB) const {
+  // Attempt to select the immediate form of an integer compare.
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  auto Ty = MRI.getType(LHS.getReg());
+  assert(!Ty.isVector() && "Expected scalar or pointer only?");
+  unsigned Size = Ty.getSizeInBits();
+  assert((Size == 32 || Size == 64) &&
+         "Expected 32 bit or 64 bit compare only?");
+  auto P = (CmpInst::Predicate)Predicate.getPredicate();
+
+  // Check if this is a case we can already handle.
+  InstructionSelector::ComplexRendererFns ImmFns;
+  ImmFns = selectArithImmed(RHS);
+
+  if (!ImmFns) {
+    // We didn't get a rendering function, but we may still have a constant.
+    auto MaybeImmed = getImmedFromMO(RHS);
+    if (!MaybeImmed)
+      return nullptr;
+
+    // We have a constant, but it doesn't fit. Try adjusting it by one and
+    // updating the predicate if possible.
+    uint64_t C = *MaybeImmed;
+    switch (P) {
+    default:
+      return nullptr;
+    case CmpInst::ICMP_SLT:
+    case CmpInst::ICMP_SGE:
+      // Check for
+      //
+      // x slt c => x sle c - 1
+      // x sge c => x sgt c - 1
+      //
+      // When c is not the smallest possible negative number.
+      if ((Size == 64 && static_cast<int64_t>(C) == INT64_MIN) ||
+          (Size == 32 && static_cast<int32_t>(C) == INT32_MIN))
+        return nullptr;
+      P = (P == CmpInst::ICMP_SLT) ? CmpInst::ICMP_SLE : CmpInst::ICMP_SGT;
+      C -= 1;
+      break;
+    case CmpInst::ICMP_ULT:
+    case CmpInst::ICMP_UGE:
+      // Check for
+      //
+      // x ult c => x ule c - 1
+      // x uge c => x ugt c - 1
+      //
+      // When c is not zero.
+      if (C == 0)
+        return nullptr;
+      P = (P == CmpInst::ICMP_ULT) ? CmpInst::ICMP_ULE : CmpInst::ICMP_UGT;
+      C -= 1;
+      break;
+    case CmpInst::ICMP_SLE:
+    case CmpInst::ICMP_SGT:
+      // Check for
+      //
+      // x sle c => x slt c + 1
+      // x sgt c => s sge c + 1
+      //
+      // When c is not the largest possible signed integer.
+      if ((Size == 32 && static_cast<int32_t>(C) == INT32_MAX) ||
+          (Size == 64 && static_cast<int64_t>(C) == INT64_MAX))
+        return nullptr;
+      P = (P == CmpInst::ICMP_SLE) ? CmpInst::ICMP_SLT : CmpInst::ICMP_SGE;
+      C += 1;
+      break;
+    case CmpInst::ICMP_ULE:
+    case CmpInst::ICMP_UGT:
+      // Check for
+      //
+      // x ule c => x ult c + 1
+      // x ugt c => s uge c + 1
+      //
+      // When c is not the largest possible unsigned integer.
+      if ((Size == 32 && static_cast<uint32_t>(C) == UINT32_MAX) ||
+          (Size == 64 && C == UINT64_MAX))
+        return nullptr;
+      P = (P == CmpInst::ICMP_ULE) ? CmpInst::ICMP_ULT : CmpInst::ICMP_UGE;
+      C += 1;
+      break;
+    }
+
+    // Check if the new constant is valid.
+    if (Size == 32)
+      C = static_cast<uint32_t>(C);
+    ImmFns = select12BitValueWithLeftShift(C);
+    if (!ImmFns)
+      return nullptr;
+    Predicate.setPredicate(P);
+  }
+
+  // At this point, we know we can select an immediate form. Go ahead and do
+  // that.
+  Register ZReg;
+  unsigned Opc;
+  if (Size == 32) {
+    ZReg = AArch64::WZR;
+    Opc = AArch64::SUBSWri;
+  } else {
+    ZReg = AArch64::XZR;
+    Opc = AArch64::SUBSXri;
+  }
+
+  auto CmpMI = MIB.buildInstr(Opc, {ZReg}, {LHS.getReg()});
+  for (auto &RenderFn : *ImmFns)
+    RenderFn(CmpMI);
+  constrainSelectedInstRegOperands(*CmpMI, TII, TRI, RBI);
+  return &*CmpMI;
+}
+
+MachineInstr *AArch64InstructionSelector::tryOptArithShiftedCompare(
+    MachineOperand &LHS, MachineOperand &RHS, MachineIRBuilder &MIB) const {
+  // We are looking for the following pattern:
+  //
+  // shift = G_SHL/ASHR/LHSR y, c
+  // ...
+  // cmp = G_ICMP pred, something, shift
+  //
+  // Since we will select the G_ICMP to a SUBS, we can potentially fold the
+  // shift into the subtract.
+  static const unsigned OpcTable[2] = {AArch64::SUBSWrs, AArch64::SUBSXrs};
+  static const Register ZRegTable[2] = {AArch64::WZR, AArch64::XZR};
+  auto ImmFns = selectShiftedRegister(RHS);
+  if (!ImmFns)
+    return nullptr;
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  auto Ty = MRI.getType(LHS.getReg());
+  assert(!Ty.isVector() && "Expected scalar or pointer only?");
+  unsigned Size = Ty.getSizeInBits();
+  bool Idx = (Size == 64);
+  Register ZReg = ZRegTable[Idx];
+  unsigned Opc = OpcTable[Idx];
+  auto CmpMI = MIB.buildInstr(Opc, {ZReg}, {LHS.getReg()});
+  for (auto &RenderFn : *ImmFns)
+    RenderFn(CmpMI);
+  constrainSelectedInstRegOperands(*CmpMI, TII, TRI, RBI);
+  return &*CmpMI;
+}
+
 bool AArch64InstructionSelector::tryOptVectorDup(MachineInstr &I) const {
   // Try to match a vector splat operation into a dup instruction.
   // We're looking for this pattern:
@@ -3672,22 +4217,51 @@ bool AArch64InstructionSelector::tryOptVectorDup(MachineInstr &I) const {
     return false;
 
   // The shuffle's second operand doesn't matter if the mask is all zero.
-  const Constant *Mask = I.getOperand(3).getShuffleMask();
-  if (!isa<ConstantAggregateZero>(Mask))
+  ArrayRef<int> Mask = I.getOperand(3).getShuffleMask();
+  if (!all_of(Mask, [](int Elem) { return Elem == 0; }))
     return false;
 
   // We're done, now find out what kind of splat we need.
   LLT VecTy = MRI.getType(I.getOperand(0).getReg());
   LLT EltTy = VecTy.getElementType();
-  if (VecTy.getSizeInBits() != 128 || EltTy.getSizeInBits() < 32) {
-    LLVM_DEBUG(dbgs() << "Could not optimize splat pattern < 128b yet");
+  if (EltTy.getSizeInBits() < 32) {
+    LLVM_DEBUG(dbgs() << "Could not optimize splat pattern < 32b elts yet");
     return false;
   }
   bool IsFP = ScalarRB->getID() == AArch64::FPRRegBankID;
-  static const unsigned OpcTable[2][2] = {
-      {AArch64::DUPv4i32gpr, AArch64::DUPv2i64gpr},
-      {AArch64::DUPv4i32lane, AArch64::DUPv2i64lane}};
-  unsigned Opc = OpcTable[IsFP][EltTy.getSizeInBits() == 64];
+  unsigned Opc = 0;
+  if (IsFP) {
+    switch (EltTy.getSizeInBits()) {
+    case 32:
+      if (VecTy.getNumElements() == 2) {
+        Opc = AArch64::DUPv2i32lane;
+      } else {
+        Opc = AArch64::DUPv4i32lane;
+        assert(VecTy.getNumElements() == 4);
+      }
+      break;
+    case 64:
+      assert(VecTy.getNumElements() == 2 && "Unexpected num elts");
+      Opc = AArch64::DUPv2i64lane;
+      break;
+    }
+  } else {
+    switch (EltTy.getSizeInBits()) {
+    case 32:
+      if (VecTy.getNumElements() == 2) {
+        Opc = AArch64::DUPv2i32gpr;
+      } else {
+        Opc = AArch64::DUPv4i32gpr;
+        assert(VecTy.getNumElements() == 4);
+      }
+      break;
+    case 64:
+      assert(VecTy.getNumElements() == 2 && "Unexpected num elts");
+      Opc = AArch64::DUPv2i64gpr;
+      break;
+    }
+  }
+  assert(Opc && "Did not compute an opcode for a dup");
 
   // For FP splats, we need to widen the scalar reg via undef too.
   if (IsFP) {
@@ -3722,14 +4296,11 @@ bool AArch64InstructionSelector::selectShuffleVector(
   const LLT Src1Ty = MRI.getType(Src1Reg);
   Register Src2Reg = I.getOperand(2).getReg();
   const LLT Src2Ty = MRI.getType(Src2Reg);
-  const Constant *ShuffleMask = I.getOperand(3).getShuffleMask();
+  ArrayRef<int> Mask = I.getOperand(3).getShuffleMask();
 
   MachineBasicBlock &MBB = *I.getParent();
   MachineFunction &MF = *MBB.getParent();
   LLVMContext &Ctx = MF.getFunction().getContext();
-
-  SmallVector<int, 8> Mask;
-  ShuffleVectorInst::getShuffleMask(ShuffleMask, Mask);
 
   // G_SHUFFLE_VECTOR is weird in that the source operands can be scalars, if
   // it's originated from a <1 x T> type. Those should have been lowered into
@@ -3799,9 +4370,8 @@ bool AArch64InstructionSelector::selectShuffleVector(
                     .addUse(Src2Reg)
                     .addImm(AArch64::qsub1);
 
-  auto TBL2 =
-      MIRBuilder.buildInstr(AArch64::TBLv16i8Two, {I.getOperand(0).getReg()},
-                            {RegSeq, IndexLoad->getOperand(0).getReg()});
+  auto TBL2 = MIRBuilder.buildInstr(AArch64::TBLv16i8Two, {I.getOperand(0)},
+                                    {RegSeq, IndexLoad->getOperand(0)});
   constrainSelectedInstRegOperands(*RegSeq, TII, TRI, RBI);
   constrainSelectedInstRegOperands(*TBL2, TII, TRI, RBI);
   I.eraseFromParent();
@@ -4028,8 +4598,8 @@ bool AArch64InstructionSelector::selectIntrinsicWithSideEffects(
   return true;
 }
 
-bool AArch64InstructionSelector::selectIntrinsic(
-    MachineInstr &I, MachineRegisterInfo &MRI) const {
+bool AArch64InstructionSelector::selectIntrinsic(MachineInstr &I,
+                                                 MachineRegisterInfo &MRI) {
   unsigned IntrinID = findIntrinsicID(I);
   if (!IntrinID)
     return false;
@@ -4038,7 +4608,7 @@ bool AArch64InstructionSelector::selectIntrinsic(
   switch (IntrinID) {
   default:
     break;
-  case Intrinsic::aarch64_crypto_sha1h:
+  case Intrinsic::aarch64_crypto_sha1h: {
     Register DstReg = I.getOperand(0).getReg();
     Register SrcReg = I.getOperand(2).getReg();
 
@@ -4077,28 +4647,59 @@ bool AArch64InstructionSelector::selectIntrinsic(
     I.eraseFromParent();
     return true;
   }
-  return false;
-}
+  case Intrinsic::frameaddress:
+  case Intrinsic::returnaddress: {
+    MachineFunction &MF = *I.getParent()->getParent();
+    MachineFrameInfo &MFI = MF.getFrameInfo();
 
-static Optional<uint64_t> getImmedFromMO(const MachineOperand &Root) {
-  auto &MI = *Root.getParent();
-  auto &MBB = *MI.getParent();
-  auto &MF = *MBB.getParent();
-  auto &MRI = MF.getRegInfo();
-  uint64_t Immed;
-  if (Root.isImm())
-    Immed = Root.getImm();
-  else if (Root.isCImm())
-    Immed = Root.getCImm()->getZExtValue();
-  else if (Root.isReg()) {
-    auto ValAndVReg =
-        getConstantVRegValWithLookThrough(Root.getReg(), MRI, true);
-    if (!ValAndVReg)
-      return None;
-    Immed = ValAndVReg->Value;
-  } else
-    return None;
-  return Immed;
+    unsigned Depth = I.getOperand(2).getImm();
+    Register DstReg = I.getOperand(0).getReg();
+    RBI.constrainGenericRegister(DstReg, AArch64::GPR64RegClass, MRI);
+
+    if (Depth == 0 && IntrinID == Intrinsic::returnaddress) {
+      if (MFReturnAddr) {
+        MIRBuilder.buildCopy({DstReg}, MFReturnAddr);
+        I.eraseFromParent();
+        return true;
+      }
+      MFI.setReturnAddressIsTaken(true);
+      MF.addLiveIn(AArch64::LR, &AArch64::GPR64spRegClass);
+      // Insert the copy from LR/X30 into the entry block, before it can be
+      // clobbered by anything.
+      MachineBasicBlock &EntryBlock = *MF.begin();
+      if (!EntryBlock.isLiveIn(AArch64::LR))
+        EntryBlock.addLiveIn(AArch64::LR);
+      MachineIRBuilder EntryBuilder(MF);
+      EntryBuilder.setInstr(*EntryBlock.begin());
+      EntryBuilder.buildCopy({DstReg}, {Register(AArch64::LR)});
+      MFReturnAddr = DstReg;
+      I.eraseFromParent();
+      return true;
+    }
+
+    MFI.setFrameAddressIsTaken(true);
+    Register FrameAddr(AArch64::FP);
+    while (Depth--) {
+      Register NextFrame = MRI.createVirtualRegister(&AArch64::GPR64spRegClass);
+      auto Ldr =
+          MIRBuilder.buildInstr(AArch64::LDRXui, {NextFrame}, {FrameAddr})
+              .addImm(0);
+      constrainSelectedInstRegOperands(*Ldr, TII, TRI, RBI);
+      FrameAddr = NextFrame;
+    }
+
+    if (IntrinID == Intrinsic::frameaddress)
+      MIRBuilder.buildCopy({DstReg}, {FrameAddr});
+    else {
+      MFI.setReturnAddressIsTaken(true);
+      MIRBuilder.buildInstr(AArch64::LDRXui, {DstReg}, {FrameAddr}).addImm(1);
+    }
+
+    I.eraseFromParent();
+    return true;
+  }
+  }
+  return false;
 }
 
 InstructionSelector::ComplexRendererFns
@@ -4218,7 +4819,7 @@ bool AArch64InstructionSelector::isWorthFoldingIntoExtendedReg(
     MachineInstr &MI, const MachineRegisterInfo &MRI) const {
   // Always fold if there is one use, or if we're optimizing for size.
   Register DefReg = MI.getOperand(0).getReg();
-  if (MRI.hasOneUse(DefReg) ||
+  if (MRI.hasOneNonDBGUse(DefReg) ||
       MI.getParent()->getParent()->getFunction().hasMinSize())
     return true;
 
@@ -4230,49 +4831,19 @@ bool AArch64InstructionSelector::isWorthFoldingIntoExtendedReg(
   // We have a fastpath, so folding a shift in and potentially computing it
   // many times may be beneficial. Check if this is only used in memory ops.
   // If it is, then we should fold.
-  return all_of(MRI.use_instructions(DefReg),
+  return all_of(MRI.use_nodbg_instructions(DefReg),
                 [](MachineInstr &Use) { return Use.mayLoadOrStore(); });
 }
 
-/// This is used for computing addresses like this:
-///
-/// ldr x1, [x2, x3, lsl #3]
-///
-/// Where x2 is the base register, and x3 is an offset register. The shift-left
-/// is a constant value specific to this load instruction. That is, we'll never
-/// see anything other than a 3 here (which corresponds to the size of the
-/// element being loaded.)
 InstructionSelector::ComplexRendererFns
-AArch64InstructionSelector::selectAddrModeShiftedExtendXReg(
-    MachineOperand &Root, unsigned SizeInBytes) const {
-  if (!Root.isReg())
-    return None;
+AArch64InstructionSelector::selectExtendedSHL(
+    MachineOperand &Root, MachineOperand &Base, MachineOperand &Offset,
+    unsigned SizeInBytes, bool WantsExt) const {
+  assert(Base.isReg() && "Expected base to be a register operand");
+  assert(Offset.isReg() && "Expected offset to be a register operand");
+
   MachineRegisterInfo &MRI = Root.getParent()->getMF()->getRegInfo();
-
-  // Make sure that the memory op is a valid size.
-  int64_t LegalShiftVal = Log2_32(SizeInBytes);
-  if (LegalShiftVal == 0)
-    return None;
-
-  // We want to find something like this:
-  //
-  // val = G_CONSTANT LegalShiftVal
-  // shift = G_SHL off_reg val
-  // ptr = G_PTR_ADD base_reg shift
-  // x = G_LOAD ptr
-  //
-  // And fold it into this addressing mode:
-  //
-  // ldr x, [base_reg, off_reg, lsl #LegalShiftVal]
-
-  // Check if we can find the G_PTR_ADD.
-  MachineInstr *Gep = getOpcodeDef(TargetOpcode::G_PTR_ADD, Root.getReg(), MRI);
-  if (!Gep || !isWorthFoldingIntoExtendedReg(*Gep, MRI))
-    return None;
-
-  // Now, try to match an opcode which will match our specific offset.
-  // We want a G_SHL or a G_MUL.
-  MachineInstr *OffsetInst = getDefIgnoringCopies(Gep->getOperand(2).getReg(), MRI);
+  MachineInstr *OffsetInst = MRI.getVRegDef(Offset.getReg());
   if (!OffsetInst)
     return None;
 
@@ -4280,6 +4851,10 @@ AArch64InstructionSelector::selectAddrModeShiftedExtendXReg(
   if (OffsetOpc != TargetOpcode::G_SHL && OffsetOpc != TargetOpcode::G_MUL)
     return None;
 
+  // Make sure that the memory op is a valid size.
+  int64_t LegalShiftVal = Log2_32(SizeInBytes);
+  if (LegalShiftVal == 0)
+    return None;
   if (!isWorthFoldingIntoExtendedReg(*OffsetInst, MRI))
     return None;
 
@@ -4324,18 +4899,73 @@ AArch64InstructionSelector::selectAddrModeShiftedExtendXReg(
   if (ImmVal != LegalShiftVal)
     return None;
 
+  unsigned SignExtend = 0;
+  if (WantsExt) {
+    // Check if the offset is defined by an extend.
+    MachineInstr *ExtInst = getDefIgnoringCopies(OffsetReg, MRI);
+    auto Ext = getExtendTypeForInst(*ExtInst, MRI, true);
+    if (Ext == AArch64_AM::InvalidShiftExtend)
+      return None;
+
+    SignExtend = Ext == AArch64_AM::SXTW;
+
+    // Need a 32-bit wide register here.
+    MachineIRBuilder MIB(*MRI.getVRegDef(Root.getReg()));
+    OffsetReg = ExtInst->getOperand(1).getReg();
+    OffsetReg = narrowExtendRegIfNeeded(OffsetReg, MIB);
+  }
+
   // We can use the LHS of the GEP as the base, and the LHS of the shift as an
   // offset. Signify that we are shifting by setting the shift flag to 1.
-  return {{[=](MachineInstrBuilder &MIB) {
-             MIB.addUse(Gep->getOperand(1).getReg());
-           },
+  return {{[=](MachineInstrBuilder &MIB) { MIB.addUse(Base.getReg()); },
            [=](MachineInstrBuilder &MIB) { MIB.addUse(OffsetReg); },
            [=](MachineInstrBuilder &MIB) {
              // Need to add both immediates here to make sure that they are both
              // added to the instruction.
-             MIB.addImm(0);
+             MIB.addImm(SignExtend);
              MIB.addImm(1);
            }}};
+}
+
+/// This is used for computing addresses like this:
+///
+/// ldr x1, [x2, x3, lsl #3]
+///
+/// Where x2 is the base register, and x3 is an offset register. The shift-left
+/// is a constant value specific to this load instruction. That is, we'll never
+/// see anything other than a 3 here (which corresponds to the size of the
+/// element being loaded.)
+InstructionSelector::ComplexRendererFns
+AArch64InstructionSelector::selectAddrModeShiftedExtendXReg(
+    MachineOperand &Root, unsigned SizeInBytes) const {
+  if (!Root.isReg())
+    return None;
+  MachineRegisterInfo &MRI = Root.getParent()->getMF()->getRegInfo();
+
+  // We want to find something like this:
+  //
+  // val = G_CONSTANT LegalShiftVal
+  // shift = G_SHL off_reg val
+  // ptr = G_PTR_ADD base_reg shift
+  // x = G_LOAD ptr
+  //
+  // And fold it into this addressing mode:
+  //
+  // ldr x, [base_reg, off_reg, lsl #LegalShiftVal]
+
+  // Check if we can find the G_PTR_ADD.
+  MachineInstr *PtrAdd =
+      getOpcodeDef(TargetOpcode::G_PTR_ADD, Root.getReg(), MRI);
+  if (!PtrAdd || !isWorthFoldingIntoExtendedReg(*PtrAdd, MRI))
+    return None;
+
+  // Now, try to match an opcode which will match our specific offset.
+  // We want a G_SHL or a G_MUL.
+  MachineInstr *OffsetInst =
+      getDefIgnoringCopies(PtrAdd->getOperand(2).getReg(), MRI);
+  return selectExtendedSHL(Root, PtrAdd->getOperand(1),
+                           OffsetInst->getOperand(0), SizeInBytes,
+                           /*WantsExt=*/false);
 }
 
 /// This is used for computing addresses like this:
@@ -4359,7 +4989,7 @@ AArch64InstructionSelector::selectAddrModeRegisterOffset(
   // If this is used more than once, let's not bother folding.
   // TODO: Check if they are memory ops. If they are, then we can still fold
   // without having to recompute anything.
-  if (!MRI.hasOneUse(Gep->getOperand(0).getReg()))
+  if (!MRI.hasOneNonDBGUse(Gep->getOperand(0).getReg()))
     return None;
 
   // Base is the GEP's LHS, offset is its RHS.
@@ -4397,6 +5027,74 @@ AArch64InstructionSelector::selectAddrModeXRO(MachineOperand &Root,
   // If that doesn't work, see if it's possible to fold in registers from
   // a GEP.
   return selectAddrModeRegisterOffset(Root);
+}
+
+/// This is used for computing addresses like this:
+///
+/// ldr x0, [xBase, wOffset, sxtw #LegalShiftVal]
+///
+/// Where we have a 64-bit base register, a 32-bit offset register, and an
+/// extend (which may or may not be signed).
+InstructionSelector::ComplexRendererFns
+AArch64InstructionSelector::selectAddrModeWRO(MachineOperand &Root,
+                                              unsigned SizeInBytes) const {
+  MachineRegisterInfo &MRI = Root.getParent()->getMF()->getRegInfo();
+
+  MachineInstr *PtrAdd =
+      getOpcodeDef(TargetOpcode::G_PTR_ADD, Root.getReg(), MRI);
+  if (!PtrAdd || !isWorthFoldingIntoExtendedReg(*PtrAdd, MRI))
+    return None;
+
+  MachineOperand &LHS = PtrAdd->getOperand(1);
+  MachineOperand &RHS = PtrAdd->getOperand(2);
+  MachineInstr *OffsetInst = getDefIgnoringCopies(RHS.getReg(), MRI);
+
+  // The first case is the same as selectAddrModeXRO, except we need an extend.
+  // In this case, we try to find a shift and extend, and fold them into the
+  // addressing mode.
+  //
+  // E.g.
+  //
+  // off_reg = G_Z/S/ANYEXT ext_reg
+  // val = G_CONSTANT LegalShiftVal
+  // shift = G_SHL off_reg val
+  // ptr = G_PTR_ADD base_reg shift
+  // x = G_LOAD ptr
+  //
+  // In this case we can get a load like this:
+  //
+  // ldr x0, [base_reg, ext_reg, sxtw #LegalShiftVal]
+  auto ExtendedShl = selectExtendedSHL(Root, LHS, OffsetInst->getOperand(0),
+                                       SizeInBytes, /*WantsExt=*/true);
+  if (ExtendedShl)
+    return ExtendedShl;
+
+  // There was no shift. We can try and fold a G_Z/S/ANYEXT in alone though.
+  //
+  // e.g.
+  // ldr something, [base_reg, ext_reg, sxtw]
+  if (!isWorthFoldingIntoExtendedReg(*OffsetInst, MRI))
+    return None;
+
+  // Check if this is an extend. We'll get an extend type if it is.
+  AArch64_AM::ShiftExtendType Ext =
+      getExtendTypeForInst(*OffsetInst, MRI, /*IsLoadStore=*/true);
+  if (Ext == AArch64_AM::InvalidShiftExtend)
+    return None;
+
+  // Need a 32-bit wide register.
+  MachineIRBuilder MIB(*PtrAdd);
+  Register ExtReg =
+      narrowExtendRegIfNeeded(OffsetInst->getOperand(1).getReg(), MIB);
+  unsigned SignExtend = Ext == AArch64_AM::SXTW;
+
+  // Base is LHS, offset is ExtReg.
+  return {{[=](MachineInstrBuilder &MIB) { MIB.addUse(LHS.getReg()); },
+           [=](MachineInstrBuilder &MIB) { MIB.addUse(ExtReg); },
+           [=](MachineInstrBuilder &MIB) {
+             MIB.addImm(SignExtend);
+             MIB.addImm(0);
+           }}};
 }
 
 /// Select a "register plus unscaled signed 9-bit immediate" address.  This
@@ -4561,9 +5259,8 @@ AArch64InstructionSelector::selectShiftedRegister(MachineOperand &Root) const {
            [=](MachineInstrBuilder &MIB) { MIB.addImm(ShiftVal); }}};
 }
 
-/// Get the correct ShiftExtendType for an extend instruction.
-static AArch64_AM::ShiftExtendType
-getExtendTypeForInst(MachineInstr &MI, MachineRegisterInfo &MRI) {
+AArch64_AM::ShiftExtendType AArch64InstructionSelector::getExtendTypeForInst(
+    MachineInstr &MI, MachineRegisterInfo &MRI, bool IsLoadStore) const {
   unsigned Opc = MI.getOpcode();
 
   // Handle explicit extend instructions first.
@@ -4610,9 +5307,9 @@ getExtendTypeForInst(MachineInstr &MI, MachineRegisterInfo &MRI) {
   default:
     return AArch64_AM::InvalidShiftExtend;
   case 0xFF:
-    return AArch64_AM::UXTB;
+    return !IsLoadStore ? AArch64_AM::UXTB : AArch64_AM::InvalidShiftExtend;
   case 0xFFFF:
-    return AArch64_AM::UXTH;
+    return !IsLoadStore ? AArch64_AM::UXTH : AArch64_AM::InvalidShiftExtend;
   case 0xFFFFFFFF:
     return AArch64_AM::UXTW;
   }
@@ -4631,6 +5328,52 @@ Register AArch64InstructionSelector::narrowExtendRegIfNeeded(
   // Select the copy into a subregister copy.
   selectCopy(*Copy, TII, MRI, TRI, RBI);
   return Copy.getReg(0);
+}
+
+Register AArch64InstructionSelector::widenGPRBankRegIfNeeded(
+    Register Reg, unsigned WideSize, MachineIRBuilder &MIB) const {
+  assert(WideSize >= 8 && "WideSize is smaller than all possible registers?");
+  MachineRegisterInfo &MRI = *MIB.getMRI();
+  unsigned NarrowSize = MRI.getType(Reg).getSizeInBits();
+  assert(WideSize >= NarrowSize &&
+         "WideSize cannot be smaller than NarrowSize!");
+
+  // If the sizes match, just return the register.
+  //
+  // If NarrowSize is an s1, then we can select it to any size, so we'll treat
+  // it as a don't care.
+  if (NarrowSize == WideSize || NarrowSize == 1)
+    return Reg;
+
+  // Now check the register classes.
+  const RegisterBank *RB = RBI.getRegBank(Reg, MRI, TRI);
+  const TargetRegisterClass *OrigRC = getMinClassForRegBank(*RB, NarrowSize);
+  const TargetRegisterClass *WideRC = getMinClassForRegBank(*RB, WideSize);
+  assert(OrigRC && "Could not determine narrow RC?");
+  assert(WideRC && "Could not determine wide RC?");
+
+  // If the sizes differ, but the register classes are the same, there is no
+  // need to insert a SUBREG_TO_REG.
+  //
+  // For example, an s8 that's supposed to be a GPR will be selected to either
+  // a GPR32 or a GPR64 register. Note that this assumes that the s8 will
+  // always end up on a GPR32.
+  if (OrigRC == WideRC)
+    return Reg;
+
+  // We have two different register classes. Insert a SUBREG_TO_REG.
+  unsigned SubReg = 0;
+  getSubRegForClass(OrigRC, TRI, SubReg);
+  assert(SubReg && "Couldn't determine subregister?");
+
+  // Build the SUBREG_TO_REG and return the new, widened register.
+  auto SubRegToReg =
+      MIB.buildInstr(AArch64::SUBREG_TO_REG, {WideRC}, {})
+          .addImm(0)
+          .addUse(Reg)
+          .addImm(SubReg);
+  constrainSelectedInstRegOperands(*SubRegToReg, TII, TRI, RBI);
+  return SubRegToReg.getReg(0);
 }
 
 /// Select an "extended register" operand. This operand folds in an extend
@@ -4702,25 +5445,29 @@ AArch64InstructionSelector::selectArithExtendedRegister(
 }
 
 void AArch64InstructionSelector::renderTruncImm(MachineInstrBuilder &MIB,
-                                                const MachineInstr &MI) const {
+                                                const MachineInstr &MI,
+                                                int OpIdx) const {
   const MachineRegisterInfo &MRI = MI.getParent()->getParent()->getRegInfo();
-  assert(MI.getOpcode() == TargetOpcode::G_CONSTANT && "Expected G_CONSTANT");
+  assert(MI.getOpcode() == TargetOpcode::G_CONSTANT && OpIdx == -1 &&
+         "Expected G_CONSTANT");
   Optional<int64_t> CstVal = getConstantVRegVal(MI.getOperand(0).getReg(), MRI);
   assert(CstVal && "Expected constant value");
   MIB.addImm(CstVal.getValue());
 }
 
 void AArch64InstructionSelector::renderLogicalImm32(
-    MachineInstrBuilder &MIB, const MachineInstr &I) const {
-  assert(I.getOpcode() == TargetOpcode::G_CONSTANT && "Expected G_CONSTANT");
+  MachineInstrBuilder &MIB, const MachineInstr &I, int OpIdx) const {
+  assert(I.getOpcode() == TargetOpcode::G_CONSTANT && OpIdx == -1 &&
+         "Expected G_CONSTANT");
   uint64_t CstVal = I.getOperand(1).getCImm()->getZExtValue();
   uint64_t Enc = AArch64_AM::encodeLogicalImmediate(CstVal, 32);
   MIB.addImm(Enc);
 }
 
 void AArch64InstructionSelector::renderLogicalImm64(
-    MachineInstrBuilder &MIB, const MachineInstr &I) const {
-  assert(I.getOpcode() == TargetOpcode::G_CONSTANT && "Expected G_CONSTANT");
+  MachineInstrBuilder &MIB, const MachineInstr &I, int OpIdx) const {
+  assert(I.getOpcode() == TargetOpcode::G_CONSTANT && OpIdx == -1 &&
+         "Expected G_CONSTANT");
   uint64_t CstVal = I.getOperand(1).getCImm()->getZExtValue();
   uint64_t Enc = AArch64_AM::encodeLogicalImmediate(CstVal, 64);
   MIB.addImm(Enc);
@@ -4752,6 +5499,95 @@ bool AArch64InstructionSelector::isDef32(const MachineInstr &MI) const {
   case TargetOpcode::G_TRUNC:
   case TargetOpcode::G_PHI:
     return false;
+  }
+}
+
+
+// Perform fixups on the given PHI instruction's operands to force them all
+// to be the same as the destination regbank.
+static void fixupPHIOpBanks(MachineInstr &MI, MachineRegisterInfo &MRI,
+                            const AArch64RegisterBankInfo &RBI) {
+  assert(MI.getOpcode() == TargetOpcode::G_PHI && "Expected a G_PHI");
+  Register DstReg = MI.getOperand(0).getReg();
+  const RegisterBank *DstRB = MRI.getRegBankOrNull(DstReg);
+  assert(DstRB && "Expected PHI dst to have regbank assigned");
+  MachineIRBuilder MIB(MI);
+
+  // Go through each operand and ensure it has the same regbank.
+  for (unsigned OpIdx = 1; OpIdx < MI.getNumOperands(); ++OpIdx) {
+    MachineOperand &MO = MI.getOperand(OpIdx);
+    if (!MO.isReg())
+      continue;
+    Register OpReg = MO.getReg();
+    const RegisterBank *RB = MRI.getRegBankOrNull(OpReg);
+    if (RB != DstRB) {
+      // Insert a cross-bank copy.
+      auto *OpDef = MRI.getVRegDef(OpReg);
+      const LLT &Ty = MRI.getType(OpReg);
+      MIB.setInsertPt(*OpDef->getParent(), std::next(OpDef->getIterator()));
+      auto Copy = MIB.buildCopy(Ty, OpReg);
+      MRI.setRegBank(Copy.getReg(0), *DstRB);
+      MO.setReg(Copy.getReg(0));
+    }
+  }
+}
+
+void AArch64InstructionSelector::processPHIs(MachineFunction &MF) {
+  // We're looking for PHIs, build a list so we don't invalidate iterators.
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  SmallVector<MachineInstr *, 32> Phis;
+  for (auto &BB : MF) {
+    for (auto &MI : BB) {
+      if (MI.getOpcode() == TargetOpcode::G_PHI)
+        Phis.emplace_back(&MI);
+    }
+  }
+
+  for (auto *MI : Phis) {
+    // We need to do some work here if the operand types are < 16 bit and they
+    // are split across fpr/gpr banks. Since all types <32b on gpr
+    // end up being assigned gpr32 regclasses, we can end up with PHIs here
+    // which try to select between a gpr32 and an fpr16. Ideally RBS shouldn't
+    // be selecting heterogenous regbanks for operands if possible, but we
+    // still need to be able to deal with it here.
+    //
+    // To fix this, if we have a gpr-bank operand < 32b in size and at least
+    // one other operand is on the fpr bank, then we add cross-bank copies
+    // to homogenize the operand banks. For simplicity the bank that we choose
+    // to settle on is whatever bank the def operand has. For example:
+    //
+    // %endbb:
+    //   %dst:gpr(s16) = G_PHI %in1:gpr(s16), %bb1, %in2:fpr(s16), %bb2
+    //  =>
+    // %bb2:
+    //   ...
+    //   %in2_copy:gpr(s16) = COPY %in2:fpr(s16)
+    //   ...
+    // %endbb:
+    //   %dst:gpr(s16) = G_PHI %in1:gpr(s16), %bb1, %in2_copy:gpr(s16), %bb2
+    bool HasGPROp = false, HasFPROp = false;
+    for (unsigned OpIdx = 1; OpIdx < MI->getNumOperands(); ++OpIdx) {
+      const auto &MO = MI->getOperand(OpIdx);
+      if (!MO.isReg())
+        continue;
+      const LLT &Ty = MRI.getType(MO.getReg());
+      if (!Ty.isValid() || !Ty.isScalar())
+        break;
+      if (Ty.getSizeInBits() >= 32)
+        break;
+      const RegisterBank *RB = MRI.getRegBankOrNull(MO.getReg());
+      // If for some reason we don't have a regbank yet. Don't try anything.
+      if (!RB)
+        break;
+
+      if (RB->getID() == AArch64::GPRRegBankID)
+        HasGPROp = true;
+      else
+        HasFPROp = true;
+    }
+    // We have heterogenous regbanks, need to fixup.
+    if (HasGPROp && HasFPROp)
+      fixupPHIOpBanks(*MI, MRI, RBI);
   }
 }
 

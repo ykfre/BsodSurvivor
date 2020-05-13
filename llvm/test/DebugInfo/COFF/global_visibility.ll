@@ -51,7 +51,7 @@
 ; CHECK:     }
 ; CHECK:     DataSym {
 ; CHECK:       Kind: S_LDATA32 (0x110C)
-; CHECK:       DisplayName: local_int
+; CHECK:       DisplayName: foo::local_int
 ; CHECK:       LinkageName: ?local_int@?1??foo@@YAXXZ@4HA
 ; CHECK:     }
 ; CHECK:     BlockSym {
@@ -59,7 +59,7 @@
 ; CHECK:     }
 ; CHECK:     DataSym {
 ; CHECK:       Kind: S_LDATA32 (0x110C)
-; CHECK:       DisplayName: nested_int
+; CHECK:       DisplayName: foo::nested_int
 ; CHECK:       LinkageName: ?nested_int@?1??foo@@YAXXZ@4HA
 ; CHECK:     }
 ; CHECK:     ScopeEndSym {
@@ -78,7 +78,7 @@
 ; CHECK:     }
 ; CHECK:     DataSym {
 ; CHECK:       Kind: S_LDATA32 (0x110C)
-; CHECK:       DisplayName: local_int
+; CHECK:       DisplayName: bar::local_int
 ; CHECK:       LinkageName: ?local_int@?1??bar@@YAXXZ@4HA
 ; CHECK:     }
 ; CHECK:     BlockSym {
@@ -86,7 +86,7 @@
 ; CHECK:     }
 ; CHECK:     DataSym {
 ; CHECK:       Kind: S_LDATA32 (0x110C)
-; CHECK:       DisplayName: nested_int
+; CHECK:       DisplayName: bar::nested_int
 ; CHECK:       LinkageName: ?nested_int@?1??bar@@YAXXZ@4HA
 ; CHECK:     }
 ; CHECK:     ScopeEndSym {
@@ -205,8 +205,8 @@ entry:
 ; Function Attrs: nounwind readnone speculatable
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #2
 
-attributes #0 = { noinline optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { noinline optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="none" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="none" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { nounwind readnone speculatable }
 
 !llvm.dbg.cu = !{!2}

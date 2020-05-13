@@ -202,11 +202,9 @@ static void registerEPCallbacks(PassBuilder &PB, bool VerifyEachPass,
         });
 }
 
-#ifdef LINK_POLLY_INTO_TOOLS
-namespace polly {
-void RegisterPollyPasses(PassBuilder &);
-}
-#endif
+#define HANDLE_EXTENSION(Ext)                                                  \
+  llvm::PassPluginLibraryInfo get##Ext##PluginInfo();
+#include "llvm/Support/Extension.def"
 
 bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
                            ToolOutputFile *Out, ToolOutputFile *ThinLTOLinkOut,
@@ -216,52 +214,54 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
                            bool ShouldPreserveAssemblyUseListOrder,
                            bool ShouldPreserveBitcodeUseListOrder,
                            bool EmitSummaryIndex, bool EmitModuleHash,
-                           bool EnableDebugify) {
+                           bool EnableDebugify, bool Coroutines) {
   bool VerifyEachPass = VK == VK_VerifyEachPass;
 
   Optional<PGOOptions> P;
   switch (PGOKindFlag) {
-    case InstrGen:
-      P = PGOOptions(ProfileFile, "", "", PGOOptions::IRInstr);
-      break;
-    case InstrUse:
-      P = PGOOptions(ProfileFile, "", ProfileRemappingFile, PGOOptions::IRUse);
-      break;
-    case SampleUse:
-      P = PGOOptions(ProfileFile, "", ProfileRemappingFile,
-                     PGOOptions::SampleUse);
-      break;
-    case NoPGO:
-      if (DebugInfoForProfiling)
-        P = PGOOptions("", "", "", PGOOptions::NoAction, PGOOptions::NoCSAction,
-                       true);
-      else
-        P = None;
+  case InstrGen:
+    P = PGOOptions(ProfileFile, "", "", PGOOptions::IRInstr);
+    break;
+  case InstrUse:
+    P = PGOOptions(ProfileFile, "", ProfileRemappingFile, PGOOptions::IRUse);
+    break;
+  case SampleUse:
+    P = PGOOptions(ProfileFile, "", ProfileRemappingFile,
+                   PGOOptions::SampleUse);
+    break;
+  case NoPGO:
+    if (DebugInfoForProfiling)
+      P = PGOOptions("", "", "", PGOOptions::NoAction, PGOOptions::NoCSAction,
+                     true);
+    else
+      P = None;
+  }
+  if (CSPGOKindFlag != NoCSPGO) {
+    if (P && (P->Action == PGOOptions::IRInstr ||
+              P->Action == PGOOptions::SampleUse))
+      errs() << "CSPGOKind cannot be used with IRInstr or SampleUse";
+    if (CSPGOKindFlag == CSInstrGen) {
+      if (CSProfileGenFile.empty())
+        errs() << "CSInstrGen needs to specify CSProfileGenFile";
+      if (P) {
+        P->CSAction = PGOOptions::CSIRInstr;
+        P->CSProfileGenFile = CSProfileGenFile;
+      } else
+        P = PGOOptions("", CSProfileGenFile, ProfileRemappingFile,
+                       PGOOptions::NoAction, PGOOptions::CSIRInstr);
+    } else /* CSPGOKindFlag == CSInstrUse */ {
+      if (!P)
+        errs() << "CSInstrUse needs to be together with InstrUse";
+      P->CSAction = PGOOptions::CSIRUse;
     }
-    if (CSPGOKindFlag != NoCSPGO) {
-      if (P && (P->Action == PGOOptions::IRInstr ||
-                P->Action == PGOOptions::SampleUse))
-        errs() << "CSPGOKind cannot be used with IRInstr or SampleUse";
-      if (CSPGOKindFlag == CSInstrGen) {
-        if (CSProfileGenFile.empty())
-          errs() << "CSInstrGen needs to specify CSProfileGenFile";
-        if (P) {
-          P->CSAction = PGOOptions::CSIRInstr;
-          P->CSProfileGenFile = CSProfileGenFile;
-        } else
-          P = PGOOptions("", CSProfileGenFile, ProfileRemappingFile,
-                         PGOOptions::NoAction, PGOOptions::CSIRInstr);
-      } else /* CSPGOKindFlag == CSInstrUse */ {
-        if (!P)
-          errs() << "CSInstrUse needs to be together with InstrUse";
-        P->CSAction = PGOOptions::CSIRUse;
-      }
-    }
+  }
   PassInstrumentationCallbacks PIC;
   StandardInstrumentations SI;
   SI.registerCallbacks(PIC);
 
-  PassBuilder PB(TM, PipelineTuningOptions(), P, &PIC);
+  PipelineTuningOptions PTO;
+  PTO.Coroutines = Coroutines;
+  PassBuilder PB(TM, PTO, P, &PIC);
   registerEPCallbacks(PB, VerifyEachPass, DebugPM);
 
   // Load requested pass plugins and let them register pass builder callbacks
@@ -290,9 +290,9 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
         return false;
       });
 
-#ifdef LINK_POLLY_INTO_TOOLS
-  polly::RegisterPollyPasses(PB);
-#endif
+#define HANDLE_EXTENSION(Ext)                                                  \
+  get##Ext##PluginInfo().RegisterPassBuilderCallbacks(PB);
+#include "llvm/Support/Extension.def"
 
   // Specially handle the alias analysis manager so that we can register
   // a custom pipeline of AA passes with it.

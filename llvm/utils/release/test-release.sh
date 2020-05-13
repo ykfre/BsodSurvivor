@@ -40,6 +40,7 @@ do_openmp="yes"
 do_lld="yes"
 do_lldb="no"
 do_polly="yes"
+do_mlir="yes"
 BuildDir="`pwd`"
 ExtraConfigureFlags=""
 ExportBranch=""
@@ -72,6 +73,7 @@ function usage() {
     echo " -lldb                Enable check-out & build lldb"
     echo " -no-lldb             Disable check-out & build lldb (default)"
     echo " -no-polly            Disable check-out & build Polly"
+    echo " -no-mlir             Disable check-out & build MLIR"
 }
 
 while [ $# -gt 0 ]; do
@@ -167,6 +169,9 @@ while [ $# -gt 0 ]; do
         -no-polly )
             do_polly="no"
             ;;
+        -no-mlir )
+            do_mlir="no"
+            ;;
         -help | --help | -h | --h | -\? )
             usage
             exit 0
@@ -252,6 +257,9 @@ if [ $do_lldb = "yes" ]; then
 fi
 if [ $do_polly = "yes" ]; then
   projects="$projects polly"
+fi
+if [ $do_mlir = "yes" ]; then
+  projects="$projects mlir"
 fi
 
 # Go to the build directory (may be different from CWD)
@@ -462,9 +470,9 @@ function package_release() {
     cd $BuildDir/Phase3/Release
     mv llvmCore-$Release-$RC.install/usr/local $Package
     if [ "$use_gzip" = "yes" ]; then
-      tar cfz $BuildDir/$Package.tar.gz $Package
+      tar cf - $Package | gzip -9c > $BuildDir/$Package.tar.gz
     else
-      tar cfJ $BuildDir/$Package.tar.xz $Package
+      tar cf - $Package | xz -9ce > $BuildDir/$Package.tar.xz
     fi
     mv $Package llvmCore-$Release-$RC.install/usr/local
     cd $cwd
@@ -475,6 +483,10 @@ function package_release() {
 # a pipe (i.e. it changes the output of ``false | tee /dev/null ; echo $?``)
 set -e
 set -o pipefail
+
+# Turn off core dumps, as some test cases can easily fill up even the largest
+# file systems.
+ulimit -c 0
 
 if [ "$do_checkout" = "yes" ]; then
     export_sources

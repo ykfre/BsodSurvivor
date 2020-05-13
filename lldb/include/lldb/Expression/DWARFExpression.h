@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_DWARFExpression_h_
-#define liblldb_DWARFExpression_h_
+#ifndef LLDB_EXPRESSION_DWARFEXPRESSION_H
+#define LLDB_EXPRESSION_DWARFEXPRESSION_H
 
 #include "lldb/Core/Address.h"
 #include "lldb/Core/Disassembler.h"
@@ -34,15 +34,6 @@ namespace lldb_private {
 /// location expression or a location list and interprets it.
 class DWARFExpression {
 public:
-  enum LocationListFormat : uint8_t {
-    NonLocationList,     // Not a location list
-    RegularLocationList, // Location list format used in non-split dwarf files
-    SplitDwarfLocationList, // Location list format used in pre-DWARF v5 split
-                            // dwarf files (.debug_loc.dwo)
-    LocLists,               // Location list format used in DWARF v5
-                            // (.debug_loclists/.debug_loclists.dwo).
-  };
-
   DWARFExpression();
 
   /// Constructor
@@ -242,11 +233,8 @@ private:
   /// \param[in] s
   ///     The stream to use for pretty-printing.
   ///
-  /// \param[in] offset
-  ///     The offset into the data buffer of the opcodes to be printed.
-  ///
-  /// \param[in] length
-  ///     The length in bytes of the opcodes to be printed.
+  /// \param[in] data
+  ///     The data extractor.
   ///
   /// \param[in] level
   ///     The level of detail to use in pretty-printing.
@@ -284,4 +272,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_DWARFExpression_h_
+#endif // LLDB_EXPRESSION_DWARFEXPRESSION_H

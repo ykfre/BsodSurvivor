@@ -1,4 +1,4 @@
-//===-- ClangExpressionParser.cpp -------------------------------*- C++ -*-===//
+//===-- ClangExpressionParser.cpp -----------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -67,6 +67,7 @@
 #include "IRForTarget.h"
 #include "ModuleDependencyCollector.h"
 
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Disassembler.h"
 #include "lldb/Core/Module.h"
@@ -75,7 +76,6 @@
 #include "lldb/Expression/IRInterpreter.h"
 #include "lldb/Host/File.h"
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Language.h"
@@ -91,6 +91,7 @@
 #include "lldb/Utility/StringList.h"
 
 #include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
+#include "Plugins/LanguageRuntime/RenderScript/RenderScriptRuntime/RenderScriptRuntime.h"
 
 #include <cctype>
 #include <memory>
@@ -146,6 +147,14 @@ public:
   llvm::StringRef getErrorString() { return m_error_stream.GetString(); }
 };
 
+static void AddAllFixIts(ClangDiagnostic *diag, const clang::Diagnostic &Info) {
+  for (auto &fix_it : Info.getFixItHints()) {
+    if (fix_it.isNull())
+      continue;
+    diag->AddFixitHint(fix_it);
+  }
+}
+
 class ClangDiagnosticManagerAdapter : public clang::DiagnosticConsumer {
 public:
   ClangDiagnosticManagerAdapter(DiagnosticOptions &opts) {
@@ -153,12 +162,22 @@ public:
     m_options->ShowPresumedLoc = true;
     m_options->ShowLevel = false;
     m_os.reset(new llvm::raw_string_ostream(m_output));
-    m_passthrough.reset(
-        new clang::TextDiagnosticPrinter(*m_os, m_options, false));
+    m_passthrough.reset(new clang::TextDiagnosticPrinter(*m_os, m_options));
   }
 
   void ResetManager(DiagnosticManager *manager = nullptr) {
     m_manager = manager;
+  }
+
+  /// Returns the last ClangDiagnostic message that the DiagnosticManager
+  /// received or a nullptr if the DiagnosticMangager hasn't seen any
+  /// Clang diagnostics yet.
+  ClangDiagnostic *MaybeGetLastClangDiag() const {
+    if (m_manager->Diagnostics().empty())
+      return nullptr;
+    lldb_private::Diagnostic *diag = m_manager->Diagnostics().back().get();
+    ClangDiagnostic *clang_diag = dyn_cast<ClangDiagnostic>(diag);
+    return clang_diag;
   }
 
   void HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
@@ -203,11 +222,29 @@ public:
     case DiagnosticsEngine::Level::Note:
       m_manager->AppendMessageToDiagnostic(m_output);
       make_new_diagnostic = false;
+
+      // 'note:' diagnostics for errors and warnings can also contain Fix-Its.
+      // We add these Fix-Its to the last error diagnostic to make sure
+      // that we later have all Fix-Its related to an 'error' diagnostic when
+      // we apply them to the user expression.
+      auto *clang_diag = MaybeGetLastClangDiag();
+      // If we don't have a previous diagnostic there is nothing to do.
+      // If the previous diagnostic already has its own Fix-Its, assume that
+      // the 'note:' Fix-It is just an alternative way to solve the issue and
+      // ignore these Fix-Its.
+      if (!clang_diag || clang_diag->HasFixIts())
+        break;
+      // Ignore all Fix-Its that are not associated with an error.
+      if (clang_diag->GetSeverity() != eDiagnosticSeverityError)
+        break;
+      AddAllFixIts(clang_diag, Info);
+      break;
     }
     if (make_new_diagnostic) {
       // ClangDiagnostic messages are expected to have no whitespace/newlines
       // around them.
-      std::string stripped_output = llvm::StringRef(m_output).trim();
+      std::string stripped_output =
+          std::string(llvm::StringRef(m_output).trim());
 
       auto new_diagnostic = std::make_unique<ClangDiagnostic>(
           stripped_output, severity, Info.getID());
@@ -216,14 +253,8 @@ public:
       // enough context in an expression for the warning to be useful.
       // FIXME: Should we try to filter out FixIts that apply to our generated
       // code, and not the user's expression?
-      if (severity == eDiagnosticSeverityError) {
-        size_t num_fixit_hints = Info.getNumFixItHints();
-        for (size_t i = 0; i < num_fixit_hints; i++) {
-          const clang::FixItHint &fixit = Info.getFixItHint(i);
-          if (!fixit.isNull())
-            new_diagnostic->AddFixitHint(fixit);
-        }
-      }
+      if (severity == eDiagnosticSeverityError)
+        AddAllFixIts(new_diagnostic.get(), Info);
 
       m_manager->AddDiagnostic(std::move(new_diagnostic));
     }
@@ -253,9 +284,9 @@ static void SetupModuleHeaderPaths(CompilerInstance *compiler,
   }
 
   llvm::SmallString<128> module_cache;
-  auto props = ModuleList::GetGlobalModuleListProperties();
+  const auto &props = ModuleList::GetGlobalModuleListProperties();
   props.GetClangModulesCachePath().GetPath(module_cache);
-  search_opts.ModuleCachePath = module_cache.str();
+  search_opts.ModuleCachePath = std::string(module_cache.str());
   LLDB_LOG(log, "Using module cache path: {0}", module_cache.c_str());
 
   search_opts.ResourceDir = GetClangResourceDir().GetPath();
@@ -279,23 +310,22 @@ ClangExpressionParser::ClangExpressionParser(
 
   // We can't compile expressions without a target.  So if the exe_scope is
   // null or doesn't have a target, then we just need to get out of here.  I'll
-  // lldb_assert and not make any of the compiler objects since
+  // lldbassert and not make any of the compiler objects since
   // I can't return errors directly from the constructor.  Further calls will
   // check if the compiler was made and
   // bag out if it wasn't.
 
   if (!exe_scope) {
-    lldb_assert(exe_scope, "Can't make an expression parser with a null scope.",
-                __FUNCTION__, __FILE__, __LINE__);
+    lldbassert(exe_scope &&
+               "Can't make an expression parser with a null scope.");
     return;
   }
 
   lldb::TargetSP target_sp;
   target_sp = exe_scope->CalculateTarget();
   if (!target_sp) {
-    lldb_assert(target_sp.get(),
-                "Can't make an expression parser with a null target.",
-                __FUNCTION__, __FILE__, __LINE__);
+    lldbassert(target_sp.get() &&
+               "Can't make an expression parser with a null target.");
     return;
   }
 
@@ -391,9 +421,13 @@ ClangExpressionParser::ClangExpressionParser(
   // target. In this case, a specialized language runtime is available and we
   // can query it for extra options. For 99% of use cases, this will not be
   // needed and should be provided when basic platform detection is not enough.
-  if (lang_rt)
+  // FIXME: Generalize this. Only RenderScriptRuntime currently supports this
+  // currently. Hardcoding this isn't ideal but it's better than LanguageRuntime
+  // having knowledge of clang::TargetOpts.
+  if (auto *renderscript_rt =
+          llvm::dyn_cast_or_null<RenderScriptRuntime>(lang_rt))
     overridden_target_opts =
-        lang_rt->GetOverrideExprOptions(m_compiler->getTargetOpts());
+        renderscript_rt->GetOverrideExprOptions(m_compiler->getTargetOpts());
 
   if (overridden_target_opts)
     if (log && log->GetVerbose()) {
@@ -583,15 +617,16 @@ ClangExpressionParser::ClangExpressionParser(
 
   if (ClangModulesDeclVendor *decl_vendor =
           target_sp->GetClangModulesDeclVendor()) {
-    ClangPersistentVariables *clang_persistent_vars =
-        llvm::cast<ClangPersistentVariables>(
+    if (auto *clang_persistent_vars = llvm::cast<ClangPersistentVariables>(
             target_sp->GetPersistentExpressionStateForLanguage(
-                lldb::eLanguageTypeC));
-    std::unique_ptr<PPCallbacks> pp_callbacks(new LLDBPreprocessorCallbacks(
-        *decl_vendor, *clang_persistent_vars, m_compiler->getSourceManager()));
-    m_pp_callbacks =
-        static_cast<LLDBPreprocessorCallbacks *>(pp_callbacks.get());
-    m_compiler->getPreprocessor().addPPCallbacks(std::move(pp_callbacks));
+                lldb::eLanguageTypeC))) {
+      std::unique_ptr<PPCallbacks> pp_callbacks(
+          new LLDBPreprocessorCallbacks(*decl_vendor, *clang_persistent_vars,
+                                        m_compiler->getSourceManager()));
+      m_pp_callbacks =
+          static_cast<LLDBPreprocessorCallbacks *>(pp_callbacks.get());
+      m_compiler->getPreprocessor().addPPCallbacks(std::move(pp_callbacks));
+    }
   }
 
   // 8. Most of this we get from the CompilerInstance, but we also want to give
@@ -605,7 +640,8 @@ ClangExpressionParser::ClangExpressionParser(
   m_compiler->createASTContext();
   clang::ASTContext &ast_context = m_compiler->getASTContext();
 
-  m_ast_context.reset(new ClangASTContext(ast_context));
+  m_ast_context.reset(new TypeSystemClang(
+      "Expression ASTContext for '" + m_filename + "'", ast_context));
 
   std::string module_name("$__lldb_module");
 
@@ -679,7 +715,7 @@ class CodeComplete : public CodeCompleteConsumer {
     return cmd;
   }
 
-  /// Attemps to merge the given completion from the given position into the
+  /// Attempts to merge the given completion from the given position into the
   /// existing command. Returns the completion string that can be returned to
   /// the lldb completion API.
   std::string mergeCompletion(StringRef existing, unsigned pos,
@@ -1064,6 +1100,28 @@ ClangExpressionParser::GetClangTargetABI(const ArchSpec &target_arch) {
   return abi;
 }
 
+/// Applies the given Fix-It hint to the given commit.
+static void ApplyFixIt(const FixItHint &fixit, clang::edit::Commit &commit) {
+  // This is cobbed from clang::Rewrite::FixItRewriter.
+  if (fixit.CodeToInsert.empty()) {
+    if (fixit.InsertFromRange.isValid()) {
+      commit.insertFromRange(fixit.RemoveRange.getBegin(),
+                             fixit.InsertFromRange, /*afterToken=*/false,
+                             fixit.BeforePreviousInsertions);
+      return;
+    }
+    commit.remove(fixit.RemoveRange);
+    return;
+  }
+  if (fixit.RemoveRange.isTokenRange() ||
+      fixit.RemoveRange.getBegin() != fixit.RemoveRange.getEnd()) {
+    commit.replace(fixit.RemoveRange, fixit.CodeToInsert);
+    return;
+  }
+  commit.insert(fixit.RemoveRange.getBegin(), fixit.CodeToInsert,
+                /*afterToken=*/false, fixit.BeforePreviousInsertions);
+}
+
 bool ClangExpressionParser::RewriteExpression(
     DiagnosticManager &diagnostic_manager) {
   clang::SourceManager &source_manager = m_compiler->getSourceManager();
@@ -1095,26 +1153,12 @@ bool ClangExpressionParser::RewriteExpression(
 
   for (const auto &diag : diagnostic_manager.Diagnostics()) {
     const auto *diagnostic = llvm::dyn_cast<ClangDiagnostic>(diag.get());
-    if (diagnostic && diagnostic->HasFixIts()) {
-      for (const FixItHint &fixit : diagnostic->FixIts()) {
-        // This is cobbed from clang::Rewrite::FixItRewriter.
-        if (fixit.CodeToInsert.empty()) {
-          if (fixit.InsertFromRange.isValid()) {
-            commit.insertFromRange(fixit.RemoveRange.getBegin(),
-                                   fixit.InsertFromRange, /*afterToken=*/false,
-                                   fixit.BeforePreviousInsertions);
-          } else
-            commit.remove(fixit.RemoveRange);
-        } else {
-          if (fixit.RemoveRange.isTokenRange() ||
-              fixit.RemoveRange.getBegin() != fixit.RemoveRange.getEnd())
-            commit.replace(fixit.RemoveRange, fixit.CodeToInsert);
-          else
-            commit.insert(fixit.RemoveRange.getBegin(), fixit.CodeToInsert,
-                          /*afterToken=*/false, fixit.BeforePreviousInsertions);
-        }
-      }
-    }
+    if (!diagnostic)
+      continue;
+    if (!diagnostic->HasFixIts())
+      continue;
+    for (const FixItHint &fixit : diagnostic->FixIts())
+      ApplyFixIt(fixit, commit);
   }
 
   // FIXME - do we want to try to propagate specific errors here?
@@ -1257,8 +1301,9 @@ lldb_private::Status ClangExpressionParser::PrepareForExecution(
           interpret_error, interpret_function_calls);
 
       if (!can_interpret && execution_policy == eExecutionPolicyNever) {
-        err.SetErrorStringWithFormat("Can't run the expression locally: %s",
-                                     interpret_error.AsCString());
+        err.SetErrorStringWithFormat(
+            "Can't evaluate the expression without a running target due to: %s",
+            interpret_error.AsCString());
         return err;
       }
     }

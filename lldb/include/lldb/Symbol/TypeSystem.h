@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_TypeSystem_h_
-#define liblldb_TypeSystem_h_
+#ifndef LLDB_SYMBOL_TYPESYSTEM_H
+#define LLDB_SYMBOL_TYPESYSTEM_H
 
 #include <functional>
 #include <map>
@@ -49,7 +49,25 @@ struct LanguageSet {
   bool operator[](unsigned i) const;
 };
 
-/// Interface for representing the Type Systems in different languages.
+/// Interface for representing a type system.
+///
+/// Implemented by language plugins to define the type system for a given
+/// language.
+///
+/// This interface extensively used opaque pointers to prevent that generic
+/// LLDB code has dependencies on language plugins. The type and semantics of
+/// these opaque pointers are defined by the TypeSystem implementation inside
+/// the respective language plugin. Opaque pointers from one TypeSystem
+/// instance should never be passed to a different TypeSystem instance (even
+/// when the language plugin for both TypeSystem instances is the same).
+///
+/// Most of the functions in this class should not be called directly but only
+/// called by their respective counterparts in CompilerType, CompilerDecl and
+/// CompilerDeclContext.
+///
+/// \see lldb_private::CompilerType
+/// \see lldb_private::CompilerDecl
+/// \see lldb_private::CompilerDeclContext
 class TypeSystem : public PluginInterface {
 public:
   // Constructors and Destructors
@@ -111,6 +129,11 @@ public:
                                               void *other_opaque_decl_ctx) = 0;
 
   // Tests
+#ifndef NDEBUG
+  /// Verify the integrity of the type to catch CompilerTypes that mix
+  /// and match invalid TypeSystem/Opaque type pairs.
+  virtual bool Verify(lldb::opaque_compiler_type_t type) = 0;
+#endif
 
   virtual bool IsArrayType(lldb::opaque_compiler_type_t type,
                            CompilerType *element_type, uint64_t *size,
@@ -181,6 +204,8 @@ public:
 
   virtual ConstString GetTypeName(lldb::opaque_compiler_type_t type) = 0;
 
+  virtual ConstString GetDisplayTypeName(lldb::opaque_compiler_type_t type) = 0;
+
   virtual uint32_t
   GetTypeInfo(lldb::opaque_compiler_type_t type,
               CompilerType *pointee_or_element_compiler_type) = 0;
@@ -234,9 +259,12 @@ public:
 
   virtual CompilerType AddRestrictModifier(lldb::opaque_compiler_type_t type);
 
+  /// \param opaque_payload      The m_payload field of Type, which may
+  /// carry TypeSystem-specific extra information.
   virtual CompilerType CreateTypedef(lldb::opaque_compiler_type_t type,
                                      const char *name,
-                                     const CompilerDeclContext &decl_ctx);
+                                     const CompilerDeclContext &decl_ctx,
+                                     uint32_t opaque_payload);
 
   // Exploring the type
 
@@ -346,11 +374,18 @@ public:
                              uint32_t bitfield_bit_offset,
                              ExecutionContextScope *exe_scope) = 0;
 
-  virtual void
-  DumpTypeDescription(lldb::opaque_compiler_type_t type) = 0; // Dump to stdout
+  /// Dump the type to stdout.
+  virtual void DumpTypeDescription(
+      lldb::opaque_compiler_type_t type,
+      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) = 0;
 
-  virtual void DumpTypeDescription(lldb::opaque_compiler_type_t type,
-                                   Stream *s) = 0;
+  /// Print a description of the type to a stream. The exact implementation
+  /// varies, but the expectation is that eDescriptionLevelFull returns a
+  /// source-like representation of the type, whereas eDescriptionLevelVerbose
+  /// does a dump of the underlying AST if applicable.
+  virtual void DumpTypeDescription(
+      lldb::opaque_compiler_type_t type, Stream *s,
+      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) = 0;
 
   // TODO: These methods appear unused. Should they be removed?
 
@@ -362,7 +397,7 @@ public:
                            lldb::offset_t data_offset,
                            size_t data_byte_size) = 0;
 
-  // TODO: Determine if these methods should move to ClangASTContext.
+  // TODO: Determine if these methods should move to TypeSystemClang.
 
   virtual bool IsPointerOrReferenceType(lldb::opaque_compiler_type_t type,
                                         CompilerType *pointee_type) = 0;
@@ -491,4 +526,4 @@ protected:
 
 } // namespace lldb_private
 
-#endif // liblldb_TypeSystem_h_
+#endif // LLDB_SYMBOL_TYPESYSTEM_H

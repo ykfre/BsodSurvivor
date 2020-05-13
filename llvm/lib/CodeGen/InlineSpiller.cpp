@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Spiller.h"
 #include "SplitKit.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -24,8 +23,8 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveInterval.h"
+#include "llvm/CodeGen/LiveIntervalCalc.h"
 #include "llvm/CodeGen/LiveIntervals.h"
-#include "llvm/CodeGen/LiveRangeCalc.h"
 #include "llvm/CodeGen/LiveRangeEdit.h"
 #include "llvm/CodeGen/LiveStacks.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -40,6 +39,8 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/CodeGen/Spiller.h"
+#include "llvm/CodeGen/StackMaps.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
@@ -534,9 +535,21 @@ bool InlineSpiller::canGuaranteeAssignmentAfterRemat(unsigned VReg,
   //   may have more remats than physregs, we're guaranteed to fail to assign
   //   one.
   // At the moment, we only handle this for STATEPOINTs since they're the only
-  // psuedo op where we've seen this.  If we start seeing other instructions
+  // pseudo op where we've seen this.  If we start seeing other instructions
   // with the same problem, we need to revisit this.
-  return (MI.getOpcode() != TargetOpcode::STATEPOINT);
+  if (MI.getOpcode() != TargetOpcode::STATEPOINT)
+    return true;
+  // For STATEPOINTs we allow re-materialization for fixed arguments only hoping
+  // that number of physical registers is enough to cover all fixed arguments.
+  // If it is not true we need to revisit it.
+  for (unsigned Idx = StatepointOpers(&MI).getVarIdx(),
+                EndIdx = MI.getNumOperands();
+       Idx < EndIdx; ++Idx) {
+    MachineOperand &MO = MI.getOperand(Idx);
+    if (MO.isReg() && MO.getReg() == VReg)
+      return false;
+  }
+  return true;
 }
 
 /// reMaterializeFor - Attempt to rematerialize before MI instead of reloading.
@@ -864,7 +877,8 @@ foldMemoryOperand(ArrayRef<std::pair<MachineInstr *, unsigned>> Ops,
       HSpiller.rmFromMergeableSpills(*MI, FI))
     --NumSpills;
   LIS.ReplaceMachineInstrInMaps(*MI, *FoldMI);
-  if (MI->isCall())
+  // Update the call site info.
+  if (MI->isCandidateForCallSiteEntry())
     MI->getMF()->moveCallSiteInfo(MI, FoldMI);
   MI->eraseFromParent();
 
@@ -917,15 +931,15 @@ void InlineSpiller::insertReload(unsigned NewVReg,
 /// Check if \p Def fully defines a VReg with an undefined value.
 /// If that's the case, that means the value of VReg is actually
 /// not relevant.
-static bool isFullUndefDef(const MachineInstr &Def) {
+static bool isRealSpill(const MachineInstr &Def) {
   if (!Def.isImplicitDef())
-    return false;
+    return true;
   assert(Def.getNumOperands() == 1 &&
          "Implicit def with more than one definition");
   // We can say that the VReg defined by Def is undef, only if it is
   // fully defined by Def. Otherwise, some of the lanes may not be
   // undef and the value of the VReg matters.
-  return !Def.getOperand(0).getSubReg();
+  return Def.getOperand(0).getSubReg();
 }
 
 /// insertSpill - Insert a spill of NewVReg after MI.
@@ -934,26 +948,27 @@ void InlineSpiller::insertSpill(unsigned NewVReg, bool isKill,
   MachineBasicBlock &MBB = *MI->getParent();
 
   MachineInstrSpan MIS(MI, &MBB);
-  bool IsRealSpill = true;
-  if (isFullUndefDef(*MI)) {
+  MachineBasicBlock::iterator SpillBefore = std::next(MI);
+  bool IsRealSpill = isRealSpill(*MI);
+  if (IsRealSpill)
+    TII.storeRegToStackSlot(MBB, SpillBefore, NewVReg, isKill, StackSlot,
+                            MRI.getRegClass(NewVReg), &TRI);
+  else
     // Don't spill undef value.
     // Anything works for undef, in particular keeping the memory
     // uninitialized is a viable option and it saves code size and
     // run time.
-    BuildMI(MBB, std::next(MI), MI->getDebugLoc(), TII.get(TargetOpcode::KILL))
+    BuildMI(MBB, SpillBefore, MI->getDebugLoc(), TII.get(TargetOpcode::KILL))
         .addReg(NewVReg, getKillRegState(isKill));
-    IsRealSpill = false;
-  } else
-    TII.storeRegToStackSlot(MBB, std::next(MI), NewVReg, isKill, StackSlot,
-                            MRI.getRegClass(NewVReg), &TRI);
 
-  LIS.InsertMachineInstrRangeInMaps(std::next(MI), MIS.end());
+  MachineBasicBlock::iterator Spill = std::next(MI);
+  LIS.InsertMachineInstrRangeInMaps(Spill, MIS.end());
 
-  LLVM_DEBUG(dumpMachineInstrRangeWithSlotIndex(std::next(MI), MIS.end(), LIS,
-                                                "spill"));
+  LLVM_DEBUG(
+      dumpMachineInstrRangeWithSlotIndex(Spill, MIS.end(), LIS, "spill"));
   ++NumSpills;
   if (IsRealSpill)
-    HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
+    HSpiller.addToMergeableSpills(*Spill, StackSlot, Original);
 }
 
 /// spillAroundUses - insert spill code around each use of Reg.
@@ -1427,7 +1442,7 @@ void HoistSpillHelper::runHoistSpills(
   }
   // For spills in SpillsToKeep with LiveReg set (i.e., not original spill),
   // save them to SpillsToIns.
-  for (const auto Ent : SpillsToKeep) {
+  for (const auto &Ent : SpillsToKeep) {
     if (Ent.second)
       SpillsToIns[Ent.first->getBlock()] = Ent.second;
   }
@@ -1486,7 +1501,7 @@ void HoistSpillHelper::hoistAllSpills() {
 
     LLVM_DEBUG({
       dbgs() << "Finally inserted spills in BB: ";
-      for (const auto Ispill : SpillsToIns)
+      for (const auto &Ispill : SpillsToIns)
         dbgs() << Ispill.first->getNumber() << " ";
       dbgs() << "\nFinally removed spills in BB: ";
       for (const auto Rspill : SpillsToRm)
@@ -1501,7 +1516,7 @@ void HoistSpillHelper::hoistAllSpills() {
                                      StackIntvl.getValNumInfo(0));
 
     // Insert hoisted spills.
-    for (auto const Insert : SpillsToIns) {
+    for (auto const &Insert : SpillsToIns) {
       MachineBasicBlock *BB = Insert.first;
       unsigned LiveReg = Insert.second;
       MachineBasicBlock::iterator MI = IPA.getLastInsertPointIter(OrigLI, *BB);

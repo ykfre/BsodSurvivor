@@ -13,8 +13,19 @@ define i32 @main(i32 %argc, i8** %argv) {
   ret i32 0
 }
 
+define i32 @dead_aligned_alloc(i32 %size, i32 %alignment, i8 %value) {
+; CHECK-LABEL: @dead_aligned_alloc(
+; CHECK-NEXT:    ret i32 0
+;
+  %aligned_allocation = tail call i8* @aligned_alloc(i32 %alignment, i32 %size)
+  store i8 %value, i8* %aligned_allocation
+  tail call void @free(i8* %aligned_allocation)
+  ret i32 0
+}
+
 declare noalias i8* @calloc(i32, i32) nounwind
 declare noalias i8* @malloc(i32)
+declare noalias i8* @aligned_alloc(i32, i32)
 declare void @free(i8*)
 
 define i1 @foo() {
@@ -292,7 +303,7 @@ define void @test10()  {
 
 define void @test11() {
 ; CHECK-LABEL: @test11(
-; CHECK-NEXT:    [[CALL:%.*]] = call dereferenceable(8) i8* @_Znwm(i64 8) #5
+; CHECK-NEXT:    [[CALL:%.*]] = call dereferenceable(8) i8* @_Znwm(i64 8) #6
 ; CHECK-NEXT:    call void @_ZdlPv(i8* nonnull [[CALL]])
 ; CHECK-NEXT:    ret void
 ;

@@ -38,7 +38,7 @@ int main(int argc, char **argv, char *env[]) {
   foo();
   #pragma omp target depend (source : argc) // expected-error {{expected 'in', 'out', 'inout' or 'mutexinoutset' in OpenMP clause 'depend'}}
   foo();
-  #pragma omp target depend (source) // expected-error {{expected expression}} expected-warning {{missing ':' after dependency type - ignoring}}
+  #pragma omp target depend (source) // expected-error {{expected expression}} expected-warning {{missing ':' after dependency type - ignoring}} expected-error {{expected 'in', 'out', 'inout' or 'mutexinoutset' in OpenMP clause 'depend'}}
   foo();
   #pragma omp target depend (in : argc)) // expected-warning {{extra tokens at the end of '#pragma omp target' are ignored}}
   foo();
@@ -74,7 +74,7 @@ int main(int argc, char **argv, char *env[]) {
   foo();
   #pragma omp target depend (in : argv[0:-1]) // expected-error {{section length is evaluated to a negative value -1}}
   foo();
-  #pragma omp target depend (in : argv[-1:0])
+  #pragma omp target depend (in : argv[-1:0]) // expected-error {{zero-length array section is not allowed in 'depend' clause}}
   foo();
   #pragma omp target depend (in : argv[:]) // expected-error {{section length is unspecified and cannot be inferred because subscripted value is not an array}}
   foo();

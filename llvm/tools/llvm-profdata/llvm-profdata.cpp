@@ -70,18 +70,18 @@ static void exitWithError(Error E, StringRef Whence = "") {
       instrprof_error instrError = IPE.get();
       StringRef Hint = "";
       if (instrError == instrprof_error::unrecognized_format) {
-        // Hint for common error of forgetting -sample for sample profiles.
-        Hint = "Perhaps you forgot to use the -sample option?";
+        // Hint for common error of forgetting --sample for sample profiles.
+        Hint = "Perhaps you forgot to use the --sample option?";
       }
-      exitWithError(IPE.message(), Whence, Hint);
+      exitWithError(IPE.message(), std::string(Whence), std::string(Hint));
     });
   }
 
-  exitWithError(toString(std::move(E)), Whence);
+  exitWithError(toString(std::move(E)), std::string(Whence));
 }
 
 static void exitWithErrorCode(std::error_code EC, StringRef Whence = "") {
-  exitWithError(EC.message(), Whence);
+  exitWithError(EC.message(), std::string(Whence));
 }
 
 namespace {
@@ -94,7 +94,7 @@ static void warnOrExitGivenError(FailureMode FailMode, std::error_code EC,
   if (FailMode == failIfAnyAreInvalid)
     exitWithErrorCode(EC, Whence);
   else
-    warn(EC.message(), Whence);
+    warn(EC.message(), std::string(Whence));
 }
 
 static void handleMergeWriterError(Error E, StringRef WhenceFile = "",
@@ -307,8 +307,11 @@ static void mergeInstrProfile(const WeightedFileVector &Inputs,
 
   // If NumThreads is not specified, auto-detect a good default.
   if (NumThreads == 0)
-    NumThreads =
-        std::min(hardware_concurrency(), unsigned((Inputs.size() + 1) / 2));
+    NumThreads = std::min(hardware_concurrency().compute_thread_count(),
+                          unsigned((Inputs.size() + 1) / 2));
+  // FIXME: There's a bug here, where setting NumThreads = Inputs.size() fails
+  // the merge_empty_profile.test because the InstrProfWriter.ProfileKind isn't
+  // merged, thus the emitted file ends up with a PF_Unknown kind.
 
   // Initialize the writer contexts.
   SmallVector<std::unique_ptr<WriterContext>, 4> Contexts;
@@ -320,7 +323,7 @@ static void mergeInstrProfile(const WeightedFileVector &Inputs,
     for (const auto &Input : Inputs)
       loadInput(Input, Remapper, Contexts[0].get());
   } else {
-    ThreadPool Pool(NumThreads);
+    ThreadPool Pool(hardware_concurrency(NumThreads));
 
     // Load the inputs in parallel (N/NumThreads serial steps).
     unsigned Ctx = 0;
@@ -401,7 +404,8 @@ remapSamples(const sampleprof::FunctionSamples &Samples,
     for (const auto &Callsite : CallsiteSamples.second) {
       sampleprof::FunctionSamples Remapped =
           remapSamples(Callsite.second, Remapper, Error);
-      MergeResult(Error, Target[Remapped.getName()].merge(Remapped));
+      MergeResult(Error,
+                  Target[std::string(Remapped.getName())].merge(Remapped));
     }
   }
   return Result;
@@ -444,7 +448,8 @@ static void handleExtBinaryWriter(sampleprof::SampleProfileWriter &Writer,
                                   ProfileFormat OutputFormat,
                                   MemoryBuffer *Buffer,
                                   sampleprof::ProfileSymbolList &WriterList,
-                                  bool CompressAllSections) {
+                                  bool CompressAllSections, bool UseMD5,
+                                  bool GenPartialProfile) {
   populateProfileSymbolList(Buffer, WriterList);
   if (WriterList.size() > 0 && OutputFormat != PF_Ext_Binary)
     warn("Profile Symbol list is not empty but the output format is not "
@@ -453,22 +458,30 @@ static void handleExtBinaryWriter(sampleprof::SampleProfileWriter &Writer,
   Writer.setProfileSymbolList(&WriterList);
 
   if (CompressAllSections) {
-    if (OutputFormat != PF_Ext_Binary) {
+    if (OutputFormat != PF_Ext_Binary)
       warn("-compress-all-section is ignored. Specify -extbinary to enable it");
-    } else {
-      auto ExtBinaryWriter =
-          static_cast<sampleprof::SampleProfileWriterExtBinary *>(&Writer);
-      ExtBinaryWriter->setToCompressAllSections();
-    }
+    else
+      Writer.setToCompressAllSections();
+  }
+  if (UseMD5) {
+    if (OutputFormat != PF_Ext_Binary)
+      warn("-use-md5 is ignored. Specify -extbinary to enable it");
+    else
+      Writer.setUseMD5();
+  }
+  if (GenPartialProfile) {
+    if (OutputFormat != PF_Ext_Binary)
+      warn("-gen-partial-profile is ignored. Specify -extbinary to enable it");
+    else
+      Writer.setPartialProfile();
   }
 }
 
-static void mergeSampleProfile(const WeightedFileVector &Inputs,
-                               SymbolRemapper *Remapper,
-                               StringRef OutputFilename,
-                               ProfileFormat OutputFormat,
-                               StringRef ProfileSymbolListFile,
-                               bool CompressAllSections, FailureMode FailMode) {
+static void
+mergeSampleProfile(const WeightedFileVector &Inputs, SymbolRemapper *Remapper,
+                   StringRef OutputFilename, ProfileFormat OutputFormat,
+                   StringRef ProfileSymbolListFile, bool CompressAllSections,
+                   bool UseMD5, bool GenPartialProfile, FailureMode FailMode) {
   using namespace sampleprof;
   StringMap<FunctionSamples> ProfileMap;
   SmallVector<std::unique_ptr<sampleprof::SampleProfileReader>, 5> Readers;
@@ -525,7 +538,7 @@ static void mergeSampleProfile(const WeightedFileVector &Inputs,
   // Make sure Buffer lives as long as WriterList.
   auto Buffer = getInputFileBuf(ProfileSymbolListFile);
   handleExtBinaryWriter(*Writer, OutputFormat, Buffer.get(), WriterList,
-                        CompressAllSections);
+                        CompressAllSections, UseMD5, GenPartialProfile);
   Writer->write(ProfileMap);
 }
 
@@ -537,7 +550,7 @@ static WeightedFile parseWeightedFile(const StringRef &WeightedFilename) {
   if (WeightStr.getAsInteger(10, Weight) || Weight < 1)
     exitWithError("Input weight must be a positive integer.");
 
-  return {FileName, Weight};
+  return {std::string(FileName), Weight};
 }
 
 static void addWeightedInput(WeightedFileVector &WNI, const WeightedFile &WF) {
@@ -546,7 +559,7 @@ static void addWeightedInput(WeightedFileVector &WNI, const WeightedFile &WF) {
 
   // If it's STDIN just pass it on.
   if (Filename == "-") {
-    WNI.push_back({Filename, Weight});
+    WNI.push_back({std::string(Filename), Weight});
     return;
   }
 
@@ -557,7 +570,7 @@ static void addWeightedInput(WeightedFileVector &WNI, const WeightedFile &WF) {
                       Filename);
   // If it's a source file, collect it.
   if (llvm::sys::fs::is_regular_file(Status)) {
-    WNI.push_back({Filename, Weight});
+    WNI.push_back({std::string(Filename), Weight});
     return;
   }
 
@@ -589,7 +602,7 @@ static void parseInputFilenamesFile(MemoryBuffer *Buffer,
       continue;
     // If there's no comma, it's an unweighted profile.
     else if (SanitizedEntry.find(',') == StringRef::npos)
-      addWeightedInput(WFV, {SanitizedEntry, 1});
+      addWeightedInput(WFV, {std::string(SanitizedEntry), 1});
     else
       addWeightedInput(WFV, parseWeightedFile(SanitizedEntry));
   }
@@ -653,12 +666,19 @@ static int merge_main(int argc, const char *argv[]) {
       "compress-all-sections", cl::init(false), cl::Hidden,
       cl::desc("Compress all sections when writing the profile (only "
                "meaningful for -extbinary)"));
+  cl::opt<bool> UseMD5(
+      "use-md5", cl::init(false), cl::Hidden,
+      cl::desc("Choose to use MD5 to represent string in name table (only "
+               "meaningful for -extbinary)"));
+  cl::opt<bool> GenPartialProfile(
+      "gen-partial-profile", cl::init(false), cl::Hidden,
+      cl::desc("Generate a partial profile (only meaningful for -extbinary)"));
 
   cl::ParseCommandLineOptions(argc, argv, "LLVM profile data merger\n");
 
   WeightedFileVector WeightedInputs;
   for (StringRef Filename : InputFilenames)
-    addWeightedInput(WeightedInputs, {Filename, 1});
+    addWeightedInput(WeightedInputs, {std::string(Filename), 1});
   for (StringRef WeightedFilename : WeightedInputFilenames)
     addWeightedInput(WeightedInputs, parseWeightedFile(WeightedFilename));
 
@@ -687,7 +707,7 @@ static int merge_main(int argc, const char *argv[]) {
   else
     mergeSampleProfile(WeightedInputs, Remapper.get(), OutputFilename,
                        OutputFormat, ProfileSymbolListFile, CompressAllSections,
-                       FailureMode);
+                       UseMD5, GenPartialProfile, FailureMode);
 
   return 0;
 }
@@ -989,15 +1009,9 @@ static int showInstrProfile(const std::string &Filename, bool ShowCounts,
   }
 
   if (ShowDetailedSummary) {
-    OS << "Detailed summary:\n";
     OS << "Total number of blocks: " << PS->getNumCounts() << "\n";
     OS << "Total count: " << PS->getTotalCount() << "\n";
-    for (auto Entry : PS->getDetailedSummary()) {
-      OS << Entry.NumCounts << " blocks with count >= " << Entry.MinCount
-         << " account for "
-         << format("%0.6g", (float)Entry.Cutoff / ProfileSummary::Scale * 100)
-         << " percentage of the total counts.\n";
-    }
+    PS->printDetailedSummary(OS);
   }
   return 0;
 }
@@ -1013,7 +1027,7 @@ static void showSectionInfo(sampleprof::SampleProfileReader *Reader,
 }
 
 static int showSampleProfile(const std::string &Filename, bool ShowCounts,
-                             bool ShowAllFunctions,
+                             bool ShowAllFunctions, bool ShowDetailedSummary,
                              const std::string &ShowFunction,
                              bool ShowProfileSymbolList,
                              bool ShowSectionInfoOnly, raw_fd_ostream &OS) {
@@ -1042,6 +1056,12 @@ static int showSampleProfile(const std::string &Filename, bool ShowCounts,
     std::unique_ptr<sampleprof::ProfileSymbolList> ReaderList =
         Reader->getProfileSymbolList();
     ReaderList->dump(OS);
+  }
+
+  if (ShowDetailedSummary) {
+    auto &PS = Reader->getSummary();
+    PS.printSummary(OS);
+    PS.printDetailedSummary(OS);
   }
 
   return 0;
@@ -1132,8 +1152,8 @@ static int show_main(int argc, const char *argv[]) {
                             OnlyListBelow, ShowFunction, TextFormat, OS);
   else
     return showSampleProfile(Filename, ShowCounts, ShowAllFunctions,
-                             ShowFunction, ShowProfileSymbolList,
-                             ShowSectionInfoOnly, OS);
+                             ShowDetailedSummary, ShowFunction,
+                             ShowProfileSymbolList, ShowSectionInfoOnly, OS);
 }
 
 int main(int argc, const char *argv[]) {

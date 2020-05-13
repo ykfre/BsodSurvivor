@@ -9,7 +9,7 @@ This check will try to enforce coding guidelines on the identifiers naming. It
 supports one of the following casing types and tries to convert from one to
 another if a mismatch is detected
 
-Casing types inclde:
+Casing types include:
 
  - ``lower_case``,
  - ``UPPER_CASE``,
@@ -36,6 +36,7 @@ Options
 The following options are describe below:
 
  - :option:`AbstractClassCase`, :option:`AbstractClassPrefix`, :option:`AbstractClassSuffix`
+ - :option:`AggressiveDependentMemberLookup`
  - :option:`ClassCase`, :option:`ClassPrefix`, :option:`ClassSuffix`
  - :option:`ClassConstantCase`, :option:`ClassConstantPrefix`, :option:`ClassConstantSuffix`
  - :option:`ClassMemberCase`, :option:`ClassMemberPrefix`, :option:`ClassMemberSuffix`
@@ -55,6 +56,7 @@ The following options are describe below:
  - :option:`GlobalFunctionCase`, :option:`GlobalFunctionPrefix`, :option:`GlobalFunctionSuffix`
  - :option:`GlobalPointerCase`, :option:`GlobalPointerPrefix`, :option:`GlobalPointerSuffix`
  - :option:`GlobalVariableCase`, :option:`GlobalVariablePrefix`, :option:`GlobalVariableSuffix`
+ - :option:`IgnoreMainLikeFunctions`
  - :option:`InlineNamespaceCase`, :option:`InlineNamespacePrefix`, :option:`InlineNamespaceSuffix`
  - :option:`LocalConstantCase`, :option:`LocalConstantPrefix`, :option:`LocalConstantSuffix`
  - :option:`LocalConstantPointerCase`, :option:`LocalConstantPointerPrefix`, :option:`LocalConstantPointerSuffix`
@@ -124,6 +126,64 @@ After:
     class pre_abstract_class_post {
     public:
       pre_abstract_class_post();
+    };
+
+.. option:: AggressiveDependentMemberLookup
+
+    When set to `1` the check will look in dependent base classes for dependent
+    member references that need changing. This can lead to errors with template
+    specializations so the default value is `0`.
+
+For example using values of:
+
+   - ClassMemberCase of ``lower_case``
+
+Before:
+
+.. code-block:: c++
+
+    template <typename T>
+    struct Base {
+      T BadNamedMember;
+    };
+
+    template <typename T>
+    struct Derived : Base<T> {
+      void reset() {
+        this->BadNamedMember = 0;
+      }
+    };
+
+After if AggressiveDependentMemberLookup is ``0``:
+
+.. code-block:: c++
+
+    template <typename T>
+    struct Base {
+      T bad_named_member;
+    };
+
+    template <typename T>
+    struct Derived : Base<T> {
+      void reset() {
+        this->BadNamedMember = 0;
+      }
+    };
+
+After if AggressiveDependentMemberLookup is ``1``:
+
+.. code-block:: c++
+
+    template <typename T>
+    struct Base {
+      T bad_named_member;
+    };
+
+    template <typename T>
+    struct Derived : Base<T> {
+      void reset() {
+        this->bad_named_member = 0;
+      }
     };
 
 .. option:: ClassCase
@@ -826,6 +886,12 @@ After:
 .. code-block:: c++
 
     int pre_global3_post;
+
+.. option:: IgnoreMainLikeFunctions
+
+    When set to `1` functions that have a similar signature to ``main`` or 
+    ``wmain`` won't enforce checks on the names of their parameters.
+    Default value is `0`.
 
 .. option:: InlineNamespaceCase
 

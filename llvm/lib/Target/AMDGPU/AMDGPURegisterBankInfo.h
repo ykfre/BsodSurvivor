@@ -40,9 +40,12 @@ protected:
 #include "AMDGPUGenRegisterBank.inc"
 };
 class AMDGPURegisterBankInfo : public AMDGPUGenRegisterBankInfo {
+public:
   const GCNSubtarget &Subtarget;
   const SIRegisterInfo *TRI;
   const SIInstrInfo *TII;
+
+  bool buildVCopy(MachineIRBuilder &B, Register DstReg, Register SrcReg) const;
 
   bool collectWaterfallOperands(
     SmallSet<Register, 4> &SGPROperandRegs,
@@ -73,6 +76,12 @@ class AMDGPURegisterBankInfo : public AMDGPUGenRegisterBankInfo {
   applyMappingImage(MachineInstr &MI,
                     const AMDGPURegisterBankInfo::OperandsMapper &OpdMapper,
                     MachineRegisterInfo &MRI, int RSrcIdx) const;
+  bool applyMappingSBufferLoad(const OperandsMapper &OpdMapper) const;
+
+  bool applyMappingBFEIntrinsic(const OperandsMapper &OpdMapper,
+                                bool Signed) const;
+
+  void lowerScalarMinMax(MachineIRBuilder &B, MachineInstr &MI) const;
 
   Register handleD16VData(MachineIRBuilder &B, MachineRegisterInfo &MRI,
                           Register Reg) const;
@@ -85,6 +94,9 @@ class AMDGPURegisterBankInfo : public AMDGPUGenRegisterBankInfo {
 
   /// See RegisterBankInfo::applyMapping.
   void applyMappingImpl(const OperandsMapper &OpdMapper) const override;
+
+  const ValueMapping *getValueMappingForPtr(const MachineRegisterInfo &MRI,
+                                            Register Ptr) const;
 
   const RegisterBankInfo::InstructionMapping &
   getInstrMappingForLoad(const MachineInstr &MI) const;
@@ -155,8 +167,8 @@ public:
   unsigned getBreakDownCost(const ValueMapping &ValMapping,
                             const RegisterBank *CurBank = nullptr) const override;
 
-  const RegisterBank &
-  getRegBankFromRegClass(const TargetRegisterClass &RC) const override;
+  const RegisterBank &getRegBankFromRegClass(const TargetRegisterClass &RC,
+                                             LLT) const override;
 
   InstructionMappings
   getInstrAlternativeMappings(const MachineInstr &MI) const override;

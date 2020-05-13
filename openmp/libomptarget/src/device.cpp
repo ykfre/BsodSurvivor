@@ -44,16 +44,12 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
     }
   }
 
-  // Mapping does not exist, allocate it
-  HostDataToTargetTy newEntry;
-
-  // Set up missing fields
-  newEntry.HstPtrBase = (uintptr_t) HstPtrBegin;
-  newEntry.HstPtrBegin = (uintptr_t) HstPtrBegin;
-  newEntry.HstPtrEnd = (uintptr_t) HstPtrBegin + Size;
-  newEntry.TgtPtrBegin = (uintptr_t) TgtPtrBegin;
-  // refCount must be infinite
-  newEntry.RefCount = INF_REF_CNT;
+  // Mapping does not exist, allocate it with refCount=INF
+  HostDataToTargetTy newEntry((uintptr_t) HstPtrBegin /*HstPtrBase*/,
+                              (uintptr_t) HstPtrBegin /*HstPtrBegin*/,
+                              (uintptr_t) HstPtrBegin + Size /*HstPtrEnd*/,
+                              (uintptr_t) TgtPtrBegin /*TgtPtrBegin*/,
+                              true /*IsRefCountINF*/);
 
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
       DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(newEntry.HstPtrBase),
@@ -74,7 +70,7 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
       ii != HostDataToTargetMap.end(); ++ii) {
     if ((uintptr_t)HstPtrBegin == ii->HstPtrBegin) {
       // Mapping exists
-      if (CONSIDERED_INF(ii->RefCount)) {
+      if (ii->isRefCountInf()) {
         DP("Association found, removing it\n");
         HostDataToTargetMap.erase(ii);
         DataMapMtx.unlock();
@@ -94,21 +90,21 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
 }
 
 // Get ref count of map entry containing HstPtrBegin
-long DeviceTy::getMapEntryRefCnt(void *HstPtrBegin) {
+uint64_t DeviceTy::getMapEntryRefCnt(void *HstPtrBegin) {
   uintptr_t hp = (uintptr_t)HstPtrBegin;
-  long RefCnt = -1;
+  uint64_t RefCnt = 0;
 
   DataMapMtx.lock();
   for (auto &HT : HostDataToTargetMap) {
     if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
       DP("DeviceTy::getMapEntry: requested entry found\n");
-      RefCnt = HT.RefCount;
+      RefCnt = HT.getRefCount();
       break;
     }
   }
   DataMapMtx.unlock();
 
-  if (RefCnt < 0) {
+  if (RefCnt == 0) {
     DP("DeviceTy::getMapEntry: requested entry not found\n");
   }
 
@@ -161,6 +157,7 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     bool UpdateRefCount, bool HasCloseModifier) {
   void *rc = NULL;
   IsHostPtr = false;
+  IsNew = false;
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
 
@@ -174,15 +171,14 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     IsNew = false;
 
     if (UpdateRefCount)
-      ++HT.RefCount;
+      HT.incRefCount();
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DP("Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
         "Size=%ld,%s RefCount=%s\n", (IsImplicit ? " (implicit)" : ""),
         DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
         (UpdateRefCount ? " updated" : ""),
-        (CONSIDERED_INF(HT.RefCount)) ? "INF" :
-            std::to_string(HT.RefCount).c_str());
+        HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
     rc = (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
     // Explicit extension of mapped data - not allowed.
@@ -194,7 +190,8 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     // maps are respected.
     // In addition to the mapping rules above, the close map
     // modifier forces the mapping of the variable to the device.
-    if (RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY && !HasCloseModifier) {
+    if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
+        !HasCloseModifier) {
       DP("Return HstPtrBegin " DPxMOD " Size=%ld RefCount=%s\n",
          DPxPTR((uintptr_t)HstPtrBegin), Size, (UpdateRefCount ? " updated" : ""));
       IsHostPtr = true;
@@ -229,19 +226,18 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
 
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
     auto &HT = *lr.Entry;
-    IsLast = !(HT.RefCount > 1);
+    IsLast = HT.getRefCount() == 1;
 
-    if (HT.RefCount > 1 && UpdateRefCount)
-      --HT.RefCount;
+    if (!IsLast && UpdateRefCount)
+      HT.decRefCount();
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
         "Size=%ld,%s RefCount=%s\n", DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
         (UpdateRefCount ? " updated" : ""),
-        (CONSIDERED_INF(HT.RefCount)) ? "INF" :
-            std::to_string(HT.RefCount).c_str());
+        HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
     rc = (void *)tp;
-  } else if (RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) {
+  } else if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) {
     // If the value isn't found in the mapping and unified shared memory
     // is on then it means we have stumbled upon a value which we need to
     // use directly from the host.
@@ -271,7 +267,7 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size) {
 
 int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
                             bool HasCloseModifier) {
-  if (RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY && !HasCloseModifier)
+  if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY && !HasCloseModifier)
     return OFFLOAD_SUCCESS;
   // Check if the pointer is contained in any sub-nodes.
   int rc;
@@ -280,9 +276,8 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
     auto &HT = *lr.Entry;
     if (ForceDelete)
-      HT.RefCount = 1;
-    if (--HT.RefCount <= 0) {
-      assert(HT.RefCount == 0 && "did not expect a negative ref count");
+      HT.resetRefCount();
+    if (HT.decRefCount() == 0) {
       DP("Deleting tgt data " DPxMOD " of size %ld\n",
           DPxPTR(HT.TgtPtrBegin), Size);
       RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
@@ -306,7 +301,7 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
 void DeviceTy::init() {
   // Make call to init_requires if it exists for this plugin.
   if (RTL->init_requires)
-    RTL->init_requires(RTLs.RequiresFlags);
+    RTL->init_requires(RTLs->RequiresFlags);
   int32_t rc = RTL->init_device(RTLDeviceID);
   if (rc == OFFLOAD_SUCCESS) {
     IsInit = true;
@@ -337,31 +332,52 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
   return rc;
 }
 
-// Submit data to device.
+// Submit data to device
 int32_t DeviceTy::data_submit(void *TgtPtrBegin, void *HstPtrBegin,
-    int64_t Size) {
-  return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
+                              int64_t Size, __tgt_async_info *AsyncInfoPtr) {
+  if (!AsyncInfoPtr || !RTL->data_submit_async || !RTL->synchronize)
+    return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
+  else
+    return RTL->data_submit_async(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
+                                  AsyncInfoPtr);
 }
 
-// Retrieve data from device.
+// Retrieve data from device
 int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
-    int64_t Size) {
-  return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size);
+                                int64_t Size, __tgt_async_info *AsyncInfoPtr) {
+  if (!AsyncInfoPtr || !RTL->data_retrieve_async || !RTL->synchronize)
+    return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size);
+  else
+    return RTL->data_retrieve_async(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size,
+                                    AsyncInfoPtr);
 }
 
 // Run region on device
 int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
-    ptrdiff_t *TgtOffsets, int32_t TgtVarsSize) {
-  return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize);
+                             ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
+                             __tgt_async_info *AsyncInfoPtr) {
+  if (!AsyncInfoPtr || !RTL->run_region || !RTL->synchronize)
+    return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
+                           TgtVarsSize);
+  else
+    return RTL->run_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
+                                 TgtOffsets, TgtVarsSize, AsyncInfoPtr);
 }
 
 // Run team region on device.
 int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
-    ptrdiff_t *TgtOffsets, int32_t TgtVarsSize, int32_t NumTeams,
-    int32_t ThreadLimit, uint64_t LoopTripCount) {
-  return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize, NumTeams, ThreadLimit, LoopTripCount);
+                                  ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
+                                  int32_t NumTeams, int32_t ThreadLimit,
+                                  uint64_t LoopTripCount,
+                                  __tgt_async_info *AsyncInfoPtr) {
+  if (!AsyncInfoPtr || !RTL->run_team_region_async || !RTL->synchronize)
+    return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
+                                TgtOffsets, TgtVarsSize, NumTeams, ThreadLimit,
+                                LoopTripCount);
+  else
+    return RTL->run_team_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
+                                      TgtOffsets, TgtVarsSize, NumTeams,
+                                      ThreadLimit, LoopTripCount, AsyncInfoPtr);
 }
 
 /// Check whether a device has an associated RTL and initialize it if it's not
@@ -370,9 +386,9 @@ bool device_is_ready(int device_num) {
   DP("Checking whether device %d is ready.\n", device_num);
   // Devices.size() can only change while registering a new
   // library, so try to acquire the lock of RTLs' mutex.
-  RTLsMtx.lock();
+  RTLsMtx->lock();
   size_t Devices_size = Devices.size();
-  RTLsMtx.unlock();
+  RTLsMtx->unlock();
   if (Devices_size <= (size_t)device_num) {
     DP("Device ID  %d does not have a matching RTL\n", device_num);
     return false;

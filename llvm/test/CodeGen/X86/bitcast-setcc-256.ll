@@ -117,7 +117,7 @@ define i8 @v8f32(<8 x float> %a, <8 x float> %b) {
 ; SSE2-SSSE3-NEXT:    cmpltps %xmm1, %xmm3
 ; SSE2-SSSE3-NEXT:    cmpltps %xmm0, %xmm2
 ; SSE2-SSSE3-NEXT:    packssdw %xmm3, %xmm2
-; SSE2-SSSE3-NEXT:    packsswb %xmm0, %xmm2
+; SSE2-SSSE3-NEXT:    packsswb %xmm2, %xmm2
 ; SSE2-SSSE3-NEXT:    pmovmskb %xmm2, %eax
 ; SSE2-SSSE3-NEXT:    # kill: def $al killed $al killed $eax
 ; SSE2-SSSE3-NEXT:    retq
@@ -375,8 +375,6 @@ define void @bitcast_16i16_store(i16* %p, <16 x i16> %a0) {
 ;
 ; AVX2-LABEL: bitcast_16i16_store:
 ; AVX2:       # %bb.0:
-; AVX2-NEXT:    vpxor %xmm1, %xmm1, %xmm1
-; AVX2-NEXT:    vpcmpgtw %ymm0, %ymm1, %ymm0
 ; AVX2-NEXT:    vextracti128 $1, %ymm0, %xmm1
 ; AVX2-NEXT:    vpacksswb %xmm1, %xmm0, %xmm0
 ; AVX2-NEXT:    vpmovmskb %xmm0, %eax

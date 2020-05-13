@@ -21,6 +21,7 @@
 
 #include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
+#include "llvm-c/Transforms/PassManagerBuilder.h"
 
 LLVM_C_EXTERN_C_BEGIN
 
@@ -31,17 +32,20 @@ LLVM_C_EXTERN_C_BEGIN
  * @{
  */
 
-/** See llvm::createCoroEarlyPass function. */
+/** See llvm::createCoroEarlyLegacyPass function. */
 void LLVMAddCoroEarlyPass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroSplitPass function. */
+/** See llvm::createCoroSplitLegacyPass function. */
 void LLVMAddCoroSplitPass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroElidePass function. */
+/** See llvm::createCoroElideLegacyPass function. */
 void LLVMAddCoroElidePass(LLVMPassManagerRef PM);
 
-/** See llvm::createCoroCleanupPass function. */
+/** See llvm::createCoroCleanupLegacyPass function. */
 void LLVMAddCoroCleanupPass(LLVMPassManagerRef PM);
+
+/** See llvm::addCoroutinePassesToExtensionPoints. */
+void LLVMPassManagerBuilderAddCoroutinePassesToExtensionPoints(LLVMPassManagerBuilderRef PMB);
 
 /**
  * @}

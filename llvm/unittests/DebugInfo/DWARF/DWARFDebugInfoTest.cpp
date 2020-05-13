@@ -2008,8 +2008,47 @@ TEST(DWARFDebugInfo, TestDwarfVerifyInvalidRanges) {
   ASSERT_TRUE((bool)ErrOrSections);
   std::unique_ptr<DWARFContext> DwarfContext =
       DWARFContext::create(*ErrOrSections, 8);
-  VerifyError(*DwarfContext,
-              "error: DW_AT_ranges offset is beyond .debug_ranges bounds:");
+  VerifyError(
+      *DwarfContext,
+      "error: DW_AT_ranges offset is beyond .debug_ranges bounds: 0x00001000");
+}
+
+TEST(DWARFDebugInfo, TestDwarfVerifyInvalidRnglists) {
+  // Create a single compile unit with a DW_AT_ranges whose section offset
+  // isn't valid.
+  const char *yamldata = R"(
+    debug_str:
+      - ''
+      - /tmp/main.c
+    debug_abbrev:
+      - Code:            0x00000001
+        Tag:             DW_TAG_compile_unit
+        Children:        DW_CHILDREN_no
+        Attributes:
+          - Attribute:       DW_AT_name
+            Form:            DW_FORM_strp
+          - Attribute:       DW_AT_ranges
+            Form:            DW_FORM_sec_offset
+    debug_info:
+      - Length:
+          TotalLength:     17
+        Version:         5
+        UnitType:        DW_UT_compile
+        AbbrOffset:      0
+        AddrSize:        8
+        Entries:
+          - AbbrCode:        0x00000001
+            Values:
+              - Value:           0x0000000000000001
+              - Value:           0x0000000000001000
+
+  )";
+  auto ErrOrSections = DWARFYAML::EmitDebugSections(StringRef(yamldata));
+  ASSERT_TRUE((bool)ErrOrSections);
+  std::unique_ptr<DWARFContext> DwarfContext =
+      DWARFContext::create(*ErrOrSections, 8);
+  VerifyError(*DwarfContext, "error: DW_AT_ranges offset is beyond "
+                             ".debug_rnglists bounds: 0x00001000");
 }
 
 TEST(DWARFDebugInfo, TestDwarfVerifyInvalidStmtList) {
@@ -2506,7 +2545,7 @@ TEST(DWARFDebugInfo, TestDwarfVerifyCUDontShareLineTable) {
               "offset:");
 }
 
-TEST(DWARFDebugInfo, TestErrorReportingPolicy) {
+TEST(DWARFDebugInfo, TestErrorReporting) {
   Triple Triple("x86_64-pc-linux");
   if (!isConfigurationSupported(Triple))
       return;
@@ -2520,35 +2559,23 @@ TEST(DWARFDebugInfo, TestErrorReportingPolicy) {
   // Emit two compressed sections with broken headers.
   AP->OutStreamer->SwitchSection(
       MC->getELFSection(".zdebug_foo", 0 /*Type*/, 0 /*Flags*/));
-  AP->OutStreamer->EmitBytes("0");
+  AP->OutStreamer->emitBytes("0");
   AP->OutStreamer->SwitchSection(
       MC->getELFSection(".zdebug_bar", 0 /*Type*/, 0 /*Flags*/));
-  AP->OutStreamer->EmitBytes("0");
+  AP->OutStreamer->emitBytes("0");
 
   MemoryBufferRef FileBuffer(DG->generate(), "dwarf");
   auto Obj = object::ObjectFile::createObjectFile(FileBuffer);
   EXPECT_TRUE((bool)Obj);
 
-  // Case 1: error handler handles all errors. That allows
-  // DWARFContext to parse whole file and find both two errors we know about.
+  // DWARFContext parses whole file and finds the two errors we expect.
   int Errors = 0;
   std::unique_ptr<DWARFContext> Ctx1 =
-      DWARFContext::create(**Obj, nullptr, [&](Error E) {
+      DWARFContext::create(**Obj, nullptr, "", [&](Error E) {
         ++Errors;
         consumeError(std::move(E));
-        return ErrorPolicy::Continue;
       });
   EXPECT_TRUE(Errors == 2);
-
-  // Case 2: error handler stops parsing of object after first error.
-  Errors = 0;
-  std::unique_ptr<DWARFContext> Ctx2 =
-      DWARFContext::create(**Obj, nullptr, [&](Error E) {
-        ++Errors;
-        consumeError(std::move(E));
-        return ErrorPolicy::Halt;
-      });
-  EXPECT_TRUE(Errors == 1);
 }
 
 TEST(DWARFDebugInfo, TestDwarfVerifyCURangesIncomplete) {
@@ -3178,7 +3205,7 @@ TEST(DWARFDebugInfo, TestDWARF64UnitLength) {
     DWARFDataExtractor Data(Obj, Sec, /* IsLittleEndian = */ true,
                             /* AddressSize = */ 4);
     uint64_t Offset = 0;
-    EXPECT_FALSE(Header.extract(*Context, Data, &Offset));
+    EXPECT_FALSE(Header.extract(*Context, Data, &Offset, DW_SECT_INFO));
     // Header.extract() returns false because there is not enough space
     // in the section for the declared length. Anyway, we can check that
     // the properties are read correctly.

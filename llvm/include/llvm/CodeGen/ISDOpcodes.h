@@ -178,6 +178,11 @@ namespace ISD {
     /// UNDEF - An undefined node.
     UNDEF,
 
+    // FREEZE - FREEZE(VAL) returns an arbitrary value if VAL is UNDEF (or
+    // is evaluated to UNDEF), or returns VAL otherwise. Note that each
+    // read of UNDEF can yield different value, but FREEZE(UNDEF) cannot.
+    FREEZE,
+
     /// EXTRACT_ELEMENT - This is used to get the lower or upper (determined by
     /// a Constant, which is required to be operand #1) half of the integer or
     /// float value specified as operand #0.  This is only for use before
@@ -284,6 +289,17 @@ namespace ISD {
     /// result is clamped between the min and max values representable by the
     /// bits of the first 2 operands.
     SMULFIXSAT, UMULFIXSAT,
+
+    /// RESULT = [US]DIVFIX(LHS, RHS, SCALE) - Perform fixed point division on
+    /// 2 integers with the same width and scale. SCALE represents the scale
+    /// of both operands as fixed point numbers. This SCALE parameter must be a
+    /// constant integer.
+    SDIVFIX, UDIVFIX,
+
+    /// Same as the corresponding unsaturated fixed point instructions, but the
+    /// result is clamped between the min and max values representable by the
+    /// bits of the first 2 operands.
+    SDIVFIXSAT, UDIVFIXSAT,
 
     /// Simple binary floating point operators.
     FADD, FSUB, FMUL, FDIV, FREM,
@@ -393,16 +409,17 @@ namespace ISD {
     CONCAT_VECTORS,
 
     /// INSERT_SUBVECTOR(VECTOR1, VECTOR2, IDX) - Returns a vector
-    /// with VECTOR2 inserted into VECTOR1 at the (potentially
-    /// variable) element number IDX, which must be a multiple of the
-    /// VECTOR2 vector length.  The elements of VECTOR1 starting at
-    /// IDX are overwritten with VECTOR2.  Elements IDX through
-    /// vector_length(VECTOR2) must be valid VECTOR1 indices.
+    /// with VECTOR2 inserted into VECTOR1 at the constant element number
+    /// IDX, which must be a multiple of the VECTOR2 vector length. The
+    /// elements of VECTOR1 starting at IDX are overwritten with VECTOR2.
+    /// Elements IDX through vector_length(VECTOR2) must be valid VECTOR1
+    /// indices.
     INSERT_SUBVECTOR,
 
     /// EXTRACT_SUBVECTOR(VECTOR, IDX) - Returns a subvector from VECTOR (an
-    /// vector value) starting with the element number IDX, which must be a
-    /// constant multiple of the result vector length.
+    /// vector value) starting with the constant element number IDX, which
+    /// must be a multiple of the result vector length. Elements IDX through
+    /// vector_length(VECTOR) must be valid VECTOR indices.
     EXTRACT_SUBVECTOR,
 
     /// VECTOR_SHUFFLE(VEC1, VEC2) - Returns a vector, of the same type as
@@ -598,6 +615,7 @@ namespace ISD {
     ///  1 Round to nearest
     ///  2 Round to +inf
     ///  3 Round to -inf
+    /// Result is rounding mode and chain. Input is a chain.
     FLT_ROUNDS_,
 
     /// X = FP_EXTEND(Y) - Extend a smaller FP type into a larger FP type.
@@ -627,6 +645,7 @@ namespace ISD {
     /// form a semi-softened interface for dealing with f16 (as an i16), which
     /// is often a storage-only type but has native conversions.
     FP16_TO_FP, FP_TO_FP16,
+    STRICT_FP16_TO_FP, STRICT_FP_TO_FP16,
 
     /// Perform various unary floating-point operations inspired by libm. For
     /// FPOWI, the result is undefined if if the integer operand doesn't fit
@@ -731,9 +750,6 @@ namespace ISD {
     /// with respect to other call instructions, but loads and stores may float
     /// past it.
     ANNOTATION_LABEL,
-
-    /// CATCHPAD - Represents a catchpad instruction.
-    CATCHPAD,
 
     /// CATCHRET - Represents a return from a catch block funclet. Used for
     /// MSVC compatible exception handling. Takes a chain operand and a
@@ -915,6 +931,11 @@ namespace ISD {
     /// known nonzero constant. The only operand here is the chain.
     GET_DYNAMIC_AREA_OFFSET,
 
+    /// VSCALE(IMM) - Returns the runtime scaling factor used to calculate the
+    /// number of elements within a scalable vector. IMM is a constant integer
+    /// multiplier that is applied to the runtime value.
+    VSCALE,
+
     /// Generic reduction nodes. These nodes represent horizontal vector
     /// reduction operations, producing a scalar result.
     /// The STRICT variants perform reductions in sequential order. The first
@@ -937,11 +958,16 @@ namespace ISD {
     BUILTIN_OP_END
   };
 
+  /// FIRST_TARGET_STRICTFP_OPCODE - Target-specific pre-isel operations
+  /// which cannot raise FP exceptions should be less than this value.
+  /// Those that do must not be less than this value.
+  static const int FIRST_TARGET_STRICTFP_OPCODE = BUILTIN_OP_END+400;
+
   /// FIRST_TARGET_MEMORY_OPCODE - Target-specific pre-isel operations
   /// which do not reference a specific memory location should be less than
   /// this value. Those that do must not be less than this value, and can
   /// be used with SelectionDAG::getMemIntrinsicNode.
-  static const int FIRST_TARGET_MEMORY_OPCODE = BUILTIN_OP_END+400;
+  static const int FIRST_TARGET_MEMORY_OPCODE = BUILTIN_OP_END+500;
 
   //===--------------------------------------------------------------------===//
   /// MemIndexedMode enum - This enum defines the load / store indexed
@@ -1093,6 +1119,16 @@ namespace ISD {
   /// Return the operation corresponding to !(X op Y), where 'op' is a valid
   /// SetCC operation.
   CondCode getSetCCInverse(CondCode Operation, EVT Type);
+
+  namespace GlobalISel {
+    /// Return the operation corresponding to !(X op Y), where 'op' is a valid
+    /// SetCC operation. The U bit of the condition code has different meanings
+    /// between floating point and integer comparisons and LLT's don't provide
+    /// this distinction. As such we need to be told whether the comparison is
+    /// floating point or integer-like. Pointers should use integer-like
+    /// comparisons.
+    CondCode getSetCCInverse(CondCode Operation, bool isIntegerLike);
+  } // end namespace GlobalISel
 
   /// Return the operation corresponding to (Y op X) when given the operation
   /// for (X op Y).

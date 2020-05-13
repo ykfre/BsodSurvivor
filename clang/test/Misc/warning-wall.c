@@ -8,7 +8,6 @@ CHECK-NEXT:    -Wcomment
 CHECK-NEXT:    -Wdelete-non-virtual-dtor
 CHECK-NEXT:      -Wdelete-non-abstract-non-virtual-dtor
 CHECK-NEXT:      -Wdelete-abstract-non-virtual-dtor
-CHECK-NEXT:    -Wfor-loop-analysis
 CHECK-NEXT:    -Wformat
 CHECK-NEXT:      -Wformat-extra-args
 CHECK-NEXT:      -Wformat-zero-length
@@ -16,6 +15,8 @@ CHECK-NEXT:      -Wnonnull
 CHECK-NEXT:      -Wformat-security
 CHECK-NEXT:      -Wformat-y2k
 CHECK-NEXT:      -Wformat-invalid-specifier
+CHECK-NEXT:    -Wfor-loop-analysis
+CHECK-NEXT:    -Wframe-address
 CHECK-NEXT:    -Wimplicit
 CHECK-NEXT:      -Wimplicit-function-declaration
 CHECK-NEXT:      -Wimplicit-int
@@ -29,6 +30,7 @@ CHECK-NEXT:      -Wredundant-move
 CHECK-NEXT:      -Wreturn-std-move
 CHECK-NEXT:      -Wself-move
 CHECK-NEXT:    -Wmultichar
+CHECK-NEXT:    -Wrange-loop-construct
 CHECK-NEXT:    -Wreorder
 CHECK-NEXT:      -Wreorder-ctor
 CHECK-NEXT:      -Wreorder-init-list

@@ -381,7 +381,7 @@ static void analyzeParsePointLiveness(
       dbgs() << " " << V->getName() << " " << *V << "\n";
   }
   if (PrintLiveSetSize) {
-    dbgs() << "Safepoint For: " << Call->getCalledValue()->getName() << "\n";
+    dbgs() << "Safepoint For: " << Call->getCalledOperand()->getName() << "\n";
     dbgs() << "Number live values: " << LiveSet.size() << "\n";
   }
   Result.LiveSet = LiveSet;
@@ -926,8 +926,7 @@ static Value *findBasePointer(Value *I, DefiningValueMapTy &Cache) {
   }
 #endif
 
-  // Insert Phis for all conflicts
-  // TODO: adjust naming patterns to avoid this order of iteration dependency
+  // Handle extractelement instructions and their uses.
   for (auto Pair : States) {
     Instruction *I = cast<Instruction>(Pair.first);
     BDVState State = Pair.second;
@@ -938,17 +937,40 @@ static Value *findBasePointer(Value *I, DefiningValueMapTy &Cache) {
     // insert an extract even when we know an exact base for the instruction.
     // The problem is that we need to convert from a vector base to a scalar
     // base for the particular indice we're interested in.
-    if (State.isBase() && isa<ExtractElementInst>(I) &&
-        isa<VectorType>(State.getBaseValue()->getType())) {
-      auto *EE = cast<ExtractElementInst>(I);
-      // TODO: In many cases, the new instruction is just EE itself.  We should
-      // exploit this, but can't do it here since it would break the invariant
-      // about the BDV not being known to be a base.
-      auto *BaseInst = ExtractElementInst::Create(
-          State.getBaseValue(), EE->getIndexOperand(), "base_ee", EE);
-      BaseInst->setMetadata("is_base_value", MDNode::get(I->getContext(), {}));
-      States[I] = BDVState(BDVState::Base, BaseInst);
+    if (!State.isBase() || !isa<ExtractElementInst>(I) ||
+        !isa<VectorType>(State.getBaseValue()->getType()))
+      continue;
+    auto *EE = cast<ExtractElementInst>(I);
+    // TODO: In many cases, the new instruction is just EE itself.  We should
+    // exploit this, but can't do it here since it would break the invariant
+    // about the BDV not being known to be a base.
+    auto *BaseInst = ExtractElementInst::Create(
+        State.getBaseValue(), EE->getIndexOperand(), "base_ee", EE);
+    BaseInst->setMetadata("is_base_value", MDNode::get(I->getContext(), {}));
+    States[I] = BDVState(BDVState::Base, BaseInst);
+
+    // We need to handle uses of the extractelement that have the same vector
+    // base as well but the use is a scalar type. Since we cannot reuse the
+    // same BaseInst above (may not satisfy property that base pointer should
+    // always dominate derived pointer), we conservatively set this as conflict.
+    // Setting the base value for these conflicts is handled in the next loop
+    // which traverses States.
+    for (User *U : I->users()) {
+      auto *UseI = dyn_cast<Instruction>(U);
+      if (!UseI || !States.count(UseI))
+        continue;
+      if (!isa<VectorType>(UseI->getType()) && States[UseI] == State)
+        States[UseI] = BDVState(BDVState::Conflict);
     }
+  }
+
+  // Insert Phis for all conflicts
+  // TODO: adjust naming patterns to avoid this order of iteration dependency
+  for (auto Pair : States) {
+    Instruction *I = cast<Instruction>(Pair.first);
+    BDVState State = Pair.second;
+    assert(!isKnownBaseResult(I) && "why did it get added?");
+    assert(!State.isUnknown() && "Optimistic algorithm didn't complete!");
 
     // Since we're joining a vector and scalar base, they can never be the
     // same.  As a result, we should always see insert element having reached
@@ -987,7 +1009,7 @@ static Value *findBasePointer(Value *I, DefiningValueMapTy &Cache) {
         auto *SV = cast<ShuffleVectorInst>(I);
         UndefValue *VecUndef = UndefValue::get(SV->getOperand(0)->getType());
         std::string Name = suffixed_name_or(I, ".base", "base_sv");
-        return new ShuffleVectorInst(VecUndef, VecUndef, SV->getOperand(2),
+        return new ShuffleVectorInst(VecUndef, VecUndef, SV->getShuffleMask(),
                                      Name, SV);
       }
     };
@@ -1238,7 +1260,8 @@ normalizeForInvokeSafepoint(BasicBlock *BB, BasicBlock *InvokeParent,
 
 // Create new attribute set containing only attributes which can be transferred
 // from original call to the safepoint.
-static AttributeList legalizeCallAttributes(AttributeList AL) {
+static AttributeList legalizeCallAttributes(LLVMContext &Ctx,
+                                            AttributeList AL) {
   if (AL.isEmpty())
     return AL;
 
@@ -1252,7 +1275,6 @@ static AttributeList legalizeCallAttributes(AttributeList AL) {
   }
 
   // Just skip parameter and return attributes for now
-  LLVMContext &Ctx = AL.getContext();
   return AttributeList::get(Ctx, AttributeList::FunctionIndex,
                             AttributeSet::get(Ctx, FnAttrs));
 }
@@ -1270,7 +1292,7 @@ static void CreateGCRelocates(ArrayRef<Value *> LiveVariables,
                               const int LiveStart,
                               ArrayRef<Value *> BasePtrs,
                               Instruction *StatepointToken,
-                              IRBuilder<> Builder) {
+                              IRBuilder<> &Builder) {
   if (LiveVariables.empty())
     return;
 
@@ -1459,7 +1481,7 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     assert(DeoptLowering.equals("live-through") && "Unsupported value!");
   }
 
-  Value *CallTarget = Call->getCalledValue();
+  Value *CallTarget = Call->getCalledOperand();
   if (Function *F = dyn_cast<Function>(CallTarget)) {
     if (F->getIntrinsicID() == Intrinsic::experimental_deoptimize) {
       // Calls to llvm.experimental.deoptimize are lowered to calls to the
@@ -1498,7 +1520,8 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     // function attributes.  In case if we can handle this set of attributes -
     // set up function attrs directly on statepoint and return attrs later for
     // gc_result intrinsic.
-    SPCall->setAttributes(legalizeCallAttributes(CI->getAttributes()));
+    SPCall->setAttributes(
+        legalizeCallAttributes(CI->getContext(), CI->getAttributes()));
 
     Token = SPCall;
 
@@ -1524,7 +1547,8 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     // function attributes.  In case if we can handle this set of attributes -
     // set up function attrs directly on statepoint and return attrs later for
     // gc_result intrinsic.
-    SPInvoke->setAttributes(legalizeCallAttributes(II->getAttributes()));
+    SPInvoke->setAttributes(
+        legalizeCallAttributes(II->getContext(), II->getAttributes()));
 
     Token = SPInvoke;
 
@@ -1966,7 +1990,9 @@ chainToBasePointerCost(SmallVectorImpl<Instruction*> &Chain,
              "non noop cast is found during rematerialization");
 
       Type *SrcTy = CI->getOperand(0)->getType();
-      Cost += TTI.getCastInstrCost(CI->getOpcode(), CI->getType(), SrcTy, CI);
+      Cost += TTI.getCastInstrCost(CI->getOpcode(), CI->getType(), SrcTy,
+                                   TargetTransformInfo::TCK_SizeAndLatency,
+                                   CI);
 
     } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Instr)) {
       // Cost of the address calculation
@@ -2608,10 +2634,9 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
 
     unsigned VF = 0;
     for (unsigned i = 0; i < I.getNumOperands(); i++)
-      if (I.getOperand(i)->getType()->isVectorTy()) {
-        assert(VF == 0 ||
-               VF == I.getOperand(i)->getType()->getVectorNumElements());
-        VF = I.getOperand(i)->getType()->getVectorNumElements();
+      if (auto *OpndVTy = dyn_cast<VectorType>(I.getOperand(i)->getType())) {
+        assert(VF == 0 || VF == OpndVTy->getNumElements());
+        VF = OpndVTy->getNumElements();
       }
 
     // It's the vector to scalar traversal through the pointer operand which

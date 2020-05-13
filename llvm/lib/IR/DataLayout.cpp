@@ -229,7 +229,7 @@ static unsigned getAddrSpace(StringRef R) {
 }
 
 void DataLayout::parseSpecifier(StringRef Desc) {
-  StringRepresentation = Desc;
+  StringRepresentation = std::string(Desc);
   while (!Desc.empty()) {
     // Split at '-'.
     std::pair<StringRef, StringRef> Split = split(Desc, '-');
@@ -559,7 +559,10 @@ Align DataLayout::getAlignmentInfo(AlignTypeEnum AlignType, uint32_t BitWidth,
     // with what clang and llvm-gcc do.
     unsigned Alignment =
         getTypeAllocSize(cast<VectorType>(Ty)->getElementType());
-    Alignment *= cast<VectorType>(Ty)->getNumElements();
+    // We're only calculating a natural alignment, so it doesn't have to be
+    // based on the full size for scalable vectors. Using the minimum element
+    // count should be enough here.
+    Alignment *= cast<VectorType>(Ty)->getElementCount().Min;
     Alignment = PowerOf2Ceil(Alignment);
     return Align(Alignment);
    }
@@ -718,7 +721,7 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
   case Type::StructTyID: {
     // Packed structure types always have an ABI alignment of one.
     if (cast<StructType>(Ty)->isPacked() && abi_or_pref)
-      return Align::None();
+      return Align(1);
 
     // Get the layout annotation... which is lazily created on demand.
     const StructLayout *Layout = getStructLayout(cast<StructType>(Ty));
@@ -739,7 +742,8 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
     AlignType = FLOAT_ALIGN;
     break;
   case Type::X86_MMXTyID:
-  case Type::VectorTyID:
+  case Type::FixedVectorTyID:
+  case Type::ScalableVectorTyID:
     AlignType = VECTOR_ALIGN;
     break;
   default:
@@ -752,8 +756,13 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
                           abi_or_pref, Ty);
 }
 
+/// TODO: Remove this function once the transition to Align is over.
 unsigned DataLayout::getABITypeAlignment(Type *Ty) const {
-  return getAlignment(Ty, true).value();
+  return getABITypeAlign(Ty).value();
+}
+
+Align DataLayout::getABITypeAlign(Type *Ty) const {
+  return getAlignment(Ty, true);
 }
 
 /// getABIIntegerTypeAlignment - Return the minimum ABI-required alignment for
@@ -762,8 +771,13 @@ Align DataLayout::getABIIntegerTypeAlignment(unsigned BitWidth) const {
   return getAlignmentInfo(INTEGER_ALIGN, BitWidth, true, nullptr);
 }
 
+/// TODO: Remove this function once the transition to Align is over.
 unsigned DataLayout::getPrefTypeAlignment(Type *Ty) const {
-  return getAlignment(Ty, false).value();
+  return getPrefTypeAlign(Ty).value();
+}
+
+Align DataLayout::getPrefTypeAlign(Type *Ty) const {
+  return getAlignment(Ty, false);
 }
 
 IntegerType *DataLayout::getIntPtrType(LLVMContext &C,

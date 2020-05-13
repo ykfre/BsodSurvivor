@@ -14,6 +14,7 @@
 #include "llvm/Config/config.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -1791,5 +1792,50 @@ static cl::bits<Enum> ExampleBits(
     cl::values(
       clEnumValN(Val1, "bits-val1", "The Val1 value"),
       clEnumValN(Val1, "bits-val2", "The Val2 value")));
+
+TEST(CommandLineTest, ConsumeAfterOnePositional) {
+  cl::ResetCommandLineParser();
+
+  // input [args]
+  StackOption<std::string, cl::opt<std::string>> Input(cl::Positional,
+                                                       cl::Required);
+  StackOption<std::string, cl::list<std::string>> ExtraArgs(cl::ConsumeAfter);
+
+  const char *Args[] = {"prog", "input", "arg1", "arg2"};
+
+  std::string Errs;
+  raw_string_ostream OS(Errs);
+  EXPECT_TRUE(cl::ParseCommandLineOptions(4, Args, StringRef(), &OS));
+  OS.flush();
+  EXPECT_EQ("input", Input);
+  EXPECT_TRUE(ExtraArgs.size() == 2);
+  EXPECT_TRUE(ExtraArgs[0] == "arg1");
+  EXPECT_TRUE(ExtraArgs[1] == "arg2");
+  EXPECT_TRUE(Errs.empty());
+}
+
+TEST(CommandLineTest, ConsumeAfterTwoPositionals) {
+  cl::ResetCommandLineParser();
+
+  // input1 input2 [args]
+  StackOption<std::string, cl::opt<std::string>> Input1(cl::Positional,
+                                                        cl::Required);
+  StackOption<std::string, cl::opt<std::string>> Input2(cl::Positional,
+                                                        cl::Required);
+  StackOption<std::string, cl::list<std::string>> ExtraArgs(cl::ConsumeAfter);
+
+  const char *Args[] = {"prog", "input1", "input2", "arg1", "arg2"};
+
+  std::string Errs;
+  raw_string_ostream OS(Errs);
+  EXPECT_TRUE(cl::ParseCommandLineOptions(5, Args, StringRef(), &OS));
+  OS.flush();
+  EXPECT_EQ("input1", Input1);
+  EXPECT_EQ("input2", Input2);
+  EXPECT_TRUE(ExtraArgs.size() == 2);
+  EXPECT_TRUE(ExtraArgs[0] == "arg1");
+  EXPECT_TRUE(ExtraArgs[1] == "arg2");
+  EXPECT_TRUE(Errs.empty());
+}
 
 } // anonymous namespace

@@ -8,7 +8,7 @@
 using size_t = __SIZE_TYPE__;
 
 void *malloc(size_t size);
-void *align_malloc(size_t size, unsigned short aligmnent);
+void *align_malloc(size_t size, unsigned short alignment);
 void *calloc(size_t num, size_t size);
 void *realloc(void *ptr, size_t size);
 void *align_realloc(void *ptr, size_t size, unsigned short alignment);
@@ -54,6 +54,6 @@ void arbitrary_call() {
   // we dont want every function to raise the warning even if malloc is in the name
   malloced_array(); // OK(2)
 
-  // completly unrelated function call to malloc
+  // completely unrelated function call to malloc
   newed_array(); // OK(3)
 }

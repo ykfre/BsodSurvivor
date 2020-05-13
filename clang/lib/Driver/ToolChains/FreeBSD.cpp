@@ -99,7 +99,8 @@ void freebsd::Assembler::ConstructJob(Compilation &C, const JobAction &JA,
   case llvm::Triple::sparcel:
   case llvm::Triple::sparcv9: {
     std::string CPU = getCPUName(Args, getToolChain().getTriple());
-    CmdArgs.push_back(sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
+    CmdArgs.push_back(
+        sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
     AddAssemblerKPIC(getToolChain(), Args, CmdArgs);
     break;
   }
@@ -170,11 +171,10 @@ void freebsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back("-dynamic-linker");
       CmdArgs.push_back("/libexec/ld-elf.so.1");
     }
-    if (ToolChain.getTriple().getOSMajorVersion() >= 9) {
-      if (Arch == llvm::Triple::arm || Arch == llvm::Triple::sparc ||
-          Arch == llvm::Triple::x86 || Arch == llvm::Triple::x86_64) {
+    const llvm::Triple &T = ToolChain.getTriple();
+    if (T.getOSMajorVersion() >= 9) {
+      if (Arch == llvm::Triple::arm || Arch == llvm::Triple::sparc || T.isX86())
         CmdArgs.push_back("--hash-style=both");
-      }
     }
     CmdArgs.push_back("--enable-new-dtags");
   }
@@ -276,7 +276,7 @@ void freebsd::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (D.isUsingLTO()) {
     assert(!Inputs.empty() && "Must have at least one input.");
-    AddGoldPlugin(ToolChain, Args, CmdArgs, Output, Inputs[0],
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs[0],
                   D.getLTOMode() == LTOK_Thin);
   }
 
@@ -387,6 +387,12 @@ unsigned FreeBSD::GetDefaultDwarfVersion() const {
   if (getTriple().getOSMajorVersion() < 12)
     return 2;
   return 4;
+}
+
+void FreeBSD::addLibCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                    llvm::opt::ArgStringList &CC1Args) const {
+  addSystemInclude(DriverArgs, CC1Args,
+                   getDriver().SysRoot + "/usr/include/c++/v1");
 }
 
 void FreeBSD::addLibStdCxxIncludePaths(

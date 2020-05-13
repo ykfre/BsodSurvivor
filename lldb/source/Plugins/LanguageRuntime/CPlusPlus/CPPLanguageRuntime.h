@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_CPPLanguageRuntime_h_
-#define liblldb_CPPLanguageRuntime_h_
+#ifndef LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H
+#define LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H
 
 #include <vector>
 
@@ -69,7 +69,7 @@ public:
   /// Obtain a ThreadPlan to get us into C++ constructs such as std::function.
   ///
   /// \param[in] thread
-  ///     Curent thrad of execution.
+  ///     Current thrad of execution.
   ///
   /// \param[in] stop_others
   ///     True if other threads should pause during execution.
@@ -95,4 +95,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_CPPLanguageRuntime_h_
+#endif // LLDB_SOURCE_PLUGINS_LANGUAGERUNTIME_CPLUSPLUS_CPPLANGUAGERUNTIME_H

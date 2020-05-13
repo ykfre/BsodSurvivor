@@ -124,6 +124,8 @@ class LLVM_LIBRARY_VISIBILITY X86TargetInfo : public TargetInfo {
   bool HasPTWRITE = false;
   bool HasINVPCID = false;
   bool HasENQCMD = false;
+  bool HasSERIALIZE = false;
+  bool HasTSXLDTRK = false;
 
 protected:
   /// Enumeration of all of the X86 CPUs supported by Clang.
@@ -166,6 +168,10 @@ public:
 
   ArrayRef<TargetInfo::AddlRegName> getGCCAddlRegNames() const override;
 
+  bool isSPRegName(StringRef RegName) const override {
+    return RegName.equals("esp") || RegName.equals("rsp");
+  }
+
   bool validateCpuSupports(StringRef Name) const override;
 
   bool validateCpuIs(StringRef Name) const override;
@@ -177,6 +183,8 @@ public:
   void getCPUSpecificCPUDispatchFeatures(
       StringRef Name,
       llvm::SmallVectorImpl<StringRef> &Features) const override;
+
+  Optional<unsigned> getCPUCacheLineSize() const override;
 
   bool validateAsmConstraint(const char *&Name,
                              TargetInfo::ConstraintInfo &info) const override;
@@ -427,6 +435,8 @@ public:
   }
 
   ArrayRef<Builtin::Info> getTargetBuiltins() const override;
+
+  bool hasExtIntType() const override { return true; }
 };
 
 class LLVM_LIBRARY_VISIBILITY NetBSDI386TargetInfo
@@ -729,6 +739,8 @@ public:
   }
 
   ArrayRef<Builtin::Info> getTargetBuiltins() const override;
+
+  bool hasExtIntType() const override { return true; }
 };
 
 // x86-64 Windows target

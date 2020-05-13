@@ -42,8 +42,8 @@ class AVRInst32<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 // A class for pseudo instructions.
-// Psuedo instructions are not real AVR instructions. The DAG stores
-// psuedo instructions which are replaced by real AVR instructions by
+// Pseudo instructions are not real AVR instructions. The DAG stores
+// pseudo instructions which are replaced by real AVR instructions by
 // AVRExpandPseudoInsts.cpp.
 //
 // For example, the ADDW (add wide, as in add 16 bit values) instruction
@@ -485,7 +485,7 @@ class F32BRk<bits<3> f, dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 //===----------------------------------------------------------------------===//
-// 32 bits direct mem instructions: <|1001|00fd|dddd|0000|kkkk|kkkk|kkkk|kkkk|> 
+// 32 bits direct mem instructions: <|1001|00fd|dddd|0000|kkkk|kkkk|kkkk|kkkk|>
 // f = secondary opcode = 1 bit
 // d = destination = 5 bits
 // k = constant address = 16 bits

@@ -7,9 +7,11 @@
 // CHECK-NEXT: alpha.clone.CloneChecker:IgnoredFilesPattern = ""
 // CHECK-NEXT: alpha.clone.CloneChecker:MinimumCloneComplexity = 50
 // CHECK-NEXT: alpha.clone.CloneChecker:ReportNormalClones = true
+// CHECK-NEXT: alpha.cplusplus.STLAlgorithmModeling:AggressiveStdFindModeling = false
 // CHECK-NEXT: alpha.security.MmapWriteExec:MmapProtExec = 0x04
 // CHECK-NEXT: alpha.security.MmapWriteExec:MmapProtRead = 0x01
 // CHECK-NEXT: alpha.security.taint.TaintPropagation:Config = ""
+// CHECK-NEXT: apply-fixits = false
 // CHECK-NEXT: avoid-suppressing-null-argument-paths = false
 // CHECK-NEXT: c++-allocator-inlining = true
 // CHECK-NEXT: c++-container-inlining = false
@@ -35,21 +37,27 @@
 // CHECK-NEXT: deadcode.DeadStores:WarnForDeadNestedAssignments = true
 // CHECK-NEXT: debug.AnalysisOrder:* = false
 // CHECK-NEXT: debug.AnalysisOrder:Bind = false
+// CHECK-NEXT: debug.AnalysisOrder:EndAnalysis = false
 // CHECK-NEXT: debug.AnalysisOrder:EndFunction = false
 // CHECK-NEXT: debug.AnalysisOrder:LiveSymbols = false
 // CHECK-NEXT: debug.AnalysisOrder:NewAllocator = false
 // CHECK-NEXT: debug.AnalysisOrder:PointerEscape = false
 // CHECK-NEXT: debug.AnalysisOrder:PostCall = false
 // CHECK-NEXT: debug.AnalysisOrder:PostStmtArraySubscriptExpr = false
+// CHECK-NEXT: debug.AnalysisOrder:PostStmtCXXConstructExpr = false
+// CHECK-NEXT: debug.AnalysisOrder:PostStmtCXXDeleteExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PostStmtCXXNewExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PostStmtCastExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PostStmtOffsetOfExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PreCall = false
 // CHECK-NEXT: debug.AnalysisOrder:PreStmtArraySubscriptExpr = false
+// CHECK-NEXT: debug.AnalysisOrder:PreStmtCXXConstructExpr = false
+// CHECK-NEXT: debug.AnalysisOrder:PreStmtCXXDeleteExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PreStmtCXXNewExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PreStmtCastExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:PreStmtOffsetOfExpr = false
 // CHECK-NEXT: debug.AnalysisOrder:RegionChanges = false
+// CHECK-NEXT: display-checker-name = true
 // CHECK-NEXT: display-ctu-progress = false
 // CHECK-NEXT: eagerly-assume = true
 // CHECK-NEXT: elide-constructors = true
@@ -57,7 +65,6 @@
 // CHECK-NEXT: experimental-enable-naive-ctu-analysis = false
 // CHECK-NEXT: exploration_strategy = unexplored_first_queue
 // CHECK-NEXT: faux-bodies = true
-// CHECK-NEXT: fixits-as-remarks = false
 // CHECK-NEXT: graph-trim-interval = 1000
 // CHECK-NEXT: inline-lambdas = true
 // CHECK-NEXT: ipa = dynamic-bifurcate
@@ -99,4 +106,4 @@
 // CHECK-NEXT: unroll-loops = false
 // CHECK-NEXT: widen-loops = false
 // CHECK-NEXT: [stats]
-// CHECK-NEXT: num-entries = 96
+// CHECK-NEXT: num-entries = 103

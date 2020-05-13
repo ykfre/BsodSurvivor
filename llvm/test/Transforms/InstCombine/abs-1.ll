@@ -569,3 +569,81 @@ define i1 @abs_must_be_positive(i32 %x) {
   ret i1 %c2
 }
 
+define i8 @abs_swapped(i8 %a) {
+; CHECK-LABEL: @abs_swapped(
+; CHECK-NEXT:    [[NEG:%.*]] = sub i8 0, [[A:%.*]]
+; CHECK-NEXT:    call void @extra_use(i8 [[NEG]])
+; CHECK-NEXT:    [[CMP1:%.*]] = icmp slt i8 [[A]], 0
+; CHECK-NEXT:    [[M1:%.*]] = select i1 [[CMP1]], i8 [[NEG]], i8 [[A]]
+; CHECK-NEXT:    ret i8 [[M1]]
+;
+  %neg = sub i8 0, %a
+  call void @extra_use(i8 %neg)
+  %cmp1 = icmp sgt i8 %a, 0
+  %m1 = select i1 %cmp1, i8 %a, i8 %neg
+  ret i8 %m1
+}
+
+define i8 @nabs_swapped(i8 %a) {
+; CHECK-LABEL: @nabs_swapped(
+; CHECK-NEXT:    [[NEG:%.*]] = sub i8 0, [[A:%.*]]
+; CHECK-NEXT:    call void @extra_use(i8 [[NEG]])
+; CHECK-NEXT:    [[CMP2:%.*]] = icmp slt i8 [[A]], 0
+; CHECK-NEXT:    [[M2:%.*]] = select i1 [[CMP2]], i8 [[A]], i8 [[NEG]]
+; CHECK-NEXT:    ret i8 [[M2]]
+;
+  %neg = sub i8 0, %a
+  call void @extra_use(i8 %neg)
+  %cmp2 = icmp sgt i8 %a, 0
+  %m2 = select i1 %cmp2, i8 %neg, i8 %a
+  ret i8 %m2
+}
+
+define i8 @abs_different_constants(i8 %a) {
+; CHECK-LABEL: @abs_different_constants(
+; CHECK-NEXT:    [[NEG:%.*]] = sub i8 0, [[A:%.*]]
+; CHECK-NEXT:    call void @extra_use(i8 [[NEG]])
+; CHECK-NEXT:    [[CMP1:%.*]] = icmp slt i8 [[A]], 0
+; CHECK-NEXT:    [[M1:%.*]] = select i1 [[CMP1]], i8 [[NEG]], i8 [[A]]
+; CHECK-NEXT:    ret i8 [[M1]]
+;
+  %neg = sub i8 0, %a
+  call void @extra_use(i8 %neg)
+  %cmp1 = icmp sgt i8 %a, -1
+  %m1 = select i1 %cmp1, i8 %a, i8 %neg
+  ret i8 %m1
+}
+
+define i8 @nabs_different_constants(i8 %a) {
+; CHECK-LABEL: @nabs_different_constants(
+; CHECK-NEXT:    [[NEG:%.*]] = sub i8 0, [[A:%.*]]
+; CHECK-NEXT:    call void @extra_use(i8 [[NEG]])
+; CHECK-NEXT:    [[CMP2:%.*]] = icmp slt i8 [[A]], 0
+; CHECK-NEXT:    [[M2:%.*]] = select i1 [[CMP2]], i8 [[A]], i8 [[NEG]]
+; CHECK-NEXT:    ret i8 [[M2]]
+;
+  %neg = sub i8 0, %a
+  call void @extra_use(i8 %neg)
+  %cmp2 = icmp sgt i8 %a, -1
+  %m2 = select i1 %cmp2, i8 %neg, i8 %a
+  ret i8 %m2
+}
+
+@g = external global i64
+
+; PR45539 - https://bugs.llvm.org/show_bug.cgi?id=45539
+
+define i64 @infinite_loop_constant_expression_abs(i64 %arg) {
+; CHECK-LABEL: @infinite_loop_constant_expression_abs(
+; CHECK-NEXT:    [[T:%.*]] = sub i64 ptrtoint (i64* @g to i64), [[ARG:%.*]]
+; CHECK-NEXT:    [[T1:%.*]] = icmp slt i64 [[T]], 0
+; CHECK-NEXT:    [[T2:%.*]] = sub nsw i64 0, [[T]]
+; CHECK-NEXT:    [[T3:%.*]] = select i1 [[T1]], i64 [[T2]], i64 [[T]]
+; CHECK-NEXT:    ret i64 [[T3]]
+;
+  %t = sub i64 ptrtoint (i64* @g to i64), %arg
+  %t1 = icmp slt i64 %t, 0
+  %t2 = sub nsw i64 0, %t
+  %t3 = select i1 %t1, i64 %t2, i64 %t
+  ret i64 %t3
+}

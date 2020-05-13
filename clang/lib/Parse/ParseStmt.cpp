@@ -105,6 +105,7 @@ Parser::ParseStatementOrDeclaration(StmtVector &Stmts,
 
   StmtResult Res = ParseStatementOrDeclarationAfterAttributes(
       Stmts, StmtCtx, TrailingElseLoc, Attrs);
+  MaybeDestroyTemplateIds();
 
   assert((Attrs.empty() || Res.isInvalid() || Res.isUsable()) &&
          "attributes on empty statement");
@@ -353,13 +354,13 @@ Retry:
 
   case tok::annot_pragma_fp_contract:
     ProhibitAttributes(Attrs);
-    Diag(Tok, diag::err_pragma_fp_contract_scope);
+    Diag(Tok, diag::err_pragma_file_or_compound_scope) << "fp_contract";
     ConsumeAnnotationToken();
     return StmtError();
 
   case tok::annot_pragma_fp:
     ProhibitAttributes(Attrs);
-    Diag(Tok, diag::err_pragma_fp_scope);
+    Diag(Tok, diag::err_pragma_file_or_compound_scope) << "clang fp";
     ConsumeAnnotationToken();
     return StmtError();
 
@@ -367,6 +368,12 @@ Retry:
     ProhibitAttributes(Attrs);
     HandlePragmaFEnvAccess();
     return StmtEmpty();
+
+  case tok::annot_pragma_float_control:
+    ProhibitAttributes(Attrs);
+    Diag(Tok, diag::err_pragma_file_or_compound_scope) << "float_control";
+    ConsumeAnnotationToken();
+    return StmtError();
 
   case tok::annot_pragma_opencl_extension:
     ProhibitAttributes(Attrs);
@@ -936,6 +943,9 @@ void Parser::ParseCompoundStatementLeadingPragmas() {
     case tok::annot_pragma_fenv_access:
       HandlePragmaFEnvAccess();
       break;
+    case tok::annot_pragma_float_control:
+      HandlePragmaFloatControl();
+      break;
     case tok::annot_pragma_ms_pointers_to_members:
       HandlePragmaMSPointersToMembers();
       break;
@@ -1014,9 +1024,9 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
                                 Tok.getLocation(),
                                 "in compound statement ('{}')");
 
-  // Record the state of the FP_CONTRACT pragma, restore on leaving the
+  // Record the state of the FPFeatures, restore on leaving the
   // compound statement.
-  Sema::FPContractStateRAII SaveFPContractState(Actions);
+  Sema::FPFeaturesStateRAII SaveFPContractState(Actions);
 
   InMessageExpressionRAIIObject InMessage(*this, false);
   BalancedDelimiterTracker T(*this, tok::l_brace);
@@ -1214,6 +1224,42 @@ struct MisleadingIndentationChecker {
     if (Kind == MSK_else && !ShouldSkip)
       P.MisleadingIndentationElseLoc = SL;
   }
+
+  /// Compute the column number will aligning tabs on TabStop (-ftabstop), this
+  /// gives the visual indentation of the SourceLocation.
+  static unsigned getVisualIndentation(SourceManager &SM, SourceLocation Loc) {
+    unsigned TabStop = SM.getDiagnostics().getDiagnosticOptions().TabStop;
+
+    unsigned ColNo = SM.getSpellingColumnNumber(Loc);
+    if (ColNo == 0 || TabStop == 1)
+      return ColNo;
+
+    std::pair<FileID, unsigned> FIDAndOffset = SM.getDecomposedLoc(Loc);
+
+    bool Invalid;
+    StringRef BufData = SM.getBufferData(FIDAndOffset.first, &Invalid);
+    if (Invalid)
+      return 0;
+
+    const char *EndPos = BufData.data() + FIDAndOffset.second;
+    // FileOffset are 0-based and Column numbers are 1-based
+    assert(FIDAndOffset.second + 1 >= ColNo &&
+           "Column number smaller than file offset?");
+
+    unsigned VisualColumn = 0; // Stored as 0-based column, here.
+    // Loop from beginning of line up to Loc's file position, counting columns,
+    // expanding tabs.
+    for (const char *CurPos = EndPos - (ColNo - 1); CurPos != EndPos;
+         ++CurPos) {
+      if (*CurPos == '\t')
+        // Advance visual column to next tabstop.
+        VisualColumn += (TabStop - VisualColumn % TabStop);
+      else
+        VisualColumn++;
+    }
+    return VisualColumn + 1;
+  }
+
   void Check() {
     Token Tok = P.getCurToken();
     if (P.getActions().getDiagnostics().isIgnored(
@@ -1230,16 +1276,18 @@ struct MisleadingIndentationChecker {
       P.MisleadingIndentationElseLoc = SourceLocation();
 
     SourceManager &SM = P.getPreprocessor().getSourceManager();
-    unsigned PrevColNum = SM.getSpellingColumnNumber(PrevLoc);
-    unsigned CurColNum = SM.getSpellingColumnNumber(Tok.getLocation());
-    unsigned StmtColNum = SM.getSpellingColumnNumber(StmtLoc);
+    unsigned PrevColNum = getVisualIndentation(SM, PrevLoc);
+    unsigned CurColNum = getVisualIndentation(SM, Tok.getLocation());
+    unsigned StmtColNum = getVisualIndentation(SM, StmtLoc);
 
     if (PrevColNum != 0 && CurColNum != 0 && StmtColNum != 0 &&
         ((PrevColNum > StmtColNum && PrevColNum == CurColNum) ||
-         !Tok.isAtStartOfLine()) && SM.getPresumedLineNumber(StmtLoc) !=
-          SM.getPresumedLineNumber(Tok.getLocation())) {
-      P.Diag(Tok.getLocation(), diag::warn_misleading_indentation)
-          << Kind;
+         !Tok.isAtStartOfLine()) &&
+        SM.getPresumedLineNumber(StmtLoc) !=
+            SM.getPresumedLineNumber(Tok.getLocation()) &&
+        (Tok.isNot(tok::identifier) ||
+         P.getPreprocessor().LookAhead(0).isNot(tok::colon))) {
+      P.Diag(Tok.getLocation(), diag::warn_misleading_indentation) << Kind;
       P.Diag(StmtLoc, diag::note_previous_statement);
     }
   }
@@ -1883,7 +1931,7 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
         if (ForRangeInfo.ParsedForRangeDecl()) {
           Diag(FirstPart.get() ? FirstPart.get()->getBeginLoc()
                                : ForRangeInfo.ColonLoc,
-               getLangOpts().CPlusPlus2a
+               getLangOpts().CPlusPlus20
                    ? diag::warn_cxx17_compat_for_range_init_stmt
                    : diag::ext_for_range_init_stmt)
               << (FirstPart.get() ? FirstPart.get()->getSourceRange()

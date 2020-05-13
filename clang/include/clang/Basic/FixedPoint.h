@@ -75,11 +75,11 @@ public:
   }
 
 private:
-  unsigned Width;
-  unsigned Scale;
-  bool IsSigned;
-  bool IsSaturated;
-  bool HasUnsignedPadding;
+  unsigned Width          : 16;
+  unsigned Scale          : 13;
+  unsigned IsSigned       : 1;
+  unsigned IsSaturated    : 1;
+  unsigned HasUnsignedPadding : 1;
 };
 
 /// The APFixedPoint class works similarly to APInt/APSInt in that it is a
@@ -165,7 +165,7 @@ class APFixedPoint {
   std::string toString() const {
     llvm::SmallString<40> S;
     toString(S);
-    return S.str();
+    return std::string(S.str());
   }
 
   // If LHS > RHS, return 1. If LHS == RHS, return 0. If LHS < RHS, return -1.

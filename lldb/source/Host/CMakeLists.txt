@@ -1,20 +1,14 @@
+if (APPLE AND LLVM_ENABLE_LOCAL_SUBMODULE_VISIBILITY)
+  # The arpa/inet.h header used in the files here is providing a miscompiled
+  # htonl function on macOS <= 10.15 when local submodule visibility is active.
+  # Disabling modules in this directory until this is is fixed.
+  # See rdar://problem/62886385
+  remove_module_flags()
+endif()
+
 macro(add_host_subdirectory group)
   list(APPEND HOST_SOURCES ${ARGN})
   source_group(${group} FILES ${ARGN})
-endmacro()
-
-# Removes all module flags from the current CMAKE_CXX_FLAGS. Used for
-# the Objective-C++ code in lldb which we don't want to build with modules.
-# Reasons for this are that modules with Objective-C++ would require that
-# all LLVM/Clang modules are Objective-C++ compatible (which they are likely
-# not) and we would have rebuild a second set of modules just for the few
-# Objective-C++ files in lldb (which slows down the build process).
-macro(remove_module_flags)
-  string(REGEX REPLACE "-fmodules-cache-path=[^ ]+" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "-fmodules-local-submodule-visibility" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "-fmodules" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "-gmodules" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REGEX REPLACE "-fcxx-modules" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endmacro()
 
 add_host_subdirectory(common
@@ -44,7 +38,6 @@ add_host_subdirectory(common
   common/SocketAddress.cpp
   common/Socket.cpp
   common/StringConvert.cpp
-  common/TaskPool.cpp
   common/TCPSocket.cpp
   common/Terminal.cpp
   common/ThreadLauncher.cpp
@@ -129,7 +122,7 @@ else()
 
   elseif (CMAKE_SYSTEM_NAME MATCHES "NetBSD")
     add_host_subdirectory(netbsd
-      netbsd/Host.cpp
+      netbsd/HostNetBSD.cpp
       netbsd/HostInfoNetBSD.cpp
       )
 
@@ -156,14 +149,17 @@ if (HAVE_LIBDL)
   list(APPEND EXTRA_LIBS ${CMAKE_DL_LIBS})
 endif()
 if (LLDB_ENABLE_LIBEDIT)
-  list(APPEND EXTRA_LIBS ${libedit_LIBRARIES})
+  list(APPEND EXTRA_LIBS ${LibEdit_LIBRARIES})
 endif()
 if (LLDB_ENABLE_LZMA)
   list(APPEND EXTRA_LIBS ${LIBLZMA_LIBRARIES})
 endif()
+if (WIN32)
+  list(APPEND LLDB_SYSTEM_LIBS psapi)
+endif ()
 
 if (LLDB_ENABLE_LIBEDIT)
-  list(APPEND LLDB_LIBEDIT_LIBS ${libedit_LIBRARIES})
+  list(APPEND LLDB_LIBEDIT_LIBS ${LibEdit_LIBRARIES})
   if (LLVM_BUILD_STATIC)
     list(APPEND LLDB_SYSTEM_LIBS gpm)
   endif()
@@ -184,5 +180,5 @@ add_lldb_library(lldbHost
   )
 
 if (LLDB_ENABLE_LIBEDIT)
-  target_include_directories(lldbHost PUBLIC ${libedit_INCLUDE_DIRS})
+  target_include_directories(lldbHost PUBLIC ${LibEdit_INCLUDE_DIRS})
 endif()

@@ -34,6 +34,7 @@
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
@@ -43,6 +44,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/SSAUpdater.h"
 #include <algorithm>
 #include <cassert>
@@ -197,6 +199,7 @@ class StructurizeCFG : public RegionPass {
   SmallVector<RegionNode *, 8> Order;
   BBSet Visited;
 
+  SmallVector<WeakVH, 8> AffectedPhis;
   BBPhiMap DeletedPhis;
   BB2BBVecMap AddedPhis;
 
@@ -212,11 +215,8 @@ class StructurizeCFG : public RegionPass {
   void orderNodes();
 
   Loop *getAdjustedLoop(RegionNode *RN);
-  unsigned getAdjustedLoopDepth(RegionNode *RN);
 
   void analyzeLoops(RegionNode *N);
-
-  Value *invert(Value *Condition);
 
   Value *buildCondition(BranchInst *Term, unsigned Idx, bool Invert);
 
@@ -231,6 +231,8 @@ class StructurizeCFG : public RegionPass {
   void addPhiValues(BasicBlock *From, BasicBlock *To);
 
   void setPhiValues();
+
+  void simplifyAffectedPhis();
 
   void killTerminator(BasicBlock *BB);
 
@@ -321,65 +323,108 @@ Loop *StructurizeCFG::getAdjustedLoop(RegionNode *RN) {
   return LI->getLoopFor(RN->getEntry());
 }
 
-/// Use the exit block to determine the loop depth if RN is a SubRegion.
-unsigned StructurizeCFG::getAdjustedLoopDepth(RegionNode *RN) {
-  if (RN->isSubRegion()) {
-    Region *SubR = RN->getNodeAs<Region>();
-    return LI->getLoopDepth(SubR->getExit());
-  }
-
-  return LI->getLoopDepth(RN->getEntry());
-}
-
-/// Build up the general order of nodes
+/// Build up the general order of nodes, by performing a topology sort of the
+/// parent region's nodes, while ensuring that there is no outer loop node
+/// between any two inner loop nodes.
 void StructurizeCFG::orderNodes() {
-  ReversePostOrderTraversal<Region*> RPOT(ParentRegion);
-  SmallDenseMap<Loop*, unsigned, 8> LoopBlocks;
+  SmallVector<RegionNode *, 32> POT;
+  SmallDenseMap<Loop *, unsigned, 8> LoopSizes;
+  for (RegionNode *RN : post_order(ParentRegion)) {
+    POT.push_back(RN);
 
-  // The reverse post-order traversal of the list gives us an ordering close
-  // to what we want.  The only problem with it is that sometimes backedges
-  // for outer loops will be visited before backedges for inner loops.
-  for (RegionNode *RN : RPOT) {
+    // Accumulate the number of nodes inside the region that belong to a loop.
     Loop *Loop = getAdjustedLoop(RN);
-    ++LoopBlocks[Loop];
+    ++LoopSizes[Loop];
   }
+  // A quick exit for the case where all nodes belong to the same loop (or no
+  // loop at all).
+  if (LoopSizes.size() <= 1U) {
+    Order.assign(POT.begin(), POT.end());
+    return;
+  }
+  Order.resize(POT.size());
 
-  unsigned CurrentLoopDepth = 0;
+  // The post-order traversal of the list gives us an ordering close to what we
+  // want. The only problem with it is that sometimes backedges for outer loops
+  // will be visited before backedges for inner loops. So now we fix that by
+  // inserting the nodes in order, while making sure that encountered inner loop
+  // are complete before their parents (outer loops).
+
+  SmallVector<Loop *, 8> WorkList;
+  // Get the size of the outermost region (the nodes that don't belong to any
+  // loop inside ParentRegion).
+  unsigned ZeroCurrentLoopSize = 0U;
+  auto LSI = LoopSizes.find(nullptr);
+  unsigned *CurrentLoopSize =
+      LSI != LoopSizes.end() ? &LSI->second : &ZeroCurrentLoopSize;
   Loop *CurrentLoop = nullptr;
-  for (auto I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
-    RegionNode *RN = cast<RegionNode>(*I);
-    unsigned LoopDepth = getAdjustedLoopDepth(RN);
 
-    if (is_contained(Order, *I))
-      continue;
+  // The "skipped" list is actually located at the (reversed) beginning of the
+  // POT. This saves us the use of an intermediate container.
+  // Note that there is always enough room, for the skipped nodes, before the
+  // current location, as we have just passed at least that amount of nodes.
 
-    if (LoopDepth < CurrentLoopDepth) {
-      // Make sure we have visited all blocks in this loop before moving back to
-      // the outer loop.
-
-      auto LoopI = I;
-      while (unsigned &BlockCount = LoopBlocks[CurrentLoop]) {
-        LoopI++;
-        if (getAdjustedLoop(cast<RegionNode>(*LoopI)) == CurrentLoop) {
-          --BlockCount;
-          Order.push_back(*LoopI);
-        }
-      }
+  auto Begin = POT.rbegin();
+  auto I = Begin, SkippedEnd = Begin;
+  auto O = Order.rbegin(), OE = Order.rend();
+  while (O != OE) {
+    // If we have any skipped nodes, then erase the gap between the end of the
+    // "skipped" list, and the current location.
+    if (SkippedEnd != Begin) {
+      POT.erase(I.base(), SkippedEnd.base());
+      I = SkippedEnd = Begin = POT.rbegin();
     }
 
-    CurrentLoop = getAdjustedLoop(RN);
-    if (CurrentLoop)
-      LoopBlocks[CurrentLoop]--;
+    // Keep processing outer loops, in order (from inner most, to outer).
+    if (!WorkList.empty()) {
+      CurrentLoop = WorkList.pop_back_val();
+      CurrentLoopSize = &LoopSizes.find(CurrentLoop)->second;
+    }
 
-    CurrentLoopDepth = LoopDepth;
-    Order.push_back(*I);
+    // Keep processing loops while only going deeper (into inner loops).
+    do {
+      assert(I != POT.rend());
+      RegionNode *RN = *I++;
+
+      Loop *L = getAdjustedLoop(RN);
+      if (L != CurrentLoop) {
+        // If L is a loop inside CurrentLoop, then CurrentLoop must be the
+        // parent of L.
+        // To prove this, we will contradict the opposite:
+        //   Let P be the parent of L. If CurrentLoop is the parent of P, then
+        //   the header of P must have been processed already, as it must
+        //   dominate the other blocks of P (otherwise P is an irreducible loop,
+        //   and won't be recorded in the LoopInfo), especially L (inside). But
+        //   then CurrentLoop must have been updated to P at the time of
+        //   processing the header of P, which conflicts with the assumption
+        //   that CurrentLoop is not P.
+
+        // If L is not a loop inside CurrentLoop, then skip RN.
+        if (!L || L->getParentLoop() != CurrentLoop) {
+          // Skip the node by pushing it to the end of the "skipped" list.
+          *SkippedEnd++ = RN;
+          continue;
+        }
+
+        // If we still haven't processed all the nodes that belong to
+        // CurrentLoop, then make sure we come back later, to finish the job, by
+        // pushing it to the WorkList.
+        if (*CurrentLoopSize)
+          WorkList.push_back(CurrentLoop);
+
+        CurrentLoop = L;
+        CurrentLoopSize = &LoopSizes.find(CurrentLoop)->second;
+      }
+
+      assert(O != OE);
+      *O++ = RN;
+
+      // If we have finished processing the current loop, then we are done here.
+      --*CurrentLoopSize;
+    } while (*CurrentLoopSize);
   }
-
-  // This pass originally used a post-order traversal and then operated on
-  // the list in reverse. Now that we are using a reverse post-order traversal
-  // rather than re-working the whole pass to operate on the list in order,
-  // we just reverse the list and continue to operate on it in reverse.
-  std::reverse(Order.begin(), Order.end());
+  assert(WorkList.empty());
+  assert(SkippedEnd == Begin);
 }
 
 /// Determine the end of the loops
@@ -401,39 +446,6 @@ void StructurizeCFG::analyzeLoops(RegionNode *N) {
   }
 }
 
-/// Invert the given condition
-Value *StructurizeCFG::invert(Value *Condition) {
-  // First: Check if it's a constant
-  if (Constant *C = dyn_cast<Constant>(Condition))
-    return ConstantExpr::getNot(C);
-
-  // Second: If the condition is already inverted, return the original value
-  Value *NotCondition;
-  if (match(Condition, m_Not(m_Value(NotCondition))))
-    return NotCondition;
-
-  if (Instruction *Inst = dyn_cast<Instruction>(Condition)) {
-    // Third: Check all the users for an invert
-    BasicBlock *Parent = Inst->getParent();
-    for (User *U : Condition->users())
-      if (Instruction *I = dyn_cast<Instruction>(U))
-        if (I->getParent() == Parent && match(I, m_Not(m_Specific(Condition))))
-          return I;
-
-    // Last option: Create a new instruction
-    return BinaryOperator::CreateNot(Condition, "", Parent->getTerminator());
-  }
-
-  if (Argument *Arg = dyn_cast<Argument>(Condition)) {
-    BasicBlock &EntryBlock = Arg->getParent()->getEntryBlock();
-    return BinaryOperator::CreateNot(Condition,
-                                     Arg->getName() + ".inv",
-                                     EntryBlock.getTerminator());
-  }
-
-  llvm_unreachable("Unhandled condition to invert");
-}
-
 /// Build the condition for one edge
 Value *StructurizeCFG::buildCondition(BranchInst *Term, unsigned Idx,
                                       bool Invert) {
@@ -442,7 +454,7 @@ Value *StructurizeCFG::buildCondition(BranchInst *Term, unsigned Idx,
     Cond = Term->getCondition();
 
     if (Idx != (unsigned)Invert)
-      Cond = invert(Cond);
+      Cond = invertCondition(Cond);
   }
   return Cond;
 }
@@ -585,9 +597,14 @@ void StructurizeCFG::insertConditions(bool Loops) {
 void StructurizeCFG::delPhiValues(BasicBlock *From, BasicBlock *To) {
   PhiMap &Map = DeletedPhis[To];
   for (PHINode &Phi : To->phis()) {
+    bool Recorded = false;
     while (Phi.getBasicBlockIndex(From) != -1) {
       Value *Deleted = Phi.removeIncomingValue(From, false);
       Map[&Phi].push_back(std::make_pair(From, Deleted));
+      if (!Recorded) {
+        AffectedPhis.push_back(&Phi);
+        Recorded = true;
+      }
     }
   }
 }
@@ -632,28 +649,29 @@ void StructurizeCFG::setPhiValues() {
 
       for (BasicBlock *FI : From)
         Phi->setIncomingValueForBlock(FI, Updater.GetValueAtEndOfBlock(FI));
+      AffectedPhis.push_back(Phi);
     }
 
     DeletedPhis.erase(To);
   }
   assert(DeletedPhis.empty());
 
-  // Simplify any phis inserted by the SSAUpdater if possible
+  AffectedPhis.append(InsertedPhis.begin(), InsertedPhis.end());
+}
+
+void StructurizeCFG::simplifyAffectedPhis() {
   bool Changed;
   do {
     Changed = false;
-
     SimplifyQuery Q(Func->getParent()->getDataLayout());
     Q.DT = DT;
-    for (size_t i = 0; i < InsertedPhis.size(); ++i) {
-      PHINode *Phi = InsertedPhis[i];
-      if (Value *V = SimplifyInstruction(Phi, Q)) {
-        Phi->replaceAllUsesWith(V);
-        Phi->eraseFromParent();
-        InsertedPhis[i] = InsertedPhis.back();
-        InsertedPhis.pop_back();
-        i--;
-        Changed = true;
+    for (WeakVH VH : AffectedPhis) {
+      if (auto Phi = dyn_cast_or_null<PHINode>(VH)) {
+        if (auto NewValue = SimplifyInstruction(Phi, Q)) {
+          Phi->replaceAllUsesWith(NewValue);
+          Phi->eraseFromParent();
+          Changed = true;
+        }
       }
     }
   } while (Changed);
@@ -886,6 +904,7 @@ void StructurizeCFG::createFlow() {
   BasicBlock *Exit = ParentRegion->getExit();
   bool EntryDominatesExit = DT->dominates(ParentRegion->getEntry(), Exit);
 
+  AffectedPhis.clear();
   DeletedPhis.clear();
   AddedPhis.clear();
   Conditions.clear();
@@ -1044,6 +1063,7 @@ bool StructurizeCFG::runOnRegion(Region *R, RGPassManager &RGM) {
   insertConditions(false);
   insertConditions(true);
   setPhiValues();
+  simplifyAffectedPhis();
   rebuildSSA();
 
   // Cleanup

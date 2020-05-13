@@ -39,7 +39,6 @@ add_lldb_library(lldbUtility
   ReproducerInstrumentation.cpp
   Scalar.cpp
   SelectHelper.cpp
-  SharingPtr.cpp
   State.cpp
   Status.cpp
   Stream.cpp
@@ -58,6 +57,7 @@ add_lldb_library(lldbUtility
   UserIDResolver.cpp
   VASprintf.cpp
   VMRange.cpp
+  XcodeSDK.cpp
 
   LINK_LIBS
     ${LLDB_SYSTEM_LIBS}

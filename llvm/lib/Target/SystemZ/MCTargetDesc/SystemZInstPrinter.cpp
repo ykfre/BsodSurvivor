@@ -55,10 +55,10 @@ void SystemZInstPrinter::printOperand(const MCOperand &MO, const MCAsmInfo *MAI,
     llvm_unreachable("Invalid operand");
 }
 
-void SystemZInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                                   StringRef Annot,
-                                   const MCSubtargetInfo &STI) {
-  printInstruction(MI, O);
+void SystemZInstPrinter::printInst(const MCInst *MI, uint64_t Address,
+                                   StringRef Annot, const MCSubtargetInfo &STI,
+                                   raw_ostream &O) {
+  printInstruction(MI, Address, O);
   printAnnotation(O, Annot);
 }
 
@@ -155,7 +155,8 @@ void SystemZInstPrinter::printPCRelOperand(const MCInst *MI, int OpNum,
     MO.getExpr()->print(O, &MAI);
 }
 
-void SystemZInstPrinter::printPCRelTLSOperand(const MCInst *MI, int OpNum,
+void SystemZInstPrinter::printPCRelTLSOperand(const MCInst *MI,
+                                              uint64_t Address, int OpNum,
                                               raw_ostream &O) {
   // Output the PC-relative operand.
   printPCRelOperand(MI, OpNum, O);

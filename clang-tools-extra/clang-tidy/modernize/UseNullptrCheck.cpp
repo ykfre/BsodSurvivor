@@ -33,7 +33,7 @@ AST_MATCHER(Type, sugaredNullptrType) {
 /// Create a matcher that finds implicit casts as well as the head of a
 /// sequence of zero or more nested explicit casts that have an implicit cast
 /// to null within.
-/// Finding sequences of explict casts is necessary so that an entire sequence
+/// Finding sequences of explicit casts is necessary so that an entire sequence
 /// can be replaced instead of just the inner-most implicit cast.
 StatementMatcher makeCastSequenceMatcher() {
   StatementMatcher ImplicitCastToNull = implicitCastExpr(
@@ -307,7 +307,7 @@ private:
   /// SourceLocation pointing within the definition of another macro.
   bool getMacroAndArgLocations(SourceLocation Loc, SourceLocation &ArgLoc,
                                SourceLocation &MacroLoc) {
-    assert(Loc.isMacroID() && "Only reasonble to call this on macros");
+    assert(Loc.isMacroID() && "Only reasonable to call this on macros");
 
     ArgLoc = Loc;
 
@@ -473,11 +473,7 @@ void UseNullptrCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
 }
 
 void UseNullptrCheck::registerMatchers(MatchFinder *Finder) {
-  // Only register the matcher for C++. Because this checker is used for
-  // modernization, it is reasonable to run it on any C++ standard with the
-  // assumption the user is trying to modernize their codebase.
-  if (getLangOpts().CPlusPlus)
-    Finder->addMatcher(makeCastSequenceMatcher(), this);
+  Finder->addMatcher(makeCastSequenceMatcher(), this);
 }
 
 void UseNullptrCheck::check(const MatchFinder::MatchResult &Result) {

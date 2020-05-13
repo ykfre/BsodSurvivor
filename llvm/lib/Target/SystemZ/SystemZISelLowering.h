@@ -58,8 +58,7 @@ enum NodeType : unsigned {
   ICMP,
 
   // Floating-point comparisons.  The two operands are the values to compare.
-  // Regular and strict (quiet and signaling) versions.
-  FCMP, STRICT_FCMP, STRICT_FCMPS,
+  FCMP,
 
   // Test under mask.  The first operand is ANDed with the second operand
   // and the condition codes are set on the result.  The third operand is
@@ -249,10 +248,9 @@ enum NodeType : unsigned {
   // Compare floating-point vector operands 0 and 1 to produce the usual 0/-1
   // vector result.  VFCMPE is for "ordered and equal", VFCMPH for "ordered and
   // greater than" and VFCMPHE for "ordered and greater than or equal to".
-  // Regular and strict (quiet and signaling) versions.
-  VFCMPE, STRICT_VFCMPE, STRICT_VFCMPES,
-  VFCMPH, STRICT_VFCMPH, STRICT_VFCMPHS,
-  VFCMPHE, STRICT_VFCMPHE, STRICT_VFCMPHES,
+  VFCMPE,
+  VFCMPH,
+  VFCMPHE,
 
   // Likewise, but also set the condition codes on the result.
   VFCMPES,
@@ -263,12 +261,12 @@ enum NodeType : unsigned {
   VFTCI,
 
   // Extend the even f32 elements of vector operand 0 to produce a vector
-  // of f64 elements.  Regular and strict versions.
-  VEXTEND, STRICT_VEXTEND,
+  // of f64 elements.
+  VEXTEND,
 
   // Round the f64 elements of vector operand 0 to f32s and store them in the
-  // even elements of the result.  Regular and strict versions.
-  VROUND, STRICT_VROUND,
+  // even elements of the result.
+  VROUND,
 
   // AND the two vector operands together and set CC based on the result.
   VTM,
@@ -291,6 +289,24 @@ enum NodeType : unsigned {
   // Operand 0: the value to test
   // Operand 1: the bit mask
   TDC,
+
+  // Strict variants of scalar floating-point comparisons.
+  // Quiet and signaling versions.
+  STRICT_FCMP = ISD::FIRST_TARGET_STRICTFP_OPCODE,
+  STRICT_FCMPS,
+
+  // Strict variants of vector floating-point comparisons.
+  // Quiet and signaling versions.
+  STRICT_VFCMPE,
+  STRICT_VFCMPH,
+  STRICT_VFCMPHE,
+  STRICT_VFCMPES,
+  STRICT_VFCMPHS,
+  STRICT_VFCMPHES,
+
+  // Strict variants of VEXTEND and VROUND.
+  STRICT_VEXTEND,
+  STRICT_VROUND,
 
   // Wrappers around the inner loop of an 8- or 16-bit ATOMIC_SWAP or
   // ATOMIC_LOAD_<op>.
@@ -377,6 +393,8 @@ public:
   explicit SystemZTargetLowering(const TargetMachine &TM,
                                  const SystemZSubtarget &STI);
 
+  bool useSoftFloat() const override;
+
   // Override TargetLowering.
   MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
     return MVT::i32;
@@ -421,6 +439,14 @@ public:
                                       bool *Fast) const override;
   bool isTruncateFree(Type *, Type *) const override;
   bool isTruncateFree(EVT, EVT) const override;
+
+  bool shouldFormOverflowOp(unsigned Opcode, EVT VT,
+                            bool MathUsed) const override {
+    // Form add and sub with overflow intrinsics regardless of any extra
+    // users of the math result.
+    return VT == MVT::i32 || VT == MVT::i64;
+  }
+
   const char *getTargetNodeName(unsigned Opcode) const override;
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
@@ -455,16 +481,19 @@ public:
     return TargetLowering::getInlineAsmMemConstraint(ConstraintCode);
   }
 
+  Register getRegisterByName(const char *RegName, LLT VT,
+                             const MachineFunction &MF) const override;
+
   /// If a physical register, this returns the register that receives the
   /// exception address on entry to an EH pad.
-  unsigned
+  Register
   getExceptionPointerRegister(const Constant *PersonalityFn) const override {
     return SystemZ::R6D;
   }
 
   /// If a physical register, this returns the register that receives the
   /// exception typeid on entry to a landing pad.
-  unsigned
+  Register
   getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
     return SystemZ::R7D;
   }
@@ -613,11 +642,13 @@ private:
   SDValue combineJOIN_DWORDS(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineFP_ROUND(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineFP_EXTEND(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineINT_TO_FP(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineBSWAP(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineBR_CCMASK(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSELECT_CCMASK(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineGET_CCMASK(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineIntDIVREM(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineINTRINSIC(SDNode *N, DAGCombinerInfo &DCI) const;
 
   SDValue unwrapAddress(SDValue N) const override;
 
@@ -661,7 +692,8 @@ private:
                                          MachineBasicBlock *MBB,
                                          unsigned Opcode) const;
 
-  MachineMemOperand::Flags getMMOFlags(const Instruction &I) const override;
+  MachineMemOperand::Flags
+  getTargetMMOFlags(const Instruction &I) const override;
   const TargetRegisterClass *getRepRegClassFor(MVT VT) const override;
 };
 

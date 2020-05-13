@@ -1,4 +1,4 @@
-//===-- DWARFExpression.cpp -------------------------------------*- C++ -*-===//
+//===-- DWARFExpression.cpp -----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -54,29 +54,6 @@ ReadAddressFromDebugAddrSection(const DWARFUnit *dwarf_cu,
   return LLDB_INVALID_ADDRESS;
 }
 
-/// Return the location list parser for the given format.
-static std::unique_ptr<llvm::DWARFLocationTable>
-GetLocationTable(DWARFExpression::LocationListFormat format, const DataExtractor &data) {
-  llvm::DWARFDataExtractor llvm_data(
-      toStringRef(data.GetData()),
-      data.GetByteOrder() == lldb::eByteOrderLittle, data.GetAddressByteSize());
-
-  switch (format) {
-  case DWARFExpression::NonLocationList:
-    return nullptr;
-  // DWARF<=4 .debug_loc
-  case DWARFExpression::RegularLocationList:
-    return std::make_unique<llvm::DWARFDebugLoc>(llvm_data);
-  // Non-standard DWARF 4 extension (fission) .debug_loc.dwo
-  case DWARFExpression::SplitDwarfLocationList:
-  // DWARF 5 .debug_loclists(.dwo)
-  case DWARFExpression::LocLists:
-    return std::make_unique<llvm::DWARFDebugLoclists>(
-        llvm_data, format == DWARFExpression::LocLists ? 5 : 4);
-  }
-  llvm_unreachable("Invalid LocationListFormat!");
-}
-
 // DWARFExpression constructor
 DWARFExpression::DWARFExpression()
     : m_module_wp(), m_data(), m_dwarf_cu(nullptr),
@@ -111,8 +88,7 @@ void DWARFExpression::UpdateValue(uint64_t const_value,
 void DWARFExpression::DumpLocation(Stream *s, const DataExtractor &data,
                                    lldb::DescriptionLevel level,
                                    ABI *abi) const {
-  llvm::DWARFExpression(data.GetAsLLVM(), llvm::dwarf::DWARF_VERSION,
-                        data.GetAddressByteSize())
+  llvm::DWARFExpression(data.GetAsLLVM(), data.GetAddressByteSize())
       .print(s->AsRawOstream(), abi ? &abi->GetMCRegisterInfo() : nullptr,
              nullptr);
 }
@@ -157,18 +133,19 @@ void DWARFExpression::GetDescription(Stream *s, lldb::DescriptionLevel level,
   if (IsLocationList()) {
     // We have a location list
     lldb::offset_t offset = 0;
-    std::unique_ptr<llvm::DWARFLocationTable> loctable_up = GetLocationTable(
-        m_dwarf_cu->GetSymbolFileDWARF().GetLocationListFormat(), m_data);
-    if (!loctable_up)
-      return;
+    std::unique_ptr<llvm::DWARFLocationTable> loctable_up =
+        m_dwarf_cu->GetLocationTable(m_data);
 
     llvm::MCRegisterInfo *MRI = abi ? &abi->GetMCRegisterInfo() : nullptr;
-
+    llvm::DIDumpOptions DumpOpts;
+    DumpOpts.RecoverableErrorHandler = [&](llvm::Error E) {
+      s->AsRawOstream() << "error: " << toString(std::move(E));
+    };
     loctable_up->dumpLocationList(
         &offset, s->AsRawOstream(),
         llvm::object::SectionedAddress{m_loclist_addresses->cu_file_addr}, MRI,
         DummyDWARFObject(m_data.GetByteOrder() == eByteOrderLittle), nullptr,
-        llvm::DIDumpOptions(), s->GetIndentLevel() + 2);
+        DumpOpts, s->GetIndentLevel() + 2);
   } else {
     // We have a normal location that contains DW_OP location opcodes
     DumpLocation(s, m_data, level, abi);
@@ -958,7 +935,7 @@ bool DWARFExpression::Evaluate(
   Value tmp;
   uint32_t reg_num;
 
-  /// Insertion point for evaluating multi-piece expression.
+  /// Insertion point for evaluating multi-piece expression.
   uint64_t op_piece_offset = 0;
   Value pieces; // Used for DW_OP_piece
 
@@ -1208,7 +1185,7 @@ bool DWARFExpression::Evaluate(
                 break;
               default:
                 stack.back().GetScalar() =
-                    addr_data.GetPointer(&addr_data_offset);
+                    addr_data.GetAddress(&addr_data_offset);
               }
               stack.back().ClearContext();
             } else {
@@ -2096,6 +2073,10 @@ bool DWARFExpression::Evaluate(
           // not available. Fill with zeros for now by resizing the data and
           // appending it
           curr_piece.ResizeData(piece_byte_size);
+          // Note that "0" is not a correct value for the unknown bits.
+          // It would be better to also return a mask of valid bits together
+          // with the expression result, so the debugger can print missing
+          // members as "<optimized out>" or something.
           ::memset(curr_piece.GetBuffer().GetBytes(), 0, piece_byte_size);
           pieces.AppendDataToHostBuffer(curr_piece);
         } else {
@@ -2153,7 +2134,8 @@ bool DWARFExpression::Evaluate(
           case Value::eValueTypeScalar: {
             uint32_t bit_size = piece_byte_size * 8;
             uint32_t bit_offset = 0;
-            if (!curr_piece_source_value.GetScalar().ExtractBitfield(
+            Scalar &scalar = curr_piece_source_value.GetScalar();
+            if (!scalar.ExtractBitfield(
                     bit_size, bit_offset)) {
               if (error_ptr)
                 error_ptr->SetErrorStringWithFormat(
@@ -2164,7 +2146,14 @@ bool DWARFExpression::Evaluate(
                         .GetByteSize());
               return false;
             }
-            curr_piece = curr_piece_source_value;
+            // Create curr_piece with bit_size. By default Scalar
+            // grows to the nearest host integer type.
+            llvm::APInt fail_value(1, 0, false);
+            llvm::APInt ap_int = scalar.UInt128(fail_value);
+            assert(ap_int.getBitWidth() >= bit_size);
+            llvm::ArrayRef<uint64_t> buf{ap_int.getRawData(),
+                                         ap_int.getNumWords()};
+            curr_piece.GetScalar() = Scalar(llvm::APInt(bit_size, buf));
           } break;
 
           case Value::eValueTypeVector: {
@@ -2186,7 +2175,7 @@ bool DWARFExpression::Evaluate(
           if (op_piece_offset == 0) {
             // This is the first piece, we should push it back onto the stack
             // so subsequent pieces will be able to access this piece and add
-            // to it
+            // to it.
             if (pieces.AppendDataToHostBuffer(curr_piece) == 0) {
               if (error_ptr)
                 error_ptr->SetErrorString("failed to append piece data");
@@ -2194,7 +2183,7 @@ bool DWARFExpression::Evaluate(
             }
           } else {
             // If this is the second or later piece there should be a value on
-            // the stack
+            // the stack.
             if (pieces.GetBuffer().GetByteSize() != op_piece_offset) {
               if (error_ptr)
                 error_ptr->SetErrorStringWithFormat(
@@ -2210,8 +2199,8 @@ bool DWARFExpression::Evaluate(
               return false;
             }
           }
-          op_piece_offset += piece_byte_size;
         }
+        op_piece_offset += piece_byte_size;
       }
     } break;
 
@@ -2332,6 +2321,12 @@ bool DWARFExpression::Evaluate(
     // rather is a constant value.  The value from the top of the stack is the
     // value to be used.  This is the actual object value and not the location.
     case DW_OP_stack_value:
+      if (stack.empty()) {
+        if (error_ptr)
+          error_ptr->SetErrorString(
+              "Expression stack needs at least 1 item for DW_OP_stack_value.");
+        return false;
+      }
       stack.back().SetValueType(Value::eValueTypeScalar);
       break;
 
@@ -2812,10 +2807,8 @@ DWARFExpression::GetLocationExpression(addr_t load_function_start,
                                        addr_t addr) const {
   Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 
-  std::unique_ptr<llvm::DWARFLocationTable> loctable_up = GetLocationTable(
-      m_dwarf_cu->GetSymbolFileDWARF().GetLocationListFormat(), m_data);
-  if (!loctable_up)
-    return llvm::None;
+  std::unique_ptr<llvm::DWARFLocationTable> loctable_up =
+      m_dwarf_cu->GetLocationTable(m_data);
   llvm::Optional<DataExtractor> result;
   uint64_t offset = 0;
   auto lookup_addr =

@@ -52,7 +52,6 @@ FunctionPass *createWebAssemblyExplicitLocals();
 FunctionPass *createWebAssemblyLowerBrUnless();
 FunctionPass *createWebAssemblyRegNumbering();
 FunctionPass *createWebAssemblyPeephole();
-FunctionPass *createWebAssemblyCallIndirectFixup();
 
 // PassRegistry initialization declarations.
 void initializeWebAssemblyAddMissingPrototypesPass(PassRegistry &);
@@ -77,10 +76,18 @@ void initializeWebAssemblyExplicitLocalsPass(PassRegistry &);
 void initializeWebAssemblyLowerBrUnlessPass(PassRegistry &);
 void initializeWebAssemblyRegNumberingPass(PassRegistry &);
 void initializeWebAssemblyPeepholePass(PassRegistry &);
-void initializeWebAssemblyCallIndirectFixupPass(PassRegistry &);
 
 namespace WebAssembly {
-enum TargetIndex { TI_LOCAL_START, TI_GLOBAL_START, TI_OPERAND_STACK_START };
+enum TargetIndex {
+  // Followed by a local index (ULEB).
+  TI_LOCAL,
+  // Followed by an absolute global index (ULEB). DEPRECATED.
+  TI_GLOBAL_FIXED,
+  TI_OPERAND_STACK,
+  // Followed by a compilation unit relative global index (uint32_t)
+  // that will have an associated relocation.
+  TI_GLOBAL_RELOC
+};
 } // end namespace WebAssembly
 
 } // end namespace llvm

@@ -33,13 +33,14 @@ public:
 
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MI,
-                                 const std::vector<CalleeSavedInfo> &CSI,
+                                 ArrayRef<CalleeSavedInfo> CSI,
                                  const TargetRegisterInfo *TRI) const override;
 
-  bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-                                  MachineBasicBlock::iterator MI,
-                                  std::vector<CalleeSavedInfo> &CSI,
-                                  const TargetRegisterInfo *TRI) const override;
+  bool
+  restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator MI,
+                              MutableArrayRef<CalleeSavedInfo> CSI,
+                              const TargetRegisterInfo *TRI) const override;
 
   bool keepFramePointer(const MachineFunction &MF) const override;
 
@@ -49,9 +50,9 @@ public:
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   bool canSimplifyCallFramePseudos(const MachineFunction &MF) const override;
   int getFrameIndexReference(const MachineFunction &MF, int FI,
-                             unsigned &FrameReg) const override;
+                             Register &FrameReg) const override;
   int ResolveFrameIndexReference(const MachineFunction &MF, int FI,
-                                 unsigned &FrameReg, int SPAdj) const;
+                                 Register &FrameReg, int SPAdj) const;
 
   void getCalleeSaves(const MachineFunction &MF,
                       BitVector &SavedRegs) const override;
@@ -73,14 +74,13 @@ public:
 
 private:
   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                    const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
-                    unsigned StrOpc, bool NoGap,
-                    bool(*Func)(unsigned, bool), unsigned NumAlignedDPRCS2Regs,
-                    unsigned MIFlags = 0) const;
+                    ArrayRef<CalleeSavedInfo> CSI, unsigned StmOpc,
+                    unsigned StrOpc, bool NoGap, bool (*Func)(unsigned, bool),
+                    unsigned NumAlignedDPRCS2Regs, unsigned MIFlags = 0) const;
   void emitPopInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   std::vector<CalleeSavedInfo> &CSI, unsigned LdmOpc,
+                   MutableArrayRef<CalleeSavedInfo> CSI, unsigned LdmOpc,
                    unsigned LdrOpc, bool isVarArg, bool NoGap,
-                   bool(*Func)(unsigned, bool),
+                   bool (*Func)(unsigned, bool),
                    unsigned NumAlignedDPRCS2Regs) const;
 
   MachineBasicBlock::iterator

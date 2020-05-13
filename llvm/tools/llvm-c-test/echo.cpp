@@ -29,8 +29,8 @@ using namespace llvm;
 template<typename T>
 struct CAPIDenseMap {};
 
-// The default DenseMapInfo require to know about pointer alignement.
-// Because the C API uses opaques pointer types, their alignement is unknown.
+// The default DenseMapInfo require to know about pointer alignment.
+// Because the C API uses opaques pointer types, their alignment is unknown.
 // As a result, we need to roll out our own implementation.
 template<typename T>
 struct CAPIDenseMap<T*> {
@@ -137,7 +137,10 @@ struct TypeCloner {
           Clone(LLVMGetElementType(Src)),
           LLVMGetPointerAddressSpace(Src)
         );
-      case LLVMVectorTypeKind:
+      case LLVMScalableVectorTypeKind:
+        // FIXME: scalable vectors unsupported
+        break;
+      case LLVMFixedVectorTypeKind:
         return LLVMVectorType(
           Clone(LLVMGetElementType(Src)),
           LLVMGetVectorSize(Src)
@@ -577,6 +580,7 @@ struct FunCloner {
       case LLVMAlloca: {
         LLVMTypeRef Ty = CloneType(LLVMGetAllocatedType(Src));
         Dst = LLVMBuildAlloca(Builder, Ty, Name);
+        LLVMSetAlignment(Dst, LLVMGetAlignment(Src));
         break;
       }
       case LLVMLoad: {

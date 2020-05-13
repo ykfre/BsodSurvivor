@@ -157,6 +157,7 @@ namespace RISCVSysReg {
 struct SysReg {
   const char *Name;
   unsigned Encoding;
+  const char *AltName;
   // FIXME: add these additional fields when needed.
   // Privilege Access: Read, Write, Read-Only.
   // unsigned ReadWrite;
@@ -201,6 +202,8 @@ enum ABI {
 // not supported for the given TT and FeatureBits combination.
 ABI computeTargetABI(const Triple &TT, FeatureBitset FeatureBits,
                      StringRef ABIName);
+
+ABI getTargetABI(StringRef ABIName);
 
 // Returns the register used to hold the stack pointer after realignment.
 Register getBPReg();

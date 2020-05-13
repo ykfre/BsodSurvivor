@@ -675,6 +675,12 @@ bool RegisterCoalescer::adjustCopiesBackFrom(const CoalescerPair &CP,
       S.removeSegment(*SS, true);
       continue;
     }
+    // The subrange may have ended before FillerStart. If so, extend it.
+    if (!S.getVNInfoAt(FillerStart)) {
+      SlotIndex BBStart =
+          LIS->getMBBStartIdx(LIS->getMBBFromIndex(FillerStart));
+      S.extendInBlock(BBStart, FillerStart);
+    }
     VNInfo *SubBValNo = S.getVNInfoAt(CopyIdx);
     S.addSegment(LiveInterval::Segment(FillerStart, FillerEnd, SubBValNo));
     VNInfo *SubValSNo = S.getVNInfoAt(AValNo->def.getPrevSlot());
@@ -2885,7 +2891,8 @@ bool JoinVals::resolveConflicts(JoinVals &Other) {
     if (V.Resolution != CR_Unresolved)
       continue;
     LLVM_DEBUG(dbgs() << "\t\tconflict at " << printReg(Reg) << ':' << i << '@'
-                      << LR.getValNumInfo(i)->def << '\n');
+                      << LR.getValNumInfo(i)->def
+                      << ' ' << PrintLaneMask(LaneMask) << '\n');
     if (SubRangeJoin)
       return false;
 

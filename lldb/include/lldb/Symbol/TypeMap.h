@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_TypeMap_h_
-#define liblldb_TypeMap_h_
+#ifndef LLDB_SYMBOL_TYPEMAP_H
+#define LLDB_SYMBOL_TYPEMAP_H
 
 #include "lldb/Symbol/Type.h"
 #include "lldb/Utility/Iterable.h"
@@ -26,7 +26,8 @@ public:
 
   void Clear();
 
-  void Dump(Stream *s, bool show_context);
+  void Dump(Stream *s, bool show_context,
+            lldb::DescriptionLevel level = lldb::eDescriptionLevelFull);
 
   TypeMap FindTypes(ConstString name);
 
@@ -71,4 +72,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_TypeMap_h_
+#endif // LLDB_SYMBOL_TYPEMAP_H

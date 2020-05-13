@@ -42,7 +42,7 @@
 //    relocation targets. Relocation targets are considered equivalent if
 //    their targets are in the same equivalence class. Sections with
 //    different relocation targets are put into different equivalence
-//    clases.
+//    classes.
 //
 // 3. If we split an equivalence class in step 2, two relocations
 //    previously target the same equivalence class may now target
@@ -80,10 +80,11 @@
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Writer.h"
-#include "lld/Common/Threads.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Object/ELF.h"
+#include "llvm/Support/Parallel.h"
+#include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/xxhash.h"
 #include <algorithm>
 #include <atomic>
@@ -399,7 +400,7 @@ template <class ELFT>
 void ICF<ELFT>::forEachClass(llvm::function_ref<void(size_t, size_t)> fn) {
   // If threading is disabled or the number of sections are
   // too small to use threading, call Fn sequentially.
-  if (!threadsEnabled || sections.size() < 1024) {
+  if (parallel::strategy.ThreadsRequested == 1 || sections.size() < 1024) {
     forEachClassRange(0, sections.size(), fn);
     ++cnt;
     return;
@@ -466,9 +467,8 @@ template <class ELFT> void ICF<ELFT>::run() {
   }
 
   // Initially, we use hash values to partition sections.
-  parallelForEach(sections, [&](InputSection *s) {
-    s->eqClass[0] = xxHash64(s->data());
-  });
+  parallelForEach(
+      sections, [&](InputSection *s) { s->eqClass[0] = xxHash64(s->data()); });
 
   for (unsigned cnt = 0; cnt != 2; ++cnt) {
     parallelForEach(sections, [&](InputSection *s) {
@@ -525,7 +525,10 @@ template <class ELFT> void ICF<ELFT>::run() {
 }
 
 // ICF entry point function.
-template <class ELFT> void doIcf() { ICF<ELFT>().run(); }
+template <class ELFT> void doIcf() {
+  llvm::TimeTraceScope timeScope("ICF");
+  ICF<ELFT>().run();
+}
 
 template void doIcf<ELF32LE>();
 template void doIcf<ELF32BE>();

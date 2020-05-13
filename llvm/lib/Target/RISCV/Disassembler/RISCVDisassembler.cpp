@@ -38,7 +38,6 @@ public:
 
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
-                              raw_ostream &VStream,
                               raw_ostream &CStream) const override;
 };
 } // end anonymous namespace
@@ -49,7 +48,7 @@ static MCDisassembler *createRISCVDisassembler(const Target &T,
   return new RISCVDisassembler(STI, Ctx);
 }
 
-extern "C" void LLVMInitializeRISCVDisassembler() {
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVDisassembler() {
   // Register the disassembler for each target.
   TargetRegistry::RegisterMCDisassembler(getTheRISCV32Target(),
                                          createRISCVDisassembler);
@@ -315,7 +314,6 @@ static DecodeStatus decodeRVCInstrRdRs1Rs2(MCInst &Inst, unsigned Insn,
 DecodeStatus RISCVDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
                                                ArrayRef<uint8_t> Bytes,
                                                uint64_t Address,
-                                               raw_ostream &OS,
                                                raw_ostream &CS) const {
   // TODO: This will need modification when supporting instruction set
   // extensions with instructions > 32-bits (up to 176 bits wide).
@@ -344,6 +342,19 @@ DecodeStatus RISCVDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
           dbgs() << "Trying RISCV32Only_16 table (16-bit Instruction):\n");
       // Calling the auto-generated decoder function.
       Result = decodeInstruction(DecoderTableRISCV32Only_16, MI, Insn, Address,
+                                 this, STI);
+      if (Result != MCDisassembler::Fail) {
+        Size = 2;
+        return Result;
+      }
+    }
+
+    if (STI.getFeatureBits()[RISCV::FeatureExtZbproposedc] &&
+        STI.getFeatureBits()[RISCV::FeatureStdExtC]) {
+      LLVM_DEBUG(
+          dbgs() << "Trying RVBC32 table (BitManip 16-bit Instruction):\n");
+      // Calling the auto-generated decoder function.
+      Result = decodeInstruction(DecoderTableRVBC16, MI, Insn, Address,
                                  this, STI);
       if (Result != MCDisassembler::Fail) {
         Size = 2;

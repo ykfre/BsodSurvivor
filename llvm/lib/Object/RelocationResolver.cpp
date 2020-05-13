@@ -105,6 +105,7 @@ static bool supportsMips64(uint64_t Type) {
   case ELF::R_MIPS_32:
   case ELF::R_MIPS_64:
   case ELF::R_MIPS_TLS_DTPREL64:
+  case ELF::R_MIPS_PC32:
     return true;
   default:
     return false;
@@ -119,6 +120,8 @@ static uint64_t resolveMips64(RelocationRef R, uint64_t S, uint64_t A) {
     return S + getELFAddend(R);
   case ELF::R_MIPS_TLS_DTPREL64:
     return S + getELFAddend(R) - 0x8000;
+  case ELF::R_MIPS_PC32:
+    return S + getELFAddend(R) - R.getOffset();
   default:
     llvm_unreachable("Invalid relocation type");
   }
@@ -495,6 +498,7 @@ static bool supportsWasm32(uint64_t Type) {
   case wasm::R_WASM_FUNCTION_OFFSET_I32:
   case wasm::R_WASM_SECTION_OFFSET_I32:
   case wasm::R_WASM_EVENT_INDEX_LEB:
+  case wasm::R_WASM_GLOBAL_INDEX_I32:
     return true;
   default:
     return false;
@@ -514,6 +518,7 @@ static uint64_t resolveWasm32(RelocationRef R, uint64_t S, uint64_t A) {
   case wasm::R_WASM_FUNCTION_OFFSET_I32:
   case wasm::R_WASM_SECTION_OFFSET_I32:
   case wasm::R_WASM_EVENT_INDEX_LEB:
+  case wasm::R_WASM_GLOBAL_INDEX_I32:
     // For wasm section, its offset at 0 -- ignoring Value
     return A;
   default:

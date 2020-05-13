@@ -68,7 +68,7 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime) {
   // set number of threads and thread limit in team to started value
   omptarget_nvptx_TaskDescr *currTaskDescr =
       omptarget_nvptx_threadPrivateContext->GetTopLevelTaskDescr(threadId);
-  nThreads = GetNumberOfWorkersInTeam();
+  nThreads = GetNumberOfThreadsInBlock();
   threadLimit = ThreadLimit;
 }
 
@@ -143,7 +143,7 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime,
         (int)newTaskDescr->ThreadId(), (int)ThreadLimit);
 
   if (RequiresDataSharing && GetLaneId() == 0) {
-    // Warp master innitializes data sharing environment.
+    // Warp master initializes data sharing environment.
     unsigned WID = threadId / WARPSIZE;
     __kmpc_data_sharing_slot *RootS = currTeamDescr.RootS(
         WID, WID == WARPSIZE - 1);

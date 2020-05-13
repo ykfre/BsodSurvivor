@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_Language_h_
-#define liblldb_Language_h_
+#ifndef LLDB_TARGET_LANGUAGE_H
+#define LLDB_TARGET_LANGUAGE_H
 
 #include <functional>
 #include <memory>
@@ -180,10 +180,6 @@ public:
   GetPossibleFormattersMatches(ValueObject &valobj,
                                lldb::DynamicValueType use_dynamic);
 
-  virtual lldb_private::formatters::StringPrinter::EscapingHelper
-      GetStringPrinterEscapingHelper(
-          lldb_private::formatters::StringPrinter::GetPrintableElementType);
-
   virtual std::unique_ptr<TypeScavenger> GetTypeScavenger();
 
   virtual const char *GetLanguageSpecificTypeLookupHelp();
@@ -279,4 +275,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_Language_h_
+#endif // LLDB_TARGET_LANGUAGE_H

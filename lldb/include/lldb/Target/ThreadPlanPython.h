@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_ThreadPlan_Python_h_
-#define liblldb_ThreadPlan_Python_h_
+#ifndef LLDB_TARGET_THREADPLANPYTHON_H
+#define LLDB_TARGET_THREADPLANPYTHON_H
 
 #include <string>
 
@@ -55,6 +55,8 @@ protected:
   bool DoPlanExplainsStop(Event *event_ptr) override;
 
   lldb::StateType GetPlanRunState() override;
+  
+  ScriptInterpreter *GetScriptInterpreter();
 
 private:
   std::string m_class_name;
@@ -71,4 +73,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_ThreadPlan_Python_h_
+#endif // LLDB_TARGET_THREADPLANPYTHON_H

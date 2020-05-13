@@ -1,4 +1,4 @@
-//===-- ObjectFileELF.cpp ------------------------------------- -*- C++ -*-===//
+//===-- ObjectFileELF.cpp -------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -50,6 +50,8 @@ using namespace lldb;
 using namespace lldb_private;
 using namespace elf;
 using namespace llvm::ELF;
+
+LLDB_PLUGIN_DEFINE(ObjectFileELF)
 
 namespace {
 
@@ -206,7 +208,9 @@ unsigned ELFRelocation::RelocAddend64(const ELFRelocation &rel) {
 
 } // end anonymous namespace
 
-static user_id_t SegmentID(size_t PHdrIndex) { return ~PHdrIndex; }
+static user_id_t SegmentID(size_t PHdrIndex) {
+  return ~user_id_t(PHdrIndex);
+}
 
 bool ELFNote::Parse(const DataExtractor &data, lldb::offset_t *offset) {
   // Read all fields.
@@ -1235,7 +1239,7 @@ void ObjectFileELF::ParseARMAttributes(DataExtractor &data, uint64_t length,
   lldb::offset_t Offset = 0;
 
   uint8_t FormatVersion = data.GetU8(&Offset);
-  if (FormatVersion != llvm::ARMBuildAttrs::Format_Version)
+  if (FormatVersion != llvm::ELFAttrs::Format_Version)
     return;
 
   Offset = Offset + sizeof(uint32_t); // Section Length
@@ -1572,8 +1576,10 @@ static SectionType GetSectionTypeFromName(llvm::StringRef Name) {
         .Case("info.dwo", eSectionTypeDWARFDebugInfoDwo)
         .Cases("line", "line.dwo", eSectionTypeDWARFDebugLine)
         .Cases("line_str", "line_str.dwo", eSectionTypeDWARFDebugLineStr)
-        .Cases("loc", "loc.dwo", eSectionTypeDWARFDebugLoc)
-        .Cases("loclists", "loclists.dwo", eSectionTypeDWARFDebugLocLists)
+        .Case("loc", eSectionTypeDWARFDebugLoc)
+        .Case("loc.dwo", eSectionTypeDWARFDebugLocDwo)
+        .Case("loclists", eSectionTypeDWARFDebugLocLists)
+        .Case("loclists.dwo", eSectionTypeDWARFDebugLocListsDwo)
         .Case("macinfo", eSectionTypeDWARFDebugMacInfo)
         .Cases("macro", "macro.dwo", eSectionTypeDWARFDebugMacro)
         .Case("names", eSectionTypeDWARFDebugNames)
@@ -1586,6 +1592,7 @@ static SectionType GetSectionTypeFromName(llvm::StringRef Name) {
         .Case("str.dwo", eSectionTypeDWARFDebugStrDwo)
         .Case("str_offsets", eSectionTypeDWARFDebugStrOffsets)
         .Case("str_offsets.dwo", eSectionTypeDWARFDebugStrOffsetsDwo)
+        .Case("tu_index", eSectionTypeDWARFDebugTuIndex)
         .Case("types", eSectionTypeDWARFDebugTypes)
         .Case("types.dwo", eSectionTypeDWARFDebugTypesDwo)
         .Default(eSectionTypeOther);
@@ -1694,7 +1701,7 @@ class VMAddressProvider {
 
 public:
   VMAddressProvider(ObjectFile::Type Type, llvm::StringRef SegmentName)
-      : ObjectType(Type), SegmentName(SegmentName) {}
+      : ObjectType(Type), SegmentName(std::string(SegmentName)) {}
 
   std::string GetNextSegmentName() const {
     return llvm::formatv("{0}[{1}]", SegmentName, SegmentCount).str();
@@ -2228,8 +2235,7 @@ unsigned ObjectFileELF::ParseSymbols(Symtab *symtab, user_id_t start_id,
       if (!mangled_name.empty())
         mangled.SetMangledName(ConstString((mangled_name + suffix).str()));
 
-      ConstString demangled =
-          mangled.GetDemangledName(lldb::eLanguageTypeUnknown);
+      ConstString demangled = mangled.GetDemangledName();
       llvm::StringRef demangled_name = demangled.GetStringRef();
       if (!demangled_name.empty())
         mangled.SetDemangledName(ConstString((demangled_name + suffix).str()));
@@ -2258,6 +2264,8 @@ unsigned ObjectFileELF::ParseSymbols(Symtab *symtab, user_id_t start_id,
         symbol_size_valid,              // Symbol size is valid
         has_suffix,                     // Contains linker annotations?
         flags);                         // Symbol flags.
+    if (symbol.getBinding() == STB_WEAK)
+      dc_symbol.SetIsWeak(true);
     symtab->AddSymbol(dc_symbol);
   }
   return i;
@@ -2773,7 +2781,7 @@ Symtab *ObjectFileELF::GetSymtab() {
       m_symtab_up.reset(new Symtab(this));
 
     // In the event that there's no symbol entry for the entry point we'll
-    // artifically create one. We delegate to the symtab object the figuring
+    // artificially create one. We delegate to the symtab object the figuring
     // out of the proper size, this will usually make it span til the next
     // symbol it finds in the section. This means that if there are missing
     // symbols the entry point might span beyond its function definition.
@@ -2870,7 +2878,7 @@ void ObjectFileELF::ParseUnwindSymbols(Symtab *symbol_table,
     return;
 
   // First we save the new symbols into a separate list and add them to the
-  // symbol table after we colleced all symbols we want to add. This is
+  // symbol table after we collected all symbols we want to add. This is
   // neccessary because adding a new symbol invalidates the internal index of
   // the symtab what causing the next lookup to be slow because it have to
   // recalculate the index first.

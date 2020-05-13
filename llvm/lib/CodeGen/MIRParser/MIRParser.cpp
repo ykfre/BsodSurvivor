@@ -64,9 +64,12 @@ class MIRParserImpl {
   /// parts.
   bool NoMIRDocuments = false;
 
+  std::function<void(Function &)> ProcessIRFunction;
+
 public:
-  MIRParserImpl(std::unique_ptr<MemoryBuffer> Contents,
-                StringRef Filename, LLVMContext &Context);
+  MIRParserImpl(std::unique_ptr<MemoryBuffer> Contents, StringRef Filename,
+                LLVMContext &Context,
+                std::function<void(Function &)> ProcessIRFunction);
 
   void reportDiagnostic(const SMDiagnostic &Diag);
 
@@ -91,6 +94,9 @@ public:
   ///
   /// Return null if an error occurred.
   std::unique_ptr<Module> parseIRModule();
+
+  /// Create an empty function with the given name.
+  Function *createDummyFunction(StringRef Name, Module &M);
 
   bool parseMachineFunctions(Module &M, MachineModuleInfo &MMI);
 
@@ -163,13 +169,13 @@ static void handleYAMLDiag(const SMDiagnostic &Diag, void *Context) {
 }
 
 MIRParserImpl::MIRParserImpl(std::unique_ptr<MemoryBuffer> Contents,
-                             StringRef Filename, LLVMContext &Context)
+                             StringRef Filename, LLVMContext &Context,
+                             std::function<void(Function &)> Callback)
     : SM(),
-      In(SM.getMemoryBuffer(
-            SM.AddNewSourceBuffer(std::move(Contents), SMLoc()))->getBuffer(),
-            nullptr, handleYAMLDiag, this),
-      Filename(Filename),
-      Context(Context) {
+      In(SM.getMemoryBuffer(SM.AddNewSourceBuffer(std::move(Contents), SMLoc()))
+             ->getBuffer(),
+         nullptr, handleYAMLDiag, this),
+      Filename(Filename), Context(Context), ProcessIRFunction(Callback) {
   In.setContext(&In);
 }
 
@@ -256,14 +262,17 @@ bool MIRParserImpl::parseMachineFunctions(Module &M, MachineModuleInfo &MMI) {
   return false;
 }
 
-/// Create an empty function with the given name.
-static Function *createDummyFunction(StringRef Name, Module &M) {
+Function *MIRParserImpl::createDummyFunction(StringRef Name, Module &M) {
   auto &Context = M.getContext();
   Function *F =
       Function::Create(FunctionType::get(Type::getVoidTy(Context), false),
                        Function::ExternalLinkage, Name, M);
   BasicBlock *BB = BasicBlock::Create(Context, "entry", F);
   new UnreachableInst(Context, BB);
+
+  if (ProcessIRFunction)
+    ProcessIRFunction(*F);
+
   return F;
 }
 
@@ -366,17 +375,17 @@ bool MIRParserImpl::initializeCallSiteInfo(
                    " is not a call instruction");
     MachineFunction::CallSiteInfo CSInfo;
     for (auto ArgRegPair : YamlCSInfo.ArgForwardingRegs) {
-      unsigned Reg = 0;
+      Register Reg;
       if (parseNamedRegisterReference(PFS, Reg, ArgRegPair.Reg.Value, Error))
         return error(Error, ArgRegPair.Reg.SourceRange);
       CSInfo.emplace_back(Reg, ArgRegPair.ArgNo);
     }
 
-    if (TM.Options.EnableDebugEntryValues)
+    if (TM.Options.EmitCallSiteInfo)
       MF.addCallArgsForwardingRegs(&*CallI, std::move(CSInfo));
   }
 
-  if (YamlMF.CallSitesInfo.size() && !TM.Options.EnableDebugEntryValues)
+  if (YamlMF.CallSitesInfo.size() && !TM.Options.EmitCallSiteInfo)
     return error(Twine("Call site info provided but not used"));
   return false;
 }
@@ -392,8 +401,7 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
     Target.reset(new PerTargetMIParsingState(MF.getSubtarget()));
   }
 
-  if (YamlMF.Alignment)
-    MF.setAlignment(Align(YamlMF.Alignment));
+  MF.setAlignment(YamlMF.Alignment.valueOrOne());
   MF.setExposesReturnsTwice(YamlMF.ExposesReturnsTwice);
   MF.setHasWinCFI(YamlMF.HasWinCFI);
 
@@ -428,6 +436,14 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
     reportDiagnostic(
         diagFromBlockStringDiag(Error, YamlMF.Body.Value.SourceRange));
     return true;
+  }
+  // Check Basic Block Section Flags.
+  if (MF.getTarget().getBBSectionsType() == BasicBlockSection::Labels) {
+    MF.createBBLabels();
+    MF.setBBSectionsType(BasicBlockSection::Labels);
+  } else if (MF.hasBBSections()) {
+    MF.createBBLabels();
+    MF.assignBeginEndSections();
   }
   PFS.SM = &SM;
 
@@ -541,10 +557,10 @@ bool MIRParserImpl::parseRegisterInfo(PerFunctionMIParsingState &PFS,
 
   // Parse the liveins.
   for (const auto &LiveIn : YamlMF.LiveIns) {
-    unsigned Reg = 0;
+    Register Reg;
     if (parseNamedRegisterReference(PFS, Reg, LiveIn.Register.Value, Error))
       return error(Error, LiveIn.Register.SourceRange);
-    unsigned VReg = 0;
+    Register VReg;
     if (!LiveIn.VirtualRegister.Value.empty()) {
       VRegInfo *Info;
       if (parseVirtualRegisterReference(PFS, Info, LiveIn.VirtualRegister.Value,
@@ -560,7 +576,7 @@ bool MIRParserImpl::parseRegisterInfo(PerFunctionMIParsingState &PFS,
   if (YamlMF.CalleeSavedRegisters) {
     SmallVector<MCPhysReg, 16> CalleeSavedRegisters;
     for (const auto &RegSource : YamlMF.CalleeSavedRegisters.getValue()) {
-      unsigned Reg = 0;
+      Register Reg;
       if (parseNamedRegisterReference(PFS, Reg, RegSource.Value, Error))
         return error(Error, RegSource.SourceRange);
       CalleeSavedRegisters.push_back(Reg);
@@ -578,7 +594,7 @@ bool MIRParserImpl::setupRegisterInfo(const PerFunctionMIParsingState &PFS,
   bool Error = false;
   // Create VRegs
   auto populateVRegInfo = [&] (const VRegInfo &Info, Twine Name) {
-    unsigned Reg = Info.VReg;
+    Register Reg = Info.VReg;
     switch (Info.Kind) {
     case VRegInfo::UNKNOWN:
       error(Twine("Cannot determine class/bank of virtual register ") +
@@ -637,7 +653,7 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
   MFI.setStackSize(YamlMFI.StackSize);
   MFI.setOffsetAdjustment(YamlMFI.OffsetAdjustment);
   if (YamlMFI.MaxAlignment)
-    MFI.ensureMaxAlignment(YamlMFI.MaxAlignment);
+    MFI.ensureMaxAlignment(Align(YamlMFI.MaxAlignment));
   MFI.setAdjustsStack(YamlMFI.AdjustsStack);
   MFI.setHasCalls(YamlMFI.HasCalls);
   if (YamlMFI.MaxCallFrameSize != ~0u)
@@ -674,7 +690,7 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
       return error(Object.ID.SourceRange.Start,
                    Twine("StackID is not supported by target"));
     MFI.setStackID(ObjectIdx, Object.StackID);
-    MFI.setObjectAlignment(ObjectIdx, Object.Alignment);
+    MFI.setObjectAlignment(ObjectIdx, Object.Alignment.valueOrOne());
     if (!PFS.FixedStackObjectSlots.insert(std::make_pair(Object.ID.Value,
                                                          ObjectIdx))
              .second)
@@ -706,10 +722,11 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
       return error(Object.ID.SourceRange.Start,
                    Twine("StackID is not supported by target"));
     if (Object.Type == yaml::MachineStackObject::VariableSized)
-      ObjectIdx = MFI.CreateVariableSizedObject(Object.Alignment, Alloca);
+      ObjectIdx =
+          MFI.CreateVariableSizedObject(Object.Alignment.valueOrOne(), Alloca);
     else
       ObjectIdx = MFI.CreateStackObject(
-          Object.Size, Object.Alignment,
+          Object.Size, Object.Alignment.valueOrOne(),
           Object.Type == yaml::MachineStackObject::SpillSlot, Alloca,
           Object.StackID);
     MFI.setObjectOffset(ObjectIdx, Object.Offset);
@@ -748,7 +765,7 @@ bool MIRParserImpl::parseCalleeSavedRegister(PerFunctionMIParsingState &PFS,
     const yaml::StringValue &RegisterSource, bool IsRestored, int FrameIdx) {
   if (RegisterSource.Value.empty())
     return false;
-  unsigned Reg = 0;
+  Register Reg;
   SMDiagnostic Error;
   if (parseNamedRegisterReference(PFS, Reg, RegisterSource.Value, Error))
     return error(Error, RegisterSource.SourceRange);
@@ -821,10 +838,9 @@ bool MIRParserImpl::initializeConstantPool(PerFunctionMIParsingState &PFS,
         parseConstantValue(YamlConstant.Value.Value, Error, M));
     if (!Value)
       return error(Error, YamlConstant.Value.SourceRange);
-    unsigned Alignment =
-        YamlConstant.Alignment
-            ? YamlConstant.Alignment
-            : M.getDataLayout().getPrefTypeAlignment(Value->getType());
+    const Align PrefTypeAlign =
+        M.getDataLayout().getPrefTypeAlign(Value->getType());
+    const Align Alignment = YamlConstant.Alignment.getValueOr(PrefTypeAlign);
     unsigned Index = ConstantPool.getConstantPoolIndex(Value, Alignment);
     if (!ConstantPoolSlots.insert(std::make_pair(YamlConstant.ID.Value, Index))
              .second)
@@ -925,21 +941,23 @@ bool MIRParser::parseMachineFunctions(Module &M, MachineModuleInfo &MMI) {
   return Impl->parseMachineFunctions(M, MMI);
 }
 
-std::unique_ptr<MIRParser> llvm::createMIRParserFromFile(StringRef Filename,
-                                                         SMDiagnostic &Error,
-                                                         LLVMContext &Context) {
+std::unique_ptr<MIRParser> llvm::createMIRParserFromFile(
+    StringRef Filename, SMDiagnostic &Error, LLVMContext &Context,
+    std::function<void(Function &)> ProcessIRFunction) {
   auto FileOrErr = MemoryBuffer::getFileOrSTDIN(Filename);
   if (std::error_code EC = FileOrErr.getError()) {
     Error = SMDiagnostic(Filename, SourceMgr::DK_Error,
                          "Could not open input file: " + EC.message());
     return nullptr;
   }
-  return createMIRParser(std::move(FileOrErr.get()), Context);
+  return createMIRParser(std::move(FileOrErr.get()), Context,
+                         ProcessIRFunction);
 }
 
 std::unique_ptr<MIRParser>
 llvm::createMIRParser(std::unique_ptr<MemoryBuffer> Contents,
-                      LLVMContext &Context) {
+                      LLVMContext &Context,
+                      std::function<void(Function &)> ProcessIRFunction) {
   auto Filename = Contents->getBufferIdentifier();
   if (Context.shouldDiscardValueNames()) {
     Context.diagnose(DiagnosticInfoMIRParser(
@@ -949,6 +967,6 @@ llvm::createMIRParser(std::unique_ptr<MemoryBuffer> Contents,
             "Can't read MIR with a Context that discards named Values")));
     return nullptr;
   }
-  return std::make_unique<MIRParser>(
-      std::make_unique<MIRParserImpl>(std::move(Contents), Filename, Context));
+  return std::make_unique<MIRParser>(std::make_unique<MIRParserImpl>(
+      std::move(Contents), Filename, Context, ProcessIRFunction));
 }

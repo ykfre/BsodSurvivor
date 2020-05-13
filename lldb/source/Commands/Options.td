@@ -39,6 +39,11 @@ let Command = "settings read" in {
     Desc<"The file from which to read the settings.">;
 }
 
+let Command = "settings clear" in {
+  def setclear_all : Option<"all", "a">,
+    Desc<"Clear all settings.">;
+}
+
 let Command = "breakpoint list" in {
   // FIXME: We need to add an "internal" command, and then add this sort of
   // thing to it. But I need to see it for now, and don't want to wait.
@@ -115,6 +120,8 @@ let Command = "breakpoint set" in {
   def breakpoint_set_line : Option<"line", "l">, Group<1>, Arg<"LineNum">,
     Required,
     Desc<"Specifies the line number on which to set this breakpoint.">;
+  def breakpoint_set_column : Option<"column", "u">, Group<1>, Arg<"ColumnNum">,
+    Desc<"Specifies the column number on which to set this breakpoint.">;
   def breakpoint_set_address : Option<"address", "a">, Group<2>,
     Arg<"AddressOrExpression">, Required,
     Desc<"Set the breakpoint at the specified address.  If the address maps "
@@ -150,7 +157,7 @@ let Command = "breakpoint set" in {
     "multiple times tomake one breakpoint for multiple methods.">;
   def breakpoint_set_func_regex : Option<"func-regex", "r">, Group<7>,
     Arg<"RegularExpression">, Required, Desc<"Set the breakpoint by function "
-    "name, evaluating a regular-expression to findthe function name(s).">;
+    "name, evaluating a regular-expression to find the function name(s).">;
   def breakpoint_set_basename : Option<"basename", "b">, Group<8>,
     Arg<"FunctionName">, Required, Completion<"Symbol">,
     Desc<"Set the breakpoint by function basename (C++ namespaces and arguments"
@@ -382,7 +389,8 @@ let Command = "frame recognizer add" in {
     "to.">;
   def frame_recognizer_function : Option<"function", "n">, Arg<"Name">,
     Completion<"Symbol">,
-    Desc<"Name of the function that this recognizer applies to.">;
+    Desc<"Name of the function that this recognizer applies to. "
+         "Can be specified more than once except if -x|--regex is provided.">;
   def frame_recognizer_python_class : Option<"python-class", "l">, Group<2>,
     Arg<"PythonClass">,
     Desc<"Give the name of a Python class to use for this frame recognizer.">;
@@ -666,6 +674,11 @@ let Command = "process handle" in {
     "received.">;
   def process_handle_pass : Option<"pass", "p">, Group<1>, Arg<"Boolean">,
     Desc<"Whether or not the signal should be passed to the process.">;
+}
+
+let Command = "process status" in {
+  def process_status_verbose : Option<"verbose", "v">, Group<1>,
+    Desc<"Show verbose process status including extended crash information.">;
 }
 
 let Command = "script import" in {
@@ -956,6 +969,11 @@ let Command = "thread plan list" in {
     Desc<"Display more information about the thread plans">;
   def thread_plan_list_internal : Option<"internal", "i">, Group<1>,
     Desc<"Display internal as well as user thread plans">;
+  def thread_plan_list_thread_id : Option<"thread-id", "t">, Group<1>,
+    Arg<"ThreadID">, Desc<"List the thread plans for this TID, can be "
+    "specified more than once.">;
+  def thread_plan_list_unreported : Option<"unreported", "u">, Group<1>,
+    Desc<"Display thread plans for unreported threads">;
 }
 
 let Command = "type summary add" in {
@@ -1125,4 +1143,9 @@ let Command = "watchpoint command add" in {
     Group<2>, Arg<"PythonFunction">, Desc<"Give the name of a Python function "
     "to run as command for this watchpoint. Be sure to give a module name if "
     "appropriate.">;
+}
+
+let Command = "watchpoint delete" in {
+  def watchpoint_delete_force : Option<"force", "f">, Group<1>,
+    Desc<"Delete all watchpoints without querying for confirmation.">;
 }

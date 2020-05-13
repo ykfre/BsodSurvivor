@@ -393,7 +393,7 @@ define <8 x double> @load_v8f64_v8i16(<8 x i16> %trigger, <8 x double>* %addr, <
 ; SSE:       ## %bb.0:
 ; SSE-NEXT:    pxor %xmm5, %xmm5
 ; SSE-NEXT:    pcmpeqw %xmm0, %xmm5
-; SSE-NEXT:    packsswb %xmm0, %xmm5
+; SSE-NEXT:    packsswb %xmm5, %xmm5
 ; SSE-NEXT:    pmovmskb %xmm5, %eax
 ; SSE-NEXT:    testb $1, %al
 ; SSE-NEXT:    jne LBB5_1
@@ -541,7 +541,7 @@ define <8 x double> @load_v8f64_v8i64(<8 x i64> %trigger, <8 x double>* %addr, <
 ; SSE2-NEXT:    pand %xmm0, %xmm1
 ; SSE2-NEXT:    packssdw %xmm2, %xmm1
 ; SSE2-NEXT:    packssdw %xmm3, %xmm1
-; SSE2-NEXT:    packsswb %xmm0, %xmm1
+; SSE2-NEXT:    packsswb %xmm1, %xmm1
 ; SSE2-NEXT:    pmovmskb %xmm1, %eax
 ; SSE2-NEXT:    testb $1, %al
 ; SSE2-NEXT:    jne LBB6_1
@@ -1645,7 +1645,7 @@ define <8 x i64> @load_v8i64_v8i16(<8 x i16> %trigger, <8 x i64>* %addr, <8 x i6
 ; SSE2:       ## %bb.0:
 ; SSE2-NEXT:    pxor %xmm5, %xmm5
 ; SSE2-NEXT:    pcmpeqw %xmm0, %xmm5
-; SSE2-NEXT:    packsswb %xmm0, %xmm5
+; SSE2-NEXT:    packsswb %xmm5, %xmm5
 ; SSE2-NEXT:    pmovmskb %xmm5, %eax
 ; SSE2-NEXT:    testb $1, %al
 ; SSE2-NEXT:    jne LBB15_1
@@ -1716,7 +1716,7 @@ define <8 x i64> @load_v8i64_v8i16(<8 x i16> %trigger, <8 x i64>* %addr, <8 x i6
 ; SSE42:       ## %bb.0:
 ; SSE42-NEXT:    pxor %xmm5, %xmm5
 ; SSE42-NEXT:    pcmpeqw %xmm0, %xmm5
-; SSE42-NEXT:    packsswb %xmm0, %xmm5
+; SSE42-NEXT:    packsswb %xmm5, %xmm5
 ; SSE42-NEXT:    pmovmskb %xmm5, %eax
 ; SSE42-NEXT:    testb $1, %al
 ; SSE42-NEXT:    jne LBB15_1
@@ -1864,7 +1864,7 @@ define <8 x i64> @load_v8i64_v8i64(<8 x i64> %trigger, <8 x i64>* %addr, <8 x i6
 ; SSE2-NEXT:    pand %xmm0, %xmm1
 ; SSE2-NEXT:    packssdw %xmm2, %xmm1
 ; SSE2-NEXT:    packssdw %xmm3, %xmm1
-; SSE2-NEXT:    packsswb %xmm0, %xmm1
+; SSE2-NEXT:    packsswb %xmm1, %xmm1
 ; SSE2-NEXT:    pmovmskb %xmm1, %eax
 ; SSE2-NEXT:    testb $1, %al
 ; SSE2-NEXT:    jne LBB16_1
@@ -3198,8 +3198,6 @@ define <16 x i16> @load_v16i16_v16i16(<16 x i16> %trigger, <16 x i16>* %addr, <1
 ;
 ; AVX2-LABEL: load_v16i16_v16i16:
 ; AVX2:       ## %bb.0:
-; AVX2-NEXT:    vpxor %xmm2, %xmm2, %xmm2
-; AVX2-NEXT:    vpcmpgtw %ymm0, %ymm2, %ymm0
 ; AVX2-NEXT:    vextracti128 $1, %ymm0, %xmm2
 ; AVX2-NEXT:    vpacksswb %xmm2, %xmm0, %xmm0
 ; AVX2-NEXT:    vpmovmskb %xmm0, %eax

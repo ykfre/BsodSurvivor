@@ -13,6 +13,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Config/llvm-config.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -28,6 +29,7 @@
 #ifdef _WIN32
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Chrono.h"
+#include "llvm/Support/Windows/WindowsSupport.h"
 #include <windows.h>
 #include <winerror.h>
 #endif
@@ -304,15 +306,45 @@ TEST(Support, AbsolutePathIteratorEnd) {
   }
 }
 
-TEST(Support, HomeDirectory) {
-  std::string expected;
 #ifdef _WIN32
-  if (wchar_t const *path = ::_wgetenv(L"USERPROFILE")) {
+std::string getEnvWin(const wchar_t *Var) {
+  std::string expected;
+  if (wchar_t const *path = ::_wgetenv(Var)) {
     auto pathLen = ::wcslen(path);
     ArrayRef<char> ref{reinterpret_cast<char const *>(path),
                        pathLen * sizeof(wchar_t)};
     convertUTF16ToUTF8String(ref, expected);
   }
+  return expected;
+}
+#else
+// RAII helper to set and restore an environment variable.
+class WithEnv {
+  const char *Var;
+  llvm::Optional<std::string> OriginalValue;
+
+public:
+  WithEnv(const char *Var, const char *Value) : Var(Var) {
+    if (const char *V = ::getenv(Var))
+      OriginalValue.emplace(V);
+    if (Value)
+      ::setenv(Var, Value, 1);
+    else
+      ::unsetenv(Var);
+  }
+  ~WithEnv() {
+    if (OriginalValue)
+      ::setenv(Var, OriginalValue->c_str(), 1);
+    else
+      ::unsetenv(Var);
+  }
+};
+#endif
+
+TEST(Support, HomeDirectory) {
+  std::string expected;
+#ifdef _WIN32
+  expected = getEnvWin(L"USERPROFILE");
 #else
   if (char const *path = ::getenv("HOME"))
     expected = path;
@@ -329,31 +361,48 @@ TEST(Support, HomeDirectory) {
 
 #ifdef LLVM_ON_UNIX
 TEST(Support, HomeDirectoryWithNoEnv) {
-  std::string OriginalStorage;
-  char const *OriginalEnv = ::getenv("HOME");
-  if (OriginalEnv) {
-    // We're going to unset it, so make a copy and save a pointer to the copy
-    // so that we can reset it at the end of the test.
-    OriginalStorage = OriginalEnv;
-    OriginalEnv = OriginalStorage.c_str();
-  }
+  WithEnv Env("HOME", nullptr);
 
   // Don't run the test if we have nothing to compare against.
   struct passwd *pw = getpwuid(getuid());
   if (!pw || !pw->pw_dir) return;
-
-  ::unsetenv("HOME");
-  EXPECT_EQ(nullptr, ::getenv("HOME"));
   std::string PwDir = pw->pw_dir;
 
   SmallString<128> HomeDir;
-  auto status = path::home_directory(HomeDir);
-  EXPECT_TRUE(status);
+  EXPECT_TRUE(path::home_directory(HomeDir));
   EXPECT_EQ(PwDir, HomeDir);
+}
 
-  // Now put the environment back to its original state (meaning that if it was
-  // unset before, we don't reset it).
-  if (OriginalEnv) ::setenv("HOME", OriginalEnv, 1);
+TEST(Support, CacheDirectoryWithEnv) {
+  WithEnv Env("XDG_CACHE_HOME", "/xdg/cache");
+
+  SmallString<128> CacheDir;
+  EXPECT_TRUE(path::cache_directory(CacheDir));
+  EXPECT_EQ("/xdg/cache", CacheDir);
+}
+
+TEST(Support, CacheDirectoryNoEnv) {
+  WithEnv Env("XDG_CACHE_HOME", nullptr);
+
+  SmallString<128> Fallback;
+  ASSERT_TRUE(path::home_directory(Fallback));
+  path::append(Fallback, ".cache");
+
+  SmallString<128> CacheDir;
+  EXPECT_TRUE(path::cache_directory(CacheDir));
+  EXPECT_EQ(Fallback, CacheDir);
+}
+#endif
+
+#ifdef _WIN32
+TEST(Support, CacheDirectory) {
+  std::string Expected = getEnvWin(L"LOCALAPPDATA");
+  // Do not try to test it if we don't know what to expect.
+  if (!Expected.empty()) {
+    SmallString<128> CacheDir;
+    EXPECT_TRUE(path::cache_directory(CacheDir));
+    EXPECT_EQ(Expected, CacheDir);
+  }
 }
 #endif
 
@@ -849,7 +898,7 @@ TEST_F(FileSystemTest, DirectoryIteration) {
     }
     if (path::filename(i->path()) == "dontlookhere")
       i.no_push();
-    visited.push_back(path::filename(i->path()));
+    visited.push_back(std::string(path::filename(i->path())));
   }
   v_t::const_iterator a0 = find(visited, "a0");
   v_t::const_iterator aa1 = find(visited, "aa1");
@@ -939,10 +988,10 @@ TEST_F(FileSystemTest, BrokenSymlinkDirectoryIteration) {
     ASSERT_NO_ERROR(ec);
     if (i->status().getError() ==
         std::make_error_code(std::errc::no_such_file_or_directory)) {
-      VisitedBrokenSymlinks.push_back(path::filename(i->path()));
+      VisitedBrokenSymlinks.push_back(std::string(path::filename(i->path())));
       continue;
     }
-    VisitedNonBrokenSymlinks.push_back(path::filename(i->path()));
+    VisitedNonBrokenSymlinks.push_back(std::string(path::filename(i->path())));
   }
   EXPECT_THAT(VisitedNonBrokenSymlinks, UnorderedElementsAre("b", "d"));
   VisitedNonBrokenSymlinks.clear();
@@ -956,10 +1005,10 @@ TEST_F(FileSystemTest, BrokenSymlinkDirectoryIteration) {
     ASSERT_NO_ERROR(ec);
     if (i->status().getError() ==
         std::make_error_code(std::errc::no_such_file_or_directory)) {
-      VisitedBrokenSymlinks.push_back(path::filename(i->path()));
+      VisitedBrokenSymlinks.push_back(std::string(path::filename(i->path())));
       continue;
     }
-    VisitedNonBrokenSymlinks.push_back(path::filename(i->path()));
+    VisitedNonBrokenSymlinks.push_back(std::string(path::filename(i->path())));
   }
   EXPECT_THAT(VisitedNonBrokenSymlinks,
               UnorderedElementsAre("b", "bb", "d", "da", "dd", "ddd", "ddd"));
@@ -975,10 +1024,10 @@ TEST_F(FileSystemTest, BrokenSymlinkDirectoryIteration) {
     ASSERT_NO_ERROR(ec);
     if (i->status().getError() ==
         std::make_error_code(std::errc::no_such_file_or_directory)) {
-      VisitedBrokenSymlinks.push_back(path::filename(i->path()));
+      VisitedBrokenSymlinks.push_back(std::string(path::filename(i->path())));
       continue;
     }
-    VisitedNonBrokenSymlinks.push_back(path::filename(i->path()));
+    VisitedNonBrokenSymlinks.push_back(std::string(path::filename(i->path())));
   }
   EXPECT_THAT(VisitedNonBrokenSymlinks,
               UnorderedElementsAreArray({"a", "b", "ba", "bb", "bc", "c", "d",
@@ -1127,14 +1176,16 @@ TEST_F(FileSystemTest, FileMapping) {
 }
 
 TEST(Support, NormalizePath) {
+  //                           Input,        Expected Win, Expected Posix
   using TestTuple = std::tuple<const char *, const char *, const char *>;
   std::vector<TestTuple> Tests;
   Tests.emplace_back("a", "a", "a");
   Tests.emplace_back("a/b", "a\\b", "a/b");
   Tests.emplace_back("a\\b", "a\\b", "a/b");
-  Tests.emplace_back("a\\\\b", "a\\\\b", "a\\\\b");
+  Tests.emplace_back("a\\\\b", "a\\\\b", "a//b");
   Tests.emplace_back("\\a", "\\a", "/a");
   Tests.emplace_back("a\\", "a\\", "a/");
+  Tests.emplace_back("a\\t", "a\\t", "a/t");
 
   for (auto &T : Tests) {
     SmallString<64> Win(std::get<0>(T));
@@ -1187,7 +1238,7 @@ static std::string remove_dots(StringRef path, bool remove_dot_dot,
                                path::Style style) {
   SmallString<256> buffer(path);
   path::remove_dots(buffer, remove_dot_dot, style);
-  return buffer.str();
+  return std::string(buffer.str());
 }
 
 TEST(Support, RemoveDots) {
@@ -1203,6 +1254,30 @@ TEST(Support, RemoveDots) {
             remove_dots("..\\a\\b\\..\\c", true, path::Style::windows));
   EXPECT_EQ("..\\..\\a\\c",
             remove_dots("..\\..\\a\\b\\..\\c", true, path::Style::windows));
+  EXPECT_EQ("C:\\a\\c", remove_dots("C:\\foo\\bar//..\\..\\a\\c", true,
+                                    path::Style::windows));
+
+  // FIXME: These leading forward slashes are emergent behavior. VFS depends on
+  // this behavior now.
+  EXPECT_EQ("C:/bar",
+            remove_dots("C:/foo/../bar", true, path::Style::windows));
+  EXPECT_EQ("C:/foo\\bar",
+            remove_dots("C:/foo/bar", true, path::Style::windows));
+  EXPECT_EQ("C:/foo\\bar",
+            remove_dots("C:/foo\\bar", true, path::Style::windows));
+  EXPECT_EQ("/", remove_dots("/", true, path::Style::windows));
+  EXPECT_EQ("C:/", remove_dots("C:/", true, path::Style::windows));
+
+  // Some clients of remove_dots expect it to remove trailing slashes. Again,
+  // this is emergent behavior that VFS relies on, and not inherently part of
+  // the specification.
+  EXPECT_EQ("C:\\foo\\bar",
+            remove_dots("C:\\foo\\bar\\", true, path::Style::windows));
+  EXPECT_EQ("/foo/bar",
+            remove_dots("/foo/bar/", true, path::Style::posix));
+
+  // A double separator is rewritten.
+  EXPECT_EQ("C:/foo\\bar", remove_dots("C:/foo//bar", true, path::Style::windows));
 
   SmallString<64> Path1(".\\.\\c");
   EXPECT_TRUE(path::remove_dots(Path1, true, path::Style::windows));
@@ -1221,6 +1296,11 @@ TEST(Support, RemoveDots) {
   EXPECT_EQ("/a/c", remove_dots("/../../a/c", true, path::Style::posix));
   EXPECT_EQ("/a/c",
             remove_dots("/../a/b//../././/c", true, path::Style::posix));
+  EXPECT_EQ("/", remove_dots("/", true, path::Style::posix));
+
+  // FIXME: Leaving behind this double leading slash seems like a bug.
+  EXPECT_EQ("//foo/bar",
+            remove_dots("//foo/bar/", true, path::Style::posix));
 
   SmallString<64> Path2("././c");
   EXPECT_TRUE(path::remove_dots(Path2, true, path::Style::posix));
@@ -1231,60 +1311,73 @@ TEST(Support, ReplacePathPrefix) {
   SmallString<64> Path1("/foo");
   SmallString<64> Path2("/old/foo");
   SmallString<64> Path3("/oldnew/foo");
+  SmallString<64> Path4("C:\\old/foo\\bar");
   SmallString<64> OldPrefix("/old");
   SmallString<64> OldPrefixSep("/old/");
+  SmallString<64> OldPrefixWin("c:/oLD/F");
   SmallString<64> NewPrefix("/new");
   SmallString<64> NewPrefix2("/longernew");
   SmallString<64> EmptyPrefix("");
+  bool Found;
 
   SmallString<64> Path = Path1;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  EXPECT_FALSE(Found);
   EXPECT_EQ(Path, "/foo");
   Path = Path2;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/new/foo");
   Path = Path2;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix2);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix2);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/longernew/foo");
   Path = Path1;
-  path::replace_path_prefix(Path, EmptyPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, EmptyPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/new/foo");
   Path = Path2;
-  path::replace_path_prefix(Path, OldPrefix, EmptyPrefix);
+  Found = path::replace_path_prefix(Path, OldPrefix, EmptyPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/foo");
   Path = Path2;
-  path::replace_path_prefix(Path, OldPrefix, EmptyPrefix, path::Style::native,
-                            true);
+  Found = path::replace_path_prefix(Path, OldPrefixSep, EmptyPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "foo");
   Path = Path3;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix, path::Style::native,
-                            false);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/newnew/foo");
   Path = Path3;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix, path::Style::native,
-                            true);
-  EXPECT_EQ(Path, "/oldnew/foo");
-  Path = Path3;
-  path::replace_path_prefix(Path, OldPrefixSep, NewPrefix, path::Style::native,
-                            true);
-  EXPECT_EQ(Path, "/oldnew/foo");
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix2);
+  EXPECT_TRUE(Found);
+  EXPECT_EQ(Path, "/longernewnew/foo");
   Path = Path1;
-  path::replace_path_prefix(Path, EmptyPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, EmptyPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/new/foo");
   Path = OldPrefix;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/new");
   Path = OldPrefixSep;
-  path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  Found = path::replace_path_prefix(Path, OldPrefix, NewPrefix);
+  EXPECT_TRUE(Found);
   EXPECT_EQ(Path, "/new/");
   Path = OldPrefix;
-  path::replace_path_prefix(Path, OldPrefixSep, NewPrefix, path::Style::native,
-                            false);
+  Found = path::replace_path_prefix(Path, OldPrefixSep, NewPrefix);
+  EXPECT_FALSE(Found);
   EXPECT_EQ(Path, "/old");
-  Path = OldPrefix;
-  path::replace_path_prefix(Path, OldPrefixSep, NewPrefix, path::Style::native,
-                            true);
-  EXPECT_EQ(Path, "/new");
+  Path = Path4;
+  Found = path::replace_path_prefix(Path, OldPrefixWin, NewPrefix,
+                                    path::Style::windows);
+  EXPECT_TRUE(Found);
+  EXPECT_EQ(Path, "/newoo\\bar");
+  Path = Path4;
+  Found = path::replace_path_prefix(Path, OldPrefixWin, NewPrefix,
+                                    path::Style::posix);
+  EXPECT_FALSE(Found);
+  EXPECT_EQ(Path, "C:\\old/foo\\bar");
 }
 
 TEST_F(FileSystemTest, OpenFileForRead) {
@@ -1874,5 +1967,75 @@ TEST_F(FileSystemTest, permissions) {
   EXPECT_TRUE(CheckPermissions(fs::all_perms & ~fs::sticky_bit));
 #endif
 }
+
+#ifdef _WIN32
+TEST_F(FileSystemTest, widenPath) {
+  const std::wstring LongPathPrefix(L"\\\\?\\");
+
+  // Test that the length limit is checked against the UTF-16 length and not the
+  // UTF-8 length.
+  std::string Input("C:\\foldername\\");
+  const std::string Pi("\xcf\x80"); // UTF-8 lower case pi.
+  // Add Pi up to the MAX_PATH limit.
+  const size_t NumChars = MAX_PATH - Input.size() - 1;
+  for (size_t i = 0; i < NumChars; ++i)
+    Input += Pi;
+  // Check that UTF-8 length already exceeds MAX_PATH.
+  EXPECT_TRUE(Input.size() > MAX_PATH);
+  SmallVector<wchar_t, MAX_PATH + 16> Result;
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  // Result should not start with the long path prefix.
+  EXPECT_TRUE(std::wmemcmp(Result.data(), LongPathPrefix.c_str(),
+                           LongPathPrefix.size()) != 0);
+  EXPECT_EQ(Result.size(), (size_t)MAX_PATH - 1);
+
+  // Add another Pi to exceed the MAX_PATH limit.
+  Input += Pi;
+  // Construct the expected result.
+  SmallVector<wchar_t, MAX_PATH + 16> Expected;
+  ASSERT_NO_ERROR(windows::UTF8ToUTF16(Input, Expected));
+  Expected.insert(Expected.begin(), LongPathPrefix.begin(),
+                  LongPathPrefix.end());
+
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  EXPECT_EQ(Result, Expected);
+
+  // Test that UNC paths are handled correctly.
+  const std::string ShareName("\\\\sharename\\");
+  const std::string FileName("\\filename");
+  // Initialize directory name so that the input is within the MAX_PATH limit.
+  const char DirChar = 'x';
+  std::string DirName(MAX_PATH - ShareName.size() - FileName.size() - 1,
+                      DirChar);
+
+  Input = ShareName + DirName + FileName;
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  // Result should not start with the long path prefix.
+  EXPECT_TRUE(std::wmemcmp(Result.data(), LongPathPrefix.c_str(),
+                           LongPathPrefix.size()) != 0);
+  EXPECT_EQ(Result.size(), (size_t)MAX_PATH - 1);
+
+  // Extend the directory name so the input exceeds the MAX_PATH limit.
+  DirName += DirChar;
+  Input = ShareName + DirName + FileName;
+  // Construct the expected result.
+  ASSERT_NO_ERROR(windows::UTF8ToUTF16(StringRef(Input).substr(2), Expected));
+  const std::wstring UNCPrefix(LongPathPrefix + L"UNC\\");
+  Expected.insert(Expected.begin(), UNCPrefix.begin(), UNCPrefix.end());
+
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  EXPECT_EQ(Result, Expected);
+
+  // Check that Unix separators are handled correctly.
+  std::replace(Input.begin(), Input.end(), '\\', '/');
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  EXPECT_EQ(Result, Expected);
+
+  // Check the removal of "dots".
+  Input = ShareName + DirName + "\\.\\foo\\.\\.." + FileName;
+  ASSERT_NO_ERROR(windows::widenPath(Input, Result));
+  EXPECT_EQ(Result, Expected);
+}
+#endif
 
 } // anonymous namespace

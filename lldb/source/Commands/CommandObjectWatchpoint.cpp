@@ -1,4 +1,4 @@
-//===-- CommandObjectWatchpoint.cpp -----------------------------*- C++ -*-===//
+//===-- CommandObjectWatchpoint.cpp ---------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -41,7 +41,7 @@ static bool CheckTargetForWatchpointOperations(Target *target,
   bool process_is_valid =
       target->GetProcessSP() && target->GetProcessSP()->IsAlive();
   if (!process_is_valid) {
-    result.AppendError("Thre's no process or it is not alive.");
+    result.AppendError("There's no process or it is not alive.");
     result.SetStatus(eReturnStatusFailed);
     return false;
   }
@@ -415,6 +415,10 @@ protected:
 };
 
 // CommandObjectWatchpointDelete
+#define LLDB_OPTIONS_watchpoint_delete
+#include "CommandOptions.inc"
+
+// CommandObjectWatchpointDelete
 #pragma mark Delete
 
 class CommandObjectWatchpointDelete : public CommandObjectParsed {
@@ -423,7 +427,8 @@ public:
       : CommandObjectParsed(interpreter, "watchpoint delete",
                             "Delete the specified watchpoint(s).  If no "
                             "watchpoints are specified, delete them all.",
-                            nullptr, eCommandRequiresTarget) {
+                            nullptr, eCommandRequiresTarget),
+        m_options() {
     CommandArgumentEntry arg;
     CommandObject::AddIDsArgumentData(arg, eArgTypeWatchpointID,
                                       eArgTypeWatchpointIDRange);
@@ -433,6 +438,41 @@ public:
   }
 
   ~CommandObjectWatchpointDelete() override = default;
+
+  Options *GetOptions() override { return &m_options; }
+
+  class CommandOptions : public Options {
+  public:
+    CommandOptions() : Options(), m_force(false) {}
+
+    ~CommandOptions() override = default;
+
+    Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_arg,
+                          ExecutionContext *execution_context) override {
+      const int short_option = m_getopt_table[option_idx].val;
+
+      switch (short_option) {
+      case 'f':
+        m_force = true;
+        break;
+      default:
+        llvm_unreachable("Unimplemented option");
+      }
+
+      return {};
+    }
+
+    void OptionParsingStarting(ExecutionContext *execution_context) override {
+      m_force = false;
+    }
+
+    llvm::ArrayRef<OptionDefinition> GetDefinitions() override {
+      return llvm::makeArrayRef(g_watchpoint_delete_options);
+    }
+
+    // Instance variables to hold the values for command options.
+    bool m_force;
+  };
 
 protected:
   bool DoExecute(Args &command, CommandReturnObject &result) override {
@@ -453,8 +493,9 @@ protected:
       return false;
     }
 
-    if (command.GetArgumentCount() == 0) {
-      if (!m_interpreter.Confirm(
+    if (command.empty()) {
+      if (!m_options.m_force &&
+          !m_interpreter.Confirm(
               "About to delete all watchpoints, do you want to do that?",
               true)) {
         result.AppendMessage("Operation cancelled...");
@@ -465,27 +506,31 @@ protected:
                                        (uint64_t)num_watchpoints);
       }
       result.SetStatus(eReturnStatusSuccessFinishNoResult);
-    } else {
-      // Particular watchpoints selected; delete them.
-      std::vector<uint32_t> wp_ids;
-      if (!CommandObjectMultiwordWatchpoint::VerifyWatchpointIDs(
-              target, command, wp_ids)) {
-        result.AppendError("Invalid watchpoints specification.");
-        result.SetStatus(eReturnStatusFailed);
-        return false;
-      }
-
-      int count = 0;
-      const size_t size = wp_ids.size();
-      for (size_t i = 0; i < size; ++i)
-        if (target->RemoveWatchpointByID(wp_ids[i]))
-          ++count;
-      result.AppendMessageWithFormat("%d watchpoints deleted.\n", count);
-      result.SetStatus(eReturnStatusSuccessFinishNoResult);
+      return result.Succeeded();
     }
+
+    // Particular watchpoints selected; delete them.
+    std::vector<uint32_t> wp_ids;
+    if (!CommandObjectMultiwordWatchpoint::VerifyWatchpointIDs(target, command,
+                                                               wp_ids)) {
+      result.AppendError("Invalid watchpoints specification.");
+      result.SetStatus(eReturnStatusFailed);
+      return false;
+    }
+
+    int count = 0;
+    const size_t size = wp_ids.size();
+    for (size_t i = 0; i < size; ++i)
+      if (target->RemoveWatchpointByID(wp_ids[i]))
+        ++count;
+    result.AppendMessageWithFormat("%d watchpoints deleted.\n", count);
+    result.SetStatus(eReturnStatusSuccessFinishNoResult);
 
     return result.Succeeded();
   }
+
+private:
+  CommandOptions m_options;
 };
 
 // CommandObjectWatchpointIgnore
@@ -647,7 +692,7 @@ public:
 
       switch (short_option) {
       case 'c':
-        m_condition = option_arg;
+        m_condition = std::string(option_arg);
         m_condition_passed = true;
         break;
       default:
@@ -889,7 +934,7 @@ protected:
         StreamString ss;
         // True to show fullpath for declaration file.
         var_sp->GetDeclaration().DumpStopContext(&ss, true);
-        wp->SetDeclInfo(ss.GetString());
+        wp->SetDeclInfo(std::string(ss.GetString()));
       }
       output_stream.Printf("Watchpoint created: ");
       wp->GetDescription(&output_stream, lldb::eDescriptionLevelFull);
@@ -993,7 +1038,7 @@ protected:
     // set a watchpoint.
     if (raw_command.trim().empty()) {
       result.GetErrorStream().Printf("error: required argument missing; "
-                                     "specify an expression to evaulate into "
+                                     "specify an expression to evaluate into "
                                      "the address to watch for\n");
       result.SetStatus(eReturnStatusFailed);
       return false;
@@ -1025,6 +1070,8 @@ protected:
       result.GetErrorStream().Printf(
           "error: expression evaluation of address to watch failed\n");
       result.GetErrorStream() << "expression evaluated: \n" << expr << "\n";
+      if (valobj_sp && !valobj_sp->GetError().Success())
+        result.GetErrorStream() << valobj_sp->GetError().AsCString() << "\n";
       result.SetStatus(eReturnStatusFailed);
       return false;
     }

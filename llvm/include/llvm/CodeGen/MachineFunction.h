@@ -20,11 +20,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/GraphTraits.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/ilist.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Analysis/EHPersonalities.h"
@@ -35,8 +32,8 @@
 #include "llvm/Support/ArrayRecycler.h"
 #include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Recycler.h"
+#include "llvm/Target/TargetOptions.h"
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -49,10 +46,12 @@ class BasicBlock;
 class BlockAddress;
 class DataLayout;
 class DebugLoc;
+struct DenormalMode;
 class DIExpression;
 class DILocalVariable;
 class DILocation;
 class Function;
+class GISelChangeObserver;
 class GlobalValue;
 class LLVMTargetMachine;
 class MachineConstantPool;
@@ -64,10 +63,12 @@ class MachineRegisterInfo;
 class MCContext;
 class MCInstrDesc;
 class MCSymbol;
+class MCSection;
 class Pass;
 class PseudoSourceValueManager;
 class raw_ostream;
 class SlotIndexes;
+class StringRef;
 class TargetRegisterClass;
 class TargetSubtargetInfo;
 struct WasmEHFuncInfo;
@@ -221,7 +222,7 @@ struct LandingPadInfo {
 };
 
 class MachineFunction {
-  const Function &F;
+  Function &F;
   const LLVMTargetMachine &Target;
   const TargetSubtargetInfo *STI;
   MCContext &Ctx;
@@ -243,6 +244,9 @@ class MachineFunction {
   // Keep track of jump tables for switch instructions
   MachineJumpTableInfo *JumpTableInfo;
 
+  // Keep track of the function section.
+  MCSection *Section = nullptr;
+
   // Keeps track of Wasm exception handling related data. This will be null for
   // functions that aren't using a wasm EH personality.
   WasmEHFuncInfo *WasmEHInfo = nullptr;
@@ -255,6 +259,12 @@ class MachineFunction {
   // MachineBasicBlock is inserted into a MachineFunction is it automatically
   // numbered and this vector keeps track of the mapping from ID's to MBB's.
   std::vector<MachineBasicBlock*> MBBNumbering;
+
+  // Unary encoding of basic block symbols is used to reduce size of ".strtab".
+  // Basic block number 'i' gets a prefix of length 'i'.  The ith character also
+  // denotes the type of basic block number 'i'.  Return blocks are marked with
+  // 'r', landing pads with 'l' and regular blocks with 'a'.
+  std::vector<char> BBSectionsSymbolPrefix;
 
   // Pool-allocate MachineFunction-lifetime and IR objects.
   BumpPtrAllocator Allocator;
@@ -331,6 +341,9 @@ class MachineFunction {
   bool HasEHScopes = false;
   bool HasEHFunclets = false;
 
+  /// Section Type for basic blocks, only relevant with basic block sections.
+  BasicBlockSection BBSectionsType = BasicBlockSection::None;
+
   /// List of C++ TypeInfo used.
   std::vector<const GlobalValue *> TypeInfos;
 
@@ -396,6 +409,7 @@ public:
 
 private:
   Delegate *TheDelegate = nullptr;
+  GISelChangeObserver *Observer = nullptr;
 
   using CallSiteInfoMap = DenseMap<const MachineInstr *, CallSiteInfo>;
   /// Map a call instruction to call site arguments forwarding info.
@@ -414,7 +428,7 @@ public:
   using VariableDbgInfoMapTy = SmallVector<VariableDbgInfo, 4>;
   VariableDbgInfoMapTy VariableDbgInfos;
 
-  MachineFunction(const Function &F, const LLVMTargetMachine &Target,
+  MachineFunction(Function &F, const LLVMTargetMachine &Target,
                   const TargetSubtargetInfo &STI, unsigned FunctionNum,
                   MachineModuleInfo &MMI);
   MachineFunction(const MachineFunction &) = delete;
@@ -444,13 +458,26 @@ public:
     TheDelegate = delegate;
   }
 
+  void setObserver(GISelChangeObserver *O) { Observer = O; }
+
+  GISelChangeObserver *getObserver() const { return Observer; }
+
   MachineModuleInfo &getMMI() const { return MMI; }
   MCContext &getContext() const { return Ctx; }
+
+  /// Returns the Section this function belongs to.
+  MCSection *getSection() const { return Section; }
+
+  /// Indicates the Section this function belongs to.
+  void setSection(MCSection *S) { Section = S; }
 
   PseudoSourceValueManager &getPSVManager() const { return *PSVManager; }
 
   /// Return the DataLayout attached to the Module associated to this MF.
   const DataLayout &getDataLayout() const;
+
+  /// Return the LLVM function that this machine code represents
+  Function &getFunction() { return F; }
 
   /// Return the LLVM function that this machine code represents
   const Function &getFunction() const { return F; }
@@ -460,6 +487,26 @@ public:
 
   /// getFunctionNumber - Return a unique ID for the current function.
   unsigned getFunctionNumber() const { return FunctionNumber; }
+
+  /// Returns true if this function has basic block sections enabled.
+  bool hasBBSections() const {
+    return (BBSectionsType == BasicBlockSection::All ||
+            BBSectionsType == BasicBlockSection::List);
+  }
+
+  /// Returns true if basic block labels are to be generated for this function.
+  bool hasBBLabels() const {
+    return BBSectionsType == BasicBlockSection::Labels;
+  }
+
+  void setBBSectionsType(BasicBlockSection V) { BBSectionsType = V; }
+
+  /// Creates basic block Labels for this function.
+  void createBBLabels();
+
+  /// Assign IsBeginSection IsEndSection fields for basic blocks in this
+  /// function.
+  void assignBeginEndSections();
 
   /// getTarget - Return the target machine this machine code is compiled with
   const LLVMTargetMachine &getTarget() const { return Target; }
@@ -753,9 +800,8 @@ public:
   /// explicitly deallocated.
   MachineMemOperand *getMachineMemOperand(
       MachinePointerInfo PtrInfo, MachineMemOperand::Flags f, uint64_t s,
-      unsigned base_alignment, const AAMDNodes &AAInfo = AAMDNodes(),
-      const MDNode *Ranges = nullptr,
-      SyncScope::ID SSID = SyncScope::System,
+      Align base_alignment, const AAMDNodes &AAInfo = AAMDNodes(),
+      const MDNode *Ranges = nullptr, SyncScope::ID SSID = SyncScope::System,
       AtomicOrdering Ordering = AtomicOrdering::NotAtomic,
       AtomicOrdering FailureOrdering = AtomicOrdering::NotAtomic);
 
@@ -795,6 +841,8 @@ public:
 
   /// Allocate and initialize a register mask with @p NumRegister bits.
   uint32_t *allocateRegMask();
+
+  ArrayRef<int> allocateShuffleMask(ArrayRef<int> Mask);
 
   /// Allocate and construct an extra info structure for a `MachineInstr`.
   ///
@@ -981,10 +1029,14 @@ public:
     return VariableDbgInfos;
   }
 
+  /// Start tracking the arguments passed to the call \p CallI.
   void addCallArgsForwardingRegs(const MachineInstr *CallI,
                                  CallSiteInfoImpl &&CallInfo) {
-    assert(CallI->isCall());
-    CallSitesInfo[CallI] = std::move(CallInfo);
+    assert(CallI->isCandidateForCallSiteEntry());
+    bool Inserted =
+        CallSitesInfo.try_emplace(CallI, std::move(CallInfo)).second;
+    (void)Inserted;
+    assert(Inserted && "Call site info not unique");
   }
 
   const CallSiteInfoMap &getCallSitesInfo() const {
@@ -994,20 +1046,23 @@ public:
   /// Following functions update call site info. They should be called before
   /// removing, replacing or copying call instruction.
 
-  /// Move the call site info from \p Old to \New call site info. This function
-  /// is used when we are replacing one call instruction with another one to
-  /// the same callee.
-  void moveCallSiteInfo(const MachineInstr *Old,
-                        const MachineInstr *New);
-
   /// Erase the call site info for \p MI. It is used to remove a call
   /// instruction from the instruction stream.
   void eraseCallSiteInfo(const MachineInstr *MI);
-
   /// Copy the call site info from \p Old to \ New. Its usage is when we are
   /// making a copy of the instruction that will be inserted at different point
   /// of the instruction stream.
   void copyCallSiteInfo(const MachineInstr *Old,
+                        const MachineInstr *New);
+
+  const std::vector<char> &getBBSectionsSymbolPrefix() const {
+    return BBSectionsSymbolPrefix;
+  }
+
+  /// Move the call site info from \p Old to \New call site info. This function
+  /// is used when we are replacing one call instruction with another one to
+  /// the same callee.
+  void moveCallSiteInfo(const MachineInstr *Old,
                         const MachineInstr *New);
 };
 

@@ -1,1 +1,70 @@
-add_subdirectory(round)
+add_header_library(
+  math_utils
+  HDRS
+    math_utils.h
+  DEPENDS
+    libc.include.errno
+    libc.include.math
+    libc.src.errno.__errno_location
+)
+
+add_object_library(
+  sincosf_utils
+  HDRS
+    sincosf_utils.h
+  SRCS
+    sincosf_data.cpp
+  DEPENDS
+    .math_utils
+)
+
+add_entrypoint_object(
+  round
+  REDIRECTED
+  SRCS
+    round.cpp
+  HDRS
+    round.h
+)
+
+add_redirector_object(
+  round_redirector
+  SRC
+    round_redirector.cpp
+)
+
+add_entrypoint_object(
+  cosf
+  SRCS
+    cosf.cpp
+  HDRS
+    cosf.h
+  DEPENDS
+    .sincosf_utils
+    libc.include.math
+    libc.src.errno.__errno_location
+)
+
+add_entrypoint_object(
+  sinf
+  SRCS
+    sinf.cpp
+  HDRS
+    sinf.h
+  DEPENDS
+    .sincosf_utils
+    libc.include.math
+    libc.src.errno.__errno_location
+)
+
+add_entrypoint_object(
+  sincosf
+  SRCS
+    sincosf.cpp
+  HDRS
+    sincosf.h
+  DEPENDS
+    .sincosf_utils
+    libc.include.math
+    libc.src.errno.__errno_location
+)

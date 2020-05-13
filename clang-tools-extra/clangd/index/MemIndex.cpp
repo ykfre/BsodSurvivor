@@ -8,9 +8,9 @@
 
 #include "MemIndex.h"
 #include "FuzzyMatch.h"
-#include "Logger.h"
 #include "Quality.h"
-#include "Trace.h"
+#include "support/Logger.h"
+#include "support/Trace.h"
 #include "clang/Index/IndexSymbol.h"
 
 namespace clang {
@@ -36,7 +36,7 @@ bool MemIndex::fuzzyFind(
       Req.Limit ? *Req.Limit : std::numeric_limits<size_t>::max());
   FuzzyMatcher Filter(Req.Query);
   bool More = false;
-  for (const auto Pair : Index) {
+  for (const auto &Pair : Index) {
     const Symbol *Sym = Pair.second;
 
     // Exact match against all possible scopes.

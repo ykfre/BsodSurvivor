@@ -14,11 +14,11 @@
 #include "Target.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
-#include "lld/Common/Threads.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/SHA1.h"
 #include <regex>
 
@@ -89,7 +89,7 @@ static bool canMergeToProgbits(unsigned type) {
 // InputSection post finalizeInputSections(), then you must do the following:
 //
 // 1. Find or create an InputSectionDescription to hold InputSection.
-// 2. Add the InputSection to the InputSectionDesciption::sections.
+// 2. Add the InputSection to the InputSectionDescription::sections.
 // 3. Call commitSection(isec).
 void OutputSection::recordSection(InputSectionBase *isec) {
   partition = isec->partition;
@@ -114,8 +114,7 @@ void OutputSection::commitSection(InputSection *isec) {
     flags = isec->flags;
   } else {
     // Otherwise, check if new type or flags are compatible with existing ones.
-    unsigned mask = SHF_TLS | SHF_LINK_ORDER;
-    if ((flags & mask) != (isec->flags & mask))
+    if ((flags ^ isec->flags) & SHF_TLS)
       error("incompatible section flags for " + name + "\n>>> " + toString(isec) +
             ": 0x" + utohexstr(isec->flags) + "\n>>> output section " + name +
             ": 0x" + utohexstr(flags));
@@ -243,6 +242,25 @@ void OutputSection::sort(llvm::function_ref<int(InputSectionBase *s)> order) {
       sortByOrder(isd->sections, order);
 }
 
+static void nopInstrFill(uint8_t *buf, size_t size) {
+  if (size == 0)
+    return;
+  unsigned i = 0;
+  if (size == 0)
+    return;
+  std::vector<std::vector<uint8_t>> nopFiller = *target->nopInstrs;
+  unsigned num = size / nopFiller.back().size();
+  for (unsigned c = 0; c < num; ++c) {
+    memcpy(buf + i, nopFiller.back().data(), nopFiller.back().size());
+    i += nopFiller.back().size();
+  }
+  unsigned remaining = size - i;
+  if (!remaining)
+    return;
+  assert(nopFiller[remaining - 1].size() == remaining);
+  memcpy(buf + i, nopFiller[remaining - 1].data(), remaining);
+}
+
 // Fill [Buf, Buf + Size) with Filler.
 // This is used for linker script "=fillexp" command.
 static void fill(uint8_t *buf, size_t size,
@@ -331,7 +349,11 @@ template <class ELFT> void OutputSection::writeTo(uint8_t *buf) {
         end = buf + size;
       else
         end = buf + sections[i + 1]->outSecOff;
-      fill(start, end - start, filler);
+      if (isec->nopFiller) {
+        assert(target->nopInstrs);
+        nopInstrFill(start, end - start);
+      } else
+        fill(start, end - start, filler);
     }
   });
 
@@ -357,8 +379,7 @@ static void finalizeShtGroup(OutputSection *os,
 }
 
 void OutputSection::finalize() {
-  std::vector<InputSection *> v = getInputSections(this);
-  InputSection *first = v.empty() ? nullptr : v[0];
+  InputSection *first = getFirstInputSection(this);
 
   if (flags & SHF_LINK_ORDER) {
     // We must preserve the link order dependency of sections with the
@@ -367,8 +388,9 @@ void OutputSection::finalize() {
     // all InputSections in the OutputSection have the same dependency.
     if (auto *ex = dyn_cast<ARMExidxSyntheticSection>(first))
       link = ex->getLinkOrderDep()->getParent()->sectionIndex;
-    else if (auto *d = first->getLinkOrderDep())
-      link = d->getParent()->sectionIndex;
+    else if (first->flags & SHF_LINK_ORDER)
+      if (auto *d = first->getLinkOrderDep())
+        link = d->getParent()->sectionIndex;
   }
 
   if (type == SHT_GROUP) {
@@ -466,7 +488,15 @@ int getPriority(StringRef s) {
   return v;
 }
 
-std::vector<InputSection *> getInputSections(OutputSection *os) {
+InputSection *getFirstInputSection(const OutputSection *os) {
+  for (BaseCommand *base : os->sectionCommands)
+    if (auto *isd = dyn_cast<InputSectionDescription>(base))
+      if (!isd->sections.empty())
+        return isd->sections[0];
+  return nullptr;
+}
+
+std::vector<InputSection *> getInputSections(const OutputSection *os) {
   std::vector<InputSection *> ret;
   for (BaseCommand *base : os->sectionCommands)
     if (auto *isd = dyn_cast<InputSectionDescription>(base))

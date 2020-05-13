@@ -30,6 +30,14 @@
 //       dst->clock[i] = max(dst->clock[i], clock[i]);
 //   }
 //
+//   void ThreadClock::releaseStoreAcquire(SyncClock *sc) const {
+//     for (int i = 0; i < kMaxThreads; i++) {
+//       tmp = clock[i];
+//       clock[i] = max(clock[i], sc->clock[i]);
+//       sc->clock[i] = tmp;
+//     }
+//   }
+//
 //   void ThreadClock::ReleaseStore(SyncClock *dst) const {
 //     for (int i = 0; i < kMaxThreads; i++)
 //       dst->clock[i] = clock[i];
@@ -177,6 +185,49 @@ void ThreadClock::acquire(ClockCache *c, SyncClock *src) {
   }
 }
 
+void ThreadClock::releaseStoreAcquire(ClockCache *c, SyncClock *sc) {
+  DCHECK_LE(nclk_, kMaxTid);
+  DCHECK_LE(sc->size_, kMaxTid);
+
+  if (sc->size_ == 0) {
+    // ReleaseStore will correctly set release_store_tid_,
+    // which can be important for future operations.
+    ReleaseStore(c, sc);
+    return;
+  }
+
+  nclk_ = max(nclk_, (uptr) sc->size_);
+
+  // Check if we need to resize sc.
+  if (sc->size_ < nclk_)
+    sc->Resize(c, nclk_);
+
+  bool acquired = false;
+
+  sc->Unshare(c);
+  // Update sc->clk_.
+  sc->FlushDirty();
+  uptr i = 0;
+  for (ClockElem &ce : *sc) {
+    u64 tmp = clk_[i];
+    if (clk_[i] < ce.epoch) {
+      clk_[i] = ce.epoch;
+      acquired = true;
+    }
+    ce.epoch = tmp;
+    ce.reused = 0;
+    i++;
+  }
+  sc->release_store_tid_ = kInvalidTid;
+  sc->release_store_reused_ = 0;
+
+  if (acquired) {
+    CPP_STAT_INC(StatClockAcquiredSomething);
+    last_acquire_ = clk_[tid_];
+    ResetCached(c);
+  }
+}
+
 void ThreadClock::release(ClockCache *c, SyncClock *dst) {
   DCHECK_LE(nclk_, kMaxTid);
   DCHECK_LE(dst->size_, kMaxTid);
@@ -222,8 +273,6 @@ void ThreadClock::release(ClockCache *c, SyncClock *dst) {
   // Clear 'acquired' flag in the remaining elements.
   if (nclk_ < dst->size_)
     CPP_STAT_INC(StatClockReleaseClearTail);
-  for (uptr i = nclk_; i < dst->size_; i++)
-    dst->elem(i).reused = 0;
   dst->release_store_tid_ = kInvalidTid;
   dst->release_store_reused_ = 0;
   // If we've acquired dst, remember this fact,

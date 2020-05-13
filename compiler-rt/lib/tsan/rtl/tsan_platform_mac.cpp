@@ -19,6 +19,7 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_procmaps.h"
+#include "sanitizer_common/sanitizer_ptrauth.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "tsan_platform.h"
 #include "tsan_rtl.h"
@@ -274,6 +275,8 @@ void InitializePlatform() {
 uptr ExtractLongJmpSp(uptr *env) {
   uptr mangled_sp = env[LONG_JMP_SP_ENV_SLOT];
   uptr sp = mangled_sp ^ longjmp_xor_key;
+  sp = (uptr)ptrauth_auth_data((void *)sp, ptrauth_key_asdb,
+                               ptrauth_string_discriminator("sp"));
   return sp;
 }
 

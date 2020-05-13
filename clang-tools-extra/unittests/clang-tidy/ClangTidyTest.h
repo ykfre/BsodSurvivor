@@ -67,6 +67,8 @@ private:
     // `getLangOpts()`).
     CheckFactory<CheckTypes...>::createChecks(&Context, Checks);
     for (auto &Check : Checks) {
+      if (!Check->isLanguageVersionSupported(Context.getLangOpts()))
+        continue;
       Check->registerMatchers(&Finder);
       Check->registerPPCallbacks(Compiler.getSourceManager(), PP, PP);
     }
@@ -97,7 +99,9 @@ runCheckOnCode(StringRef Code, std::vector<ClangTidyError> *Errors = nullptr,
 
   std::vector<std::string> Args(1, "clang-tidy");
   Args.push_back("-fsyntax-only");
-  std::string extension(llvm::sys::path::extension(Filename.str()));
+  Args.push_back("-fno-delayed-template-parsing");
+  std::string extension(
+      std::string(llvm::sys::path::extension(Filename.str())));
   if (extension == ".m" || extension == ".mm") {
     Args.push_back("-fobjc-abi-version=2");
     Args.push_back("-fobjc-arc");
@@ -156,7 +160,7 @@ runCheckOnCode(StringRef Code, std::vector<ClangTidyError> *Errors = nullptr,
     *Errors = std::move(Diags);
   auto Result = tooling::applyAllReplacements(Code, Fixes);
   if (!Result) {
-    // FIXME: propogate the error.
+    // FIXME: propagate the error.
     llvm::consumeError(Result.takeError());
     return "";
   }

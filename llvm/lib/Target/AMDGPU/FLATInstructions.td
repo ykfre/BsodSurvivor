@@ -1,4 +1,4 @@
-//===-- FLATInstructions.td - FLAT Instruction Defintions -----------------===//
+//===-- FLATInstructions.td - FLAT Instruction Definitions ----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -100,7 +100,7 @@ class FLAT_Real <bits<7> op, FLAT_Pseudo ps> :
                   !if(ps.is_flat_scratch, 0b01, 0));
 
   // Signed offset. Highest bit ignored for flat and treated as 12-bit
-  // unsigned for flat acceses.
+  // unsigned for flat accesses.
   bits<13> offset;
   bits<1> nv = 0; // XXX - What does this actually do?
 
@@ -279,6 +279,7 @@ multiclass FLAT_Atomic_Pseudo<
     AtomicNoRet <opName, 0> {
     let PseudoInstr = NAME;
     let FPAtomic = isFP;
+    let AddedComplexity = -1; // Prefer global atomics if available
   }
 
   def _RTN : FLAT_AtomicRet_Pseudo <opName,
@@ -290,6 +291,7 @@ multiclass FLAT_Atomic_Pseudo<
        GlobalSaddrTable<0, opName#"_rtn">,
        AtomicNoRet <opName, 1>{
     let FPAtomic = isFP;
+    let AddedComplexity = -1; // Prefer global atomics if available
   }
 }
 
@@ -759,7 +761,6 @@ def : FlatLoadPat <FLAT_LOAD_USHORT, zextloadi16_flat, i32>;
 def : FlatLoadPat <FLAT_LOAD_USHORT, load_flat, i16>;
 def : FlatLoadPat <FLAT_LOAD_SSHORT, sextloadi16_flat, i32>;
 def : FlatLoadPat <FLAT_LOAD_DWORDX3, load_flat, v3i32>;
-def : FlatLoadPat <FLAT_LOAD_DWORDX4, load_flat, v4i32>;
 
 def : FlatLoadAtomicPat <FLAT_LOAD_DWORD, atomic_load_32_flat, i32>;
 def : FlatLoadAtomicPat <FLAT_LOAD_DWORDX2, atomic_load_64_flat, i64>;
@@ -778,7 +779,11 @@ def : FlatLoadPat <FLAT_LOAD_DWORDX2, load_flat, vt>;
 }
 
 def : FlatStorePat <FLAT_STORE_DWORDX3, store_flat, v3i32, VReg_96>;
-def : FlatStorePat <FLAT_STORE_DWORDX4, store_flat, v4i32, VReg_128>;
+
+foreach vt = VReg_128.RegTypes in {
+def : FlatLoadPat <FLAT_LOAD_DWORDX4, load_flat, vt>;
+def : FlatStorePat <FLAT_STORE_DWORDX4, store_flat, vt, VReg_128>;
+}
 
 def : FlatStoreAtomicPat <FLAT_STORE_DWORD, atomic_store_flat_32, i32>;
 def : FlatStoreAtomicPat <FLAT_STORE_DWORDX2, atomic_store_flat_64, i64, VReg_64>;
@@ -859,7 +864,11 @@ def : FlatStoreSignedPat <GLOBAL_STORE_DWORDX2, store_global, vt, VReg_64>;
 }
 
 def : FlatLoadSignedPat <GLOBAL_LOAD_DWORDX3, load_global, v3i32>;
-def : FlatLoadSignedPat <GLOBAL_LOAD_DWORDX4, load_global, v4i32>;
+
+foreach vt = VReg_128.RegTypes in {
+def : FlatLoadSignedPat <GLOBAL_LOAD_DWORDX4, load_global, vt>;
+def : FlatStoreSignedPat <GLOBAL_STORE_DWORDX4, store_global, vt, VReg_128>;
+}
 
 def : FlatLoadAtomicPat <GLOBAL_LOAD_DWORD, atomic_load_32_global, i32>;
 def : FlatLoadAtomicPat <GLOBAL_LOAD_DWORDX2, atomic_load_64_global, i64>;
@@ -869,7 +878,6 @@ def : FlatStoreSignedPat <GLOBAL_STORE_BYTE, truncstorei8_global, i16, VGPR_32>;
 def : FlatStoreSignedPat <GLOBAL_STORE_SHORT, truncstorei16_global, i32, VGPR_32>;
 def : FlatStoreSignedPat <GLOBAL_STORE_SHORT, store_global, i16, VGPR_32>;
 def : FlatStoreSignedPat <GLOBAL_STORE_DWORDX3, store_global, v3i32, VReg_96>;
-def : FlatStoreSignedPat <GLOBAL_STORE_DWORDX4, store_global, v4i32, VReg_128>;
 
 let OtherPredicates = [D16PreservesUnusedBits] in {
 def : FlatStoreSignedPat <GLOBAL_STORE_SHORT_D16_HI, truncstorei16_hi16_global, i32>;
@@ -890,8 +898,8 @@ def : FlatSignedLoadPat_D16 <GLOBAL_LOAD_SHORT_D16, load_d16_lo_global, v2i16>;
 def : FlatSignedLoadPat_D16 <GLOBAL_LOAD_SHORT_D16, load_d16_lo_global, v2f16>;
 }
 
-def : FlatStoreSignedAtomicPat <GLOBAL_STORE_DWORD, store_atomic_global, i32>;
-def : FlatStoreSignedAtomicPat <GLOBAL_STORE_DWORDX2, store_atomic_global, i64, VReg_64>;
+def : FlatStoreSignedAtomicPat <GLOBAL_STORE_DWORD, atomic_store_global_32, i32>;
+def : FlatStoreSignedAtomicPat <GLOBAL_STORE_DWORDX2, atomic_store_global_64, i64, VReg_64>;
 
 def : FlatSignedAtomicPat <GLOBAL_ATOMIC_ADD_RTN, atomic_load_add_global_32, i32>;
 def : FlatSignedAtomicPat <GLOBAL_ATOMIC_SUB_RTN, atomic_load_sub_global_32, i32>;

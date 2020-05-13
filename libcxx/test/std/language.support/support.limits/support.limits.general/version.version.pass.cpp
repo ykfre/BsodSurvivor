@@ -38,7 +38,7 @@
     __cpp_lib_destroying_delete                    201806L [C++2a]
     __cpp_lib_enable_shared_from_this              201603L [C++17]
     __cpp_lib_endian                               201907L [C++2a]
-    __cpp_lib_erase_if                             201811L [C++2a]
+    __cpp_lib_erase_if                             202002L [C++2a]
     __cpp_lib_exchange_function                    201304L [C++14]
     __cpp_lib_execution                            201603L [C++17]
     __cpp_lib_filesystem                           201703L [C++17]
@@ -85,9 +85,11 @@
     __cpp_lib_shared_ptr_arrays                    201611L [C++17]
     __cpp_lib_shared_ptr_weak_type                 201606L [C++17]
     __cpp_lib_shared_timed_mutex                   201402L [C++14]
+    __cpp_lib_span                                 202002L [C++2a]
     __cpp_lib_string_udls                          201304L [C++14]
     __cpp_lib_string_view                          201606L [C++17]
     __cpp_lib_three_way_comparison                 201711L [C++2a]
+    __cpp_lib_to_array                             201907L [C++2a]
     __cpp_lib_to_chars                             201611L [C++17]
     __cpp_lib_transformation_trait_aliases         201304L [C++14]
     __cpp_lib_transparent_operators                201210L [C++14]
@@ -390,6 +392,10 @@
 #   error "__cpp_lib_shared_timed_mutex should not be defined before c++14"
 # endif
 
+# ifdef __cpp_lib_span
+#   error "__cpp_lib_span should not be defined before c++2a"
+# endif
+
 # ifdef __cpp_lib_string_udls
 #   error "__cpp_lib_string_udls should not be defined before c++14"
 # endif
@@ -400,6 +406,10 @@
 
 # ifdef __cpp_lib_three_way_comparison
 #   error "__cpp_lib_three_way_comparison should not be defined before c++2a"
+# endif
+
+# ifdef __cpp_lib_to_array
+#   error "__cpp_lib_to_array should not be defined before c++2a"
 # endif
 
 # ifdef __cpp_lib_to_chars
@@ -779,6 +789,10 @@
 #   endif
 # endif
 
+# ifdef __cpp_lib_span
+#   error "__cpp_lib_span should not be defined before c++2a"
+# endif
+
 # ifndef __cpp_lib_string_udls
 #   error "__cpp_lib_string_udls should be defined in c++14"
 # endif
@@ -792,6 +806,10 @@
 
 # ifdef __cpp_lib_three_way_comparison
 #   error "__cpp_lib_three_way_comparison should not be defined before c++2a"
+# endif
+
+# ifdef __cpp_lib_to_array
+#   error "__cpp_lib_to_array should not be defined before c++2a"
 # endif
 
 # ifdef __cpp_lib_to_chars
@@ -1372,6 +1390,10 @@
 #   endif
 # endif
 
+# ifdef __cpp_lib_span
+#   error "__cpp_lib_span should not be defined before c++2a"
+# endif
+
 # ifndef __cpp_lib_string_udls
 #   error "__cpp_lib_string_udls should be defined in c++17"
 # endif
@@ -1388,6 +1410,10 @@
 
 # ifdef __cpp_lib_three_way_comparison
 #   error "__cpp_lib_three_way_comparison should not be defined before c++2a"
+# endif
+
+# ifdef __cpp_lib_to_array
+#   error "__cpp_lib_to_array should not be defined before c++2a"
 # endif
 
 # if !defined(_LIBCPP_VERSION)
@@ -1705,8 +1731,8 @@
 # ifndef __cpp_lib_erase_if
 #   error "__cpp_lib_erase_if should be defined in c++2a"
 # endif
-# if __cpp_lib_erase_if != 201811L
-#   error "__cpp_lib_erase_if should have the value 201811L in c++2a"
+# if __cpp_lib_erase_if != 202002L
+#   error "__cpp_lib_erase_if should have the value 202002L in c++2a"
 # endif
 
 # ifndef __cpp_lib_exchange_function
@@ -1886,17 +1912,11 @@
 #   error "__cpp_lib_launder should have the value 201606L in c++2a"
 # endif
 
-# if !defined(_LIBCPP_VERSION)
-#   ifndef __cpp_lib_list_remove_return_type
-#     error "__cpp_lib_list_remove_return_type should be defined in c++2a"
-#   endif
-#   if __cpp_lib_list_remove_return_type != 201806L
-#     error "__cpp_lib_list_remove_return_type should have the value 201806L in c++2a"
-#   endif
-# else // _LIBCPP_VERSION
-#   ifdef __cpp_lib_list_remove_return_type
-#     error "__cpp_lib_list_remove_return_type should not be defined because it is unimplemented in libc++!"
-#   endif
+# ifndef __cpp_lib_list_remove_return_type
+#   error "__cpp_lib_list_remove_return_type should be defined in c++2a"
+# endif
+# if __cpp_lib_list_remove_return_type != 201806L
+#   error "__cpp_lib_list_remove_return_type should have the value 201806L in c++2a"
 # endif
 
 # ifndef __cpp_lib_logical_traits
@@ -2109,6 +2129,13 @@
 #   endif
 # endif
 
+# ifndef __cpp_lib_span
+#   error "__cpp_lib_span should be defined in c++2a"
+# endif
+# if __cpp_lib_span != 202002L
+#   error "__cpp_lib_span should have the value 202002L in c++2a"
+# endif
+
 # ifndef __cpp_lib_string_udls
 #   error "__cpp_lib_string_udls should be defined in c++2a"
 # endif
@@ -2134,6 +2161,13 @@
 #   ifdef __cpp_lib_three_way_comparison
 #     error "__cpp_lib_three_way_comparison should not be defined because it is unimplemented in libc++!"
 #   endif
+# endif
+
+# ifndef __cpp_lib_to_array
+#   error "__cpp_lib_to_array should be defined in c++2a"
+# endif
+# if __cpp_lib_to_array != 201907L
+#   error "__cpp_lib_to_array should have the value 201907L in c++2a"
 # endif
 
 # if !defined(_LIBCPP_VERSION)

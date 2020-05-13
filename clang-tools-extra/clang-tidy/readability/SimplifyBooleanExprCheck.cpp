@@ -131,7 +131,7 @@ std::string asBool(StringRef text, bool NeedsStaticCast) {
   if (NeedsStaticCast)
     return ("static_cast<bool>(" + text + ")").str();
 
-  return text;
+  return std::string(text);
 }
 
 bool needsNullPtrComparison(const Expr *E) {
@@ -333,13 +333,12 @@ class SimplifyBooleanExprCheck::Visitor : public RecursiveASTVisitor<Visitor> {
   const MatchFinder::MatchResult &Result;
 };
 
-
 SimplifyBooleanExprCheck::SimplifyBooleanExprCheck(StringRef Name,
                                                    ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      ChainedConditionalReturn(Options.get("ChainedConditionalReturn", 0U)),
+      ChainedConditionalReturn(Options.get("ChainedConditionalReturn", false)),
       ChainedConditionalAssignment(
-          Options.get("ChainedConditionalAssignment", 0U)) {}
+          Options.get("ChainedConditionalAssignment", false)) {}
 
 bool containsBoolLiteral(const Expr *E) {
   if (!E)

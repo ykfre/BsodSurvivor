@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef liblldb_IOHandler_h_
-#define liblldb_IOHandler_h_
+#ifndef LLDB_CORE_IOHANDLER_H
+#define LLDB_CORE_IOHANDLER_H
 
 #include "lldb/Core/ValueObjectList.h"
 #include "lldb/Host/Config.h"
@@ -94,6 +94,8 @@ public:
   virtual void Activate() { m_active = true; }
 
   virtual void Deactivate() { m_active = false; }
+
+  virtual void TerminalSizeChanged() {}
 
   virtual const char *GetPrompt() {
     // Prompt support isn't mandatory
@@ -369,6 +371,8 @@ public:
 
   void Deactivate() override;
 
+  void TerminalSizeChanged() override;
+
   ConstString GetControlSequence(char ch) override {
     return m_delegate.IOHandlerGetControlSequence(ch);
   }
@@ -545,4 +549,4 @@ private:
 
 } // namespace lldb_private
 
-#endif // liblldb_IOHandler_h_
+#endif // LLDB_CORE_IOHANDLER_H

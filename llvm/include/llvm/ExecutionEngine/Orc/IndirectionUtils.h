@@ -84,7 +84,7 @@ public:
     return std::move(LTP);
   }
 
-  /// Get a free trampoline. Returns an error if one can not be provide (e.g.
+  /// Get a free trampoline. Returns an error if one can not be provided (e.g.
   /// because the pool is empty and can not be grown).
   Expected<JITTargetAddress> getTrampoline() override {
     std::lock_guard<std::mutex> Lock(LTPMutex);
@@ -201,7 +201,7 @@ protected:
                             ExecutionSession &ES,
                             JITTargetAddress ErrorHandlerAddress)
       : TP(std::move(TP)), ES(ES),
-        CallbacksJD(ES.createJITDylib("<Callbacks>")),
+        CallbacksJD(ES.createBareJITDylib("<Callbacks>")),
         ErrorHandlerAddress(ErrorHandlerAddress) {}
 
   void setTrampolinePool(std::unique_ptr<TrampolinePool> TP) {

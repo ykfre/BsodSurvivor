@@ -20,7 +20,9 @@
 #include "clang/Lex/PreprocessorOptions.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Config/llvm-config.h"
+#include "llvm/Support/Process.h"
 #include "gtest/gtest.h"
+#include <cstddef>
 
 using namespace clang;
 
@@ -241,6 +243,28 @@ TEST_F(SourceManagerTest, getInvalidBOM) {
             "UTF-32 (LE)");
 }
 
+// Regression test - there was an out of bound access for buffers not terminated by zero.
+TEST_F(SourceManagerTest, getLineNumber) {
+  const unsigned pageSize = llvm::sys::Process::getPageSizeEstimate();
+  std::unique_ptr<char[]> source(new char[pageSize]);
+  for(unsigned i = 0; i < pageSize; ++i) {
+    source[i] = 'a';
+  }
+
+  std::unique_ptr<llvm::MemoryBuffer> Buf =
+      llvm::MemoryBuffer::getMemBuffer(
+        llvm::MemoryBufferRef(
+          llvm::StringRef(source.get(), 3), "whatever"
+        ),
+        false
+      );
+
+  FileID mainFileID = SourceMgr.createFileID(std::move(Buf));
+  SourceMgr.setMainFileID(mainFileID);
+
+  ASSERT_NO_FATAL_FAILURE(SourceMgr.getLineNumber(mainFileID, 1, nullptr));
+}
+
 #if defined(LLVM_ON_UNIX)
 
 TEST_F(SourceManagerTest, getMacroArgExpandedLocation) {
@@ -270,10 +294,16 @@ TEST_F(SourceManagerTest, getMacroArgExpandedLocation) {
   TrivialModuleLoader ModLoader;
   HeaderSearch HeaderInfo(std::make_shared<HeaderSearchOptions>(), SourceMgr,
                           Diags, LangOpts, &*Target);
+
   Preprocessor PP(std::make_shared<PreprocessorOptions>(), Diags, LangOpts,
                   SourceMgr, HeaderInfo, ModLoader,
                   /*IILookup =*/nullptr,
                   /*OwnsHeaderSearch =*/false);
+  // Ensure we can get expanded locations in presence of implicit includes.
+  // These are different than normal includes since predefines buffer doesn't
+  // have a valid insertion location.
+  PP.setPredefines("#include \"/implicit-header.h\"");
+  FileMgr.getVirtualFile("/implicit-header.h", 0, 0);
   PP.Initialize(*Target);
   PP.EnterMainSourceFile();
 
@@ -323,7 +353,7 @@ struct MacroAction {
   unsigned MAKind : 3;
 
   MacroAction(SourceLocation Loc, StringRef Name, unsigned K)
-    : Loc(Loc), Name(Name), MAKind(K) { }
+      : Loc(Loc), Name(std::string(Name)), MAKind(K) {}
 
   bool isExpansion() const { return MAKind == kExpansion; }
   bool isDefinition() const { return MAKind & kDefinition; }

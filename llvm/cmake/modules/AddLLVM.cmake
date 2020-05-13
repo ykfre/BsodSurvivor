@@ -90,6 +90,7 @@ function(add_llvm_symbol_exports target_name export_file)
     set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                  LINK_FLAGS " -Wl,-exported_symbols_list,\"${CMAKE_CURRENT_BINARY_DIR}/${native_export_file}\"")
   elseif(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+    set(native_export_file "${export_file}")
     set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                  LINK_FLAGS " -Wl,-bE:${export_file}")
   elseif(LLVM_HAVE_LINK_VERSION_SCRIPT)
@@ -117,7 +118,7 @@ function(add_llvm_symbol_exports target_name export_file)
     set(native_export_file "${target_name}.def")
 
     add_custom_command(OUTPUT ${native_export_file}
-      COMMAND ${PYTHON_EXECUTABLE} -c "import sys;print(''.join(['EXPORTS\\n']+sys.stdin.readlines(),))"
+      COMMAND "${Python3_EXECUTABLE}" -c "import sys;print(''.join(['EXPORTS\\n']+sys.stdin.readlines(),))"
         < ${export_file} > ${native_export_file}
       DEPENDS ${export_file}
       VERBATIM
@@ -162,49 +163,54 @@ function(add_llvm_symbol_exports target_name export_file)
   set(LLVM_COMMON_DEPENDS ${LLVM_COMMON_DEPENDS} PARENT_SCOPE)
 endfunction(add_llvm_symbol_exports)
 
-if(APPLE)
-  execute_process(
-    COMMAND "${CMAKE_LINKER}" -v
-    ERROR_VARIABLE stderr
-    )
-  set(LLVM_LINKER_DETECTED YES)
-  if("${stderr}" MATCHES "PROJECT:ld64")
-    set(LLVM_LINKER_IS_LD64 YES)
-    message(STATUS "Linker detection: ld64")
-  else()
-    set(LLVM_LINKER_DETECTED NO)
-    message(STATUS "Linker detection: unknown")
-  endif()
-elseif(NOT WIN32)
-  # Detect what linker we have here
-  if( LLVM_USE_LINKER )
-    set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
-  else()
-    separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
-    set(command ${CMAKE_C_COMPILER} ${flags} -Wl,--version)
-  endif()
-  execute_process(
-    COMMAND ${command}
-    OUTPUT_VARIABLE stdout
-    ERROR_VARIABLE stderr
-    )
-  set(LLVM_LINKER_DETECTED YES)
-  if("${stdout}" MATCHES "GNU gold")
-    set(LLVM_LINKER_IS_GOLD YES)
-    message(STATUS "Linker detection: GNU Gold")
-  elseif("${stdout}" MATCHES "^LLD")
-    set(LLVM_LINKER_IS_LLD YES)
-    message(STATUS "Linker detection: LLD")
-  elseif("${stdout}" MATCHES "GNU ld")
-    set(LLVM_LINKER_IS_GNULD YES)
-    message(STATUS "Linker detection: GNU ld")
-  elseif("${stderr}" MATCHES "Solaris Link Editors" OR
-         "${stdout}" MATCHES "Solaris Link Editors")
-    set(LLVM_LINKER_IS_SOLARISLD YES)
-    message(STATUS "Linker detection: Solaris ld")
-  else()
-    set(LLVM_LINKER_DETECTED NO)
-    message(STATUS "Linker detection: unknown")
+if (NOT DEFINED LLVM_LINKER_DETECTED)
+  if(APPLE)
+    execute_process(
+      COMMAND "${CMAKE_LINKER}" -v
+      ERROR_VARIABLE stderr
+      )
+    if("${stderr}" MATCHES "PROJECT:ld64")
+      set(LLVM_LINKER_DETECTED YES CACHE INTERNAL "")
+      set(LLVM_LINKER_IS_LD64 YES CACHE INTERNAL "")
+      message(STATUS "Linker detection: ld64")
+    else()
+      set(LLVM_LINKER_DETECTED NO CACHE INTERNAL "")
+      message(STATUS "Linker detection: unknown")
+    endif()
+  elseif(NOT WIN32)
+    # Detect what linker we have here
+    if( LLVM_USE_LINKER )
+      set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
+    else()
+      separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
+      set(command ${CMAKE_C_COMPILER} ${flags} -Wl,--version)
+    endif()
+    execute_process(
+      COMMAND ${command}
+      OUTPUT_VARIABLE stdout
+      ERROR_VARIABLE stderr
+      )
+    if("${stdout}" MATCHES "GNU gold")
+      set(LLVM_LINKER_DETECTED YES CACHE INTERNAL "")
+      set(LLVM_LINKER_IS_GOLD YES CACHE INTERNAL "")
+      message(STATUS "Linker detection: GNU Gold")
+    elseif("${stdout}" MATCHES "^LLD")
+      set(LLVM_LINKER_DETECTED YES CACHE INTERNAL "")
+      set(LLVM_LINKER_IS_LLD YES CACHE INTERNAL "")
+      message(STATUS "Linker detection: LLD")
+    elseif("${stdout}" MATCHES "GNU ld")
+      set(LLVM_LINKER_DETECTED YES CACHE INTERNAL "")
+      set(LLVM_LINKER_IS_GNULD YES CACHE INTERNAL "")
+      message(STATUS "Linker detection: GNU ld")
+    elseif("${stderr}" MATCHES "Solaris Link Editors" OR
+           "${stdout}" MATCHES "Solaris Link Editors")
+      set(LLVM_LINKER_DETECTED YES CACHE INTERNAL "")
+      set(LLVM_LINKER_IS_SOLARISLD YES CACHE INTERNAL "")
+      message(STATUS "Linker detection: Solaris ld")
+    else()
+      set(LLVM_LINKER_DETECTED NO CACHE INTERNAL "")
+      message(STATUS "Linker detection: unknown")
+    endif()
   endif()
 endif()
 
@@ -251,6 +257,11 @@ function(add_link_opts target_name)
                      LINK_FLAGS " -Wl,-bnogc")
       endif()
     endif()
+  endif()
+
+  if(ARG_SUPPORT_PLUGINS AND ${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+    set_property(TARGET ${target_name} APPEND_STRING PROPERTY
+                 LINK_FLAGS " -Wl,-brtl")
   endif()
 endfunction(add_link_opts)
 
@@ -462,6 +473,22 @@ function(llvm_add_library name)
     if(ARG_DEPENDS)
       add_dependencies(${obj_name} ${ARG_DEPENDS})
     endif()
+    # Treat link libraries like PUBLIC dependencies.  LINK_LIBS might
+    # result in generating header files.  Add a dependendency so that
+    # the generated header is created before this object library.
+    if(ARG_LINK_LIBS)
+      cmake_parse_arguments(LINK_LIBS_ARG
+        ""
+        ""
+        "PUBLIC;PRIVATE"
+        ${ARG_LINK_LIBS})
+      foreach(link_lib ${LINK_LIBS_ARG_PUBLIC})
+        # Can't specify a dependence on -lpthread
+        if(NOT ${link_lib} STREQUAL ${LLVM_PTHREAD_LIB})
+          add_dependencies(${obj_name} ${link_lib})
+        endif()
+      endforeach()
+    endif()
   endif()
 
   if(ARG_SHARED AND ARG_STATIC)
@@ -599,7 +626,7 @@ function(llvm_add_library name)
   endif()
 
   if(ARG_STATIC)
-    set(libtype INTERFACE)
+    set(libtype PUBLIC)
   else()
     # We can use PRIVATE since SO knows its dependent libs.
     set(libtype PRIVATE)
@@ -639,7 +666,7 @@ function(llvm_add_library name)
 endfunction()
 
 function(add_llvm_install_targets target)
-  cmake_parse_arguments(ARG "" "COMPONENT;PREFIX" "DEPENDS" ${ARGN})
+  cmake_parse_arguments(ARG "" "COMPONENT;PREFIX;SYMLINK" "DEPENDS" ${ARGN})
   if(ARG_COMPONENT)
     set(component_option -DCMAKE_INSTALL_COMPONENT="${ARG_COMPONENT}")
   endif()
@@ -675,6 +702,11 @@ function(add_llvm_install_targets target)
   if(target_dependencies)
     add_dependencies(${target} ${target_dependencies})
     add_dependencies(${target}-stripped ${target_dependencies})
+  endif()
+
+  if(ARG_SYMLINK)
+    add_dependencies(${target} install-${ARG_SYMLINK})
+    add_dependencies(${target}-stripped install-${ARG_SYMLINK}-stripped)
   endif()
 endfunction()
 
@@ -836,6 +868,168 @@ macro(add_llvm_executable name)
   llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS} BUNDLE_PATH ${ARG_BUNDLE_PATH})
 endmacro(add_llvm_executable name)
 
+# add_llvm_pass_plugin(name [NO_MODULE] ...)
+#   Add ${name} as an llvm plugin.
+#   If option LLVM_${name_upper}_LINK_INTO_TOOLS is set to ON, the plugin is registered statically.
+#   Otherwise a pluggable shared library is registered.
+#
+#   If NO_MODULE is specified, when option LLVM_${name_upper}_LINK_INTO_TOOLS is set to OFF,
+#   only an object library is built, and no module is built. This is specific to the Polly use case.
+#
+#   The SUBPROJECT argument contains the LLVM project the plugin belongs
+#   to. If set, the plugin will link statically by default it if the 
+#   project was enabled.
+function(add_llvm_pass_plugin name)
+  cmake_parse_arguments(ARG
+    "NO_MODULE" "SUBPROJECT" ""
+    ${ARGN})
+
+  string(TOUPPER ${name} name_upper)
+
+  # Enable the plugin by default if it was explicitly enabled by the user.
+  # Note: If was set to "all", LLVM's CMakeLists.txt replaces it with a
+  # list of all projects, counting as explicitly enabled.
+  set(link_into_tools_default OFF)
+  if (ARG_SUBPROJECT AND LLVM_TOOL_${name_upper}_BUILD)
+    set(link_into_tools_default ON)
+  endif()
+  option(LLVM_${name_upper}_LINK_INTO_TOOLS "Statically link ${name} into tools (if available)" ${link_into_tools_default})
+
+  # If we statically link the plugin, don't use llvm dylib because we're going
+  # to be part of it.
+  if(LLVM_${name_upper}_LINK_INTO_TOOLS)
+      list(APPEND ARG_UNPARSED_ARGUMENTS DISABLE_LLVM_LINK_LLVM_DYLIB)
+  endif()
+
+  if(LLVM_${name_upper}_LINK_INTO_TOOLS)
+    list(REMOVE_ITEM ARG_UNPARSED_ARGUMENTS BUILDTREE_ONLY)
+    # process_llvm_pass_plugins takes care of the actual linking, just create an
+    # object library as of now
+    add_llvm_library(${name} OBJECT ${ARG_UNPARSED_ARGUMENTS})
+    target_compile_definitions(${name} PRIVATE LLVM_${name_upper}_LINK_INTO_TOOLS)
+    set_property(TARGET ${name} APPEND PROPERTY COMPILE_DEFINITIONS LLVM_LINK_INTO_TOOLS)
+    if (TARGET intrinsics_gen)
+      add_dependencies(obj.${name} intrinsics_gen)
+    endif()
+    set_property(GLOBAL APPEND PROPERTY LLVM_STATIC_EXTENSIONS ${name})
+  elseif(NOT ARG_NO_MODULE)
+    add_llvm_library(${name} MODULE ${ARG_UNPARSED_ARGUMENTS})
+  else()
+    add_llvm_library(${name} OBJECT ${ARG_UNPARSED_ARGUMENTS})
+  endif()
+  message(STATUS "Registering ${name} as a pass plugin (static build: ${LLVM_${name_upper}_LINK_INTO_TOOLS})")
+
+endfunction(add_llvm_pass_plugin)
+
+# process_llvm_pass_plugins([GEN_CONFIG])
+#
+# Correctly set lib dependencies between plugins and tools, based on tools
+# registered with the ENABLE_PLUGINS option.
+#
+# if GEN_CONFIG option is set, also generate X Macro file for extension
+# handling. It provides a HANDLE_EXTENSION(extension_namespace, ExtensionProject)
+# call for each extension allowing client code to define
+# HANDLE_EXTENSION to have a specific code be run for each extension.
+#
+function(process_llvm_pass_plugins)
+  cmake_parse_arguments(ARG
+      "GEN_CONFIG" "" ""
+    ${ARGN})
+
+  if(ARG_GEN_CONFIG)
+      get_property(LLVM_STATIC_EXTENSIONS GLOBAL PROPERTY LLVM_STATIC_EXTENSIONS)
+  else()
+      include(LLVMConfigExtensions)
+  endif()
+
+  # Add static plugins to the Extension component
+  foreach(llvm_extension ${LLVM_STATIC_EXTENSIONS})
+      set_property(TARGET LLVMExtensions APPEND PROPERTY LINK_LIBRARIES ${llvm_extension})
+      set_property(TARGET LLVMExtensions APPEND PROPERTY INTERFACE_LINK_LIBRARIES ${llvm_extension})
+  endforeach()
+
+  # Eventually generate the extension headers, and store config to a cmake file
+  # for usage in third-party configuration.
+  if(ARG_GEN_CONFIG)
+
+      ## Part 1: Extension header to be included whenever we need extension
+      #  processing.
+      set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
+      set(llvm_cmake_builddir "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
+      file(WRITE
+          "${llvm_cmake_builddir}/LLVMConfigExtensions.cmake"
+          "set(LLVM_STATIC_EXTENSIONS ${LLVM_STATIC_EXTENSIONS})")
+      install(FILES
+          ${llvm_cmake_builddir}/LLVMConfigExtensions.cmake
+          DESTINATION ${LLVM_INSTALL_PACKAGE_DIR}
+          COMPONENT cmake-exports)
+
+      set(ExtensionDef "${LLVM_BINARY_DIR}/include/llvm/Support/Extension.def")
+      file(WRITE "${ExtensionDef}.tmp" "//extension handlers\n")
+      foreach(llvm_extension ${LLVM_STATIC_EXTENSIONS})
+          file(APPEND "${ExtensionDef}.tmp" "HANDLE_EXTENSION(${llvm_extension})\n")
+      endforeach()
+      file(APPEND "${ExtensionDef}.tmp" "#undef HANDLE_EXTENSION\n")
+
+      # only replace if there's an actual change
+      execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${ExtensionDef}.tmp"
+          "${ExtensionDef}")
+      file(REMOVE "${ExtensionDef}.tmp")
+
+      ## Part 2: Extension header that captures each extension dependency, to be
+      #  used by llvm-config.
+      set(ExtensionDeps "${LLVM_BINARY_DIR}/tools/llvm-config/ExtensionDependencies.inc")
+
+      # Max needed to correctly size the required library array.
+      set(llvm_plugin_max_deps_length 0)
+      foreach(llvm_extension ${LLVM_STATIC_EXTENSIONS})
+        get_property(llvm_plugin_deps TARGET ${llvm_extension} PROPERTY LINK_LIBRARIES)
+        list(LENGTH llvm_plugin_deps llvm_plugin_deps_length)
+        if(llvm_plugin_deps_length GREATER llvm_plugin_max_deps_length)
+            set(llvm_plugin_max_deps_length ${llvm_plugin_deps_length})
+        endif()
+      endforeach()
+
+      list(LENGTH LLVM_STATIC_EXTENSIONS llvm_static_extension_count)
+      file(WRITE
+          "${ExtensionDeps}.tmp"
+          "#include <array>\n\
+           struct ExtensionDescriptor {\n\
+              const char* Name;\n\
+              const char* RequiredLibraries[1 + 1 + ${llvm_plugin_max_deps_length}];\n\
+           };\n\
+           std::array<ExtensionDescriptor, ${llvm_static_extension_count}> AvailableExtensions{\n")
+
+      foreach(llvm_extension ${LLVM_STATIC_EXTENSIONS})
+        get_property(llvm_plugin_deps TARGET ${llvm_extension} PROPERTY LINK_LIBRARIES)
+
+        file(APPEND "${ExtensionDeps}.tmp" "{{\"${llvm_extension}\", {")
+        foreach(llvm_plugin_dep ${llvm_plugin_deps})
+            # Turn library dependency back to component name, if possible.
+            # That way llvm-config can avoid redundant dependencies.
+            STRING(REGEX REPLACE "^-l" ""  plugin_dep_name ${llvm_plugin_dep})
+            STRING(REGEX MATCH "^LLVM" is_llvm_library ${plugin_dep_name})
+            if(is_llvm_library)
+                STRING(REGEX REPLACE "^LLVM" ""  plugin_dep_name ${plugin_dep_name})
+                STRING(TOLOWER ${plugin_dep_name} plugin_dep_name)
+            endif()
+            file(APPEND "${ExtensionDeps}.tmp" "\"${plugin_dep_name}\", ")
+        endforeach()
+
+        # Self + mandatory trailing null, because the number of RequiredLibraries differs between extensions.
+        file(APPEND "${ExtensionDeps}.tmp" \"${llvm_extension}\", "nullptr}}},\n")
+      endforeach()
+      file(APPEND "${ExtensionDeps}.tmp" "};\n")
+
+      # only replace if there's an actual change
+      execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${ExtensionDeps}.tmp"
+          "${ExtensionDeps}")
+      file(REMOVE "${ExtensionDeps}.tmp")
+  endif()
+endfunction()
+
 function(export_executable_symbols target)
   if (LLVM_EXPORTED_SYMBOL_FILE)
     # The symbol file should contain the symbols we want the executable to
@@ -880,7 +1074,7 @@ function(export_executable_symbols target)
       set(mangling itanium)
     endif()
     add_custom_command(OUTPUT ${exported_symbol_file}
-                       COMMAND ${PYTHON_EXECUTABLE} ${LLVM_MAIN_SRC_DIR}/utils/extract_symbols.py --mangling=${mangling} ${static_libs} -o ${exported_symbol_file}
+                       COMMAND "${Python3_EXECUTABLE}" ${LLVM_MAIN_SRC_DIR}/utils/extract_symbols.py --mangling=${mangling} ${static_libs} -o ${exported_symbol_file}
                        WORKING_DIRECTORY ${LLVM_LIBRARY_OUTPUT_INTDIR}
                        DEPENDS ${LLVM_MAIN_SRC_DIR}/utils/extract_symbols.py ${static_libs}
                        VERBATIM
@@ -909,9 +1103,17 @@ function(export_executable_symbols target)
   endif()
 endfunction()
 
+# Export symbols if LLVM plugins are enabled.
+function(export_executable_symbols_for_plugins target)
+  if(LLVM_ENABLE_PLUGINS OR LLVM_EXPORT_SYMBOLS_FOR_PLUGINS)
+    export_executable_symbols(${target})
+  endif()
+endfunction()
+
 if(NOT LLVM_TOOLCHAIN_TOOLS)
   set (LLVM_TOOLCHAIN_TOOLS
     llvm-ar
+    llvm-cov
     llvm-cxxfilt
     llvm-ranlib
     llvm-lib
@@ -983,6 +1185,17 @@ macro(add_llvm_example name)
   endif()
   set_target_properties(${name} PROPERTIES FOLDER "Examples")
 endmacro(add_llvm_example name)
+
+macro(add_llvm_example_library name)
+  if( NOT LLVM_BUILD_EXAMPLES )
+    set(EXCLUDE_FROM_ALL ON)
+    add_llvm_library(${name} BUILDTREE_ONLY ${ARGN})
+  else()
+    add_llvm_library(${name} ${ARGN})
+  endif()
+
+  set_target_properties(${name} PROPERTIES FOLDER "Examples")
+endmacro(add_llvm_example_library name)
 
 # This is a macro that is used to create targets for executables that are needed
 # for development, but that are not intended to be installed by default.
@@ -1230,36 +1443,6 @@ function(add_benchmark benchmark_name)
   target_link_libraries(${benchmark_name} PRIVATE benchmark)
 endfunction()
 
-function(llvm_add_go_executable binary pkgpath)
-  cmake_parse_arguments(ARG "ALL" "" "DEPENDS;GOFLAGS" ${ARGN})
-
-  if(LLVM_BINDINGS MATCHES "go")
-    # FIXME: This should depend only on the libraries Go needs.
-    get_property(llvmlibs GLOBAL PROPERTY LLVM_LIBS)
-    set(binpath ${CMAKE_BINARY_DIR}/bin/${binary}${CMAKE_EXECUTABLE_SUFFIX})
-    set(cc "${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1}")
-    set(cxx "${CMAKE_CXX_COMPILER} ${CMAKE_CXX_COMPILER_ARG1}")
-    set(cppflags "")
-    get_property(include_dirs DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
-    foreach(d ${include_dirs})
-      set(cppflags "${cppflags} -I${d}")
-    endforeach(d)
-    set(ldflags "${CMAKE_EXE_LINKER_FLAGS}")
-    add_custom_command(OUTPUT ${binpath}
-      COMMAND ${CMAKE_BINARY_DIR}/bin/llvm-go "go=${GO_EXECUTABLE}" "cc=${cc}" "cxx=${cxx}" "cppflags=${cppflags}" "ldflags=${ldflags}" "packages=${LLVM_GO_PACKAGES}"
-              ${ARG_GOFLAGS} build -o ${binpath} ${pkgpath}
-      DEPENDS llvm-config ${CMAKE_BINARY_DIR}/bin/llvm-go${CMAKE_EXECUTABLE_SUFFIX}
-              ${llvmlibs} ${ARG_DEPENDS}
-      COMMENT "Building Go executable ${binary}"
-      VERBATIM)
-    if (ARG_ALL)
-      add_custom_target(${binary} ALL DEPENDS ${binpath})
-    else()
-      add_custom_target(${binary} DEPENDS ${binpath})
-    endif()
-  endif()
-endfunction()
-
 # This function canonicalize the CMake variables passed by names
 # from CMake boolean to 0/1 suitable for passing into Python or C++,
 # in place.
@@ -1282,13 +1465,57 @@ macro(set_llvm_build_mode)
   endif ()
 endmacro()
 
+# Takes a list of path names in pathlist and a base directory, and returns
+# a list of paths relative to the base directory in out_pathlist.
+# Paths that are on a different drive than the basedir (on Windows) or that
+# contain symlinks are returned absolute.
+# Use with LLVM_LIT_PATH_FUNCTION below.
+function(make_paths_relative out_pathlist basedir pathlist)
+  # Passing ARG_PATH_VALUES as-is to execute_process() makes cmake strip
+  # empty list entries. So escape the ;s in the list and do the splitting
+  # ourselves. cmake has no relpath function, so use Python for that.
+  string(REPLACE ";" "\\;" pathlist_escaped "${pathlist}")
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "\n
+import os, sys\n
+base = sys.argv[1]
+def haslink(p):\n
+    if not p or p == os.path.dirname(p): return False\n
+    return os.path.islink(p) or haslink(os.path.dirname(p))\n
+def relpath(p):\n
+    if not p: return ''\n
+    if os.path.splitdrive(p)[0] != os.path.splitdrive(base)[0]: return p\n
+    if haslink(p) or haslink(base): return p\n
+    return os.path.relpath(p, base)\n
+sys.stdout.write(';'.join(relpath(p) for p in sys.argv[2].split(';')))"
+    ${basedir}
+    ${pathlist_escaped}
+    OUTPUT_VARIABLE pathlist_relative)
+  set(${out_pathlist} "${pathlist_relative}" PARENT_SCOPE)
+endfunction()
+
+# Converts a file that's relative to the current python file to an absolute
+# path. Since this uses __file__, it has to be emitted into python files that
+# use it and can't be in a lit module. Use with make_paths_relative().
+string(CONCAT LLVM_LIT_PATH_FUNCTION
+  "# Allow generated file to be relocatable.\n"
+  "def path(p):\n"
+  "    if not p: return ''\n"
+  "    return os.path.join(os.path.dirname(os.path.abspath(__file__)), p)\n"
+  )
+
 # This function provides an automatic way to 'configure'-like generate a file
 # based on a set of common and custom variables, specifically targeting the
 # variables needed for the 'lit.site.cfg' files. This function bundles the
 # common variables that any Lit instance is likely to need, and custom
 # variables can be passed in.
+# The keyword PATHS is followed by a list of cmake variable names that are
+# mentioned as `path("@varname@")` in the lit.cfg.py.in file. Variables in that
+# list are treated as paths that are relative to the directory the generated
+# lit.cfg.py file is in, and the `path()` function converts the relative
+# path back to absolute form. This makes it possible to move a build directory
+# containing lit.cfg.py files from one machine to another.
 function(configure_lit_site_cfg site_in site_out)
-  cmake_parse_arguments(ARG "" "" "MAIN_CONFIG;OUTPUT_MAPPING" ${ARGN})
+  cmake_parse_arguments(ARG "" "" "MAIN_CONFIG;OUTPUT_MAPPING;PATHS" ${ARGN})
 
   if ("${ARG_MAIN_CONFIG}" STREQUAL "")
     get_filename_component(INPUT_DIR ${site_in} DIRECTORY)
@@ -1316,7 +1543,6 @@ function(configure_lit_site_cfg site_in site_out)
   # SHLIBDIR points the build tree.
   string(REPLACE "${CMAKE_CFG_INTDIR}" "${LLVM_BUILD_MODE}" SHLIBDIR "${LLVM_SHLIB_OUTPUT_INTDIR}")
 
-  set(PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
   # FIXME: "ENABLE_SHARED" doesn't make sense, since it is used just for
   # plugins. We may rename it.
   if(LLVM_ENABLE_PLUGINS)
@@ -1338,12 +1564,15 @@ function(configure_lit_site_cfg site_in site_out)
   set(HOST_CXX "${CMAKE_CXX_COMPILER} ${CMAKE_CXX_COMPILER_ARG1}")
   set(HOST_LDFLAGS "${CMAKE_EXE_LINKER_FLAGS}")
 
-  set(LIT_SITE_CFG_IN_HEADER  "## Autogenerated from ${site_in}\n## Do not edit!")
+  string(CONCAT LIT_SITE_CFG_IN_HEADER
+    "# Autogenerated from ${site_in}\n# Do not edit!\n\n"
+    "${LLVM_LIT_PATH_FUNCTION}"
+    )
 
   # Override config_target_triple (and the env)
   if(LLVM_TARGET_TRIPLE_ENV)
     # This is expanded into the heading.
-    string(CONCAT LIT_SITE_CFG_IN_HEADER "${LIT_SITE_CFG_IN_HEADER}\n\n"
+    string(CONCAT LIT_SITE_CFG_IN_HEADER "${LIT_SITE_CFG_IN_HEADER}"
       "import os\n"
       "target_env = \"${LLVM_TARGET_TRIPLE_ENV}\"\n"
       "config.target_triple = config.environment[target_env] = os.environ.get(target_env, \"${TARGET_TRIPLE}\")\n"
@@ -1353,12 +1582,47 @@ function(configure_lit_site_cfg site_in site_out)
     set(TARGET_TRIPLE "\"+config.target_triple+\"")
   endif()
 
+  if (ARG_PATHS)
+    # Walk ARG_PATHS and collect the current value of the variables in there.
+    # list(APPEND) ignores empty elements exactly if the list is empty,
+    # so start the list with a dummy element and drop it, to make sure that
+    # even empty values make it into the values list.
+    set(ARG_PATH_VALUES "dummy")
+    foreach(path ${ARG_PATHS})
+      list(APPEND ARG_PATH_VALUES "${${path}}")
+    endforeach()
+    list(REMOVE_AT ARG_PATH_VALUES 0)
+
+    get_filename_component(OUTPUT_DIR ${site_out} DIRECTORY)
+    make_paths_relative(
+        ARG_PATH_VALUES_RELATIVE "${OUTPUT_DIR}" "${ARG_PATH_VALUES}")
+
+    list(LENGTH ARG_PATHS len_paths)
+    list(LENGTH ARG_PATH_VALUES len_path_values)
+    list(LENGTH ARG_PATH_VALUES_RELATIVE len_path_value_rels)
+    if ((NOT ${len_paths} EQUAL ${len_path_values}) OR
+        (NOT ${len_paths} EQUAL ${len_path_value_rels}))
+      message(SEND_ERROR "PATHS lengths got confused")
+    endif()
+
+    # Transform variables mentioned in ARG_PATHS to relative paths for
+    # the configure_file() call. Variables are copied to subscopeds by cmake,
+    # so this only modifies the local copy of the variables.
+    math(EXPR arg_path_limit "${len_paths} - 1")
+    foreach(i RANGE ${arg_path_limit})
+      list(GET ARG_PATHS ${i} val1)
+      list(GET ARG_PATH_VALUES_RELATIVE ${i} val2)
+      set(${val1} ${val2})
+    endforeach()
+  endif()
+
   configure_file(${site_in} ${site_out} @ONLY)
+
   if (EXISTS "${ARG_MAIN_CONFIG}")
-    set(PYTHON_STATEMENT "map_config('${ARG_MAIN_CONFIG}', '${site_out}')")
-    get_property(LLVM_LIT_CONFIG_MAP GLOBAL PROPERTY LLVM_LIT_CONFIG_MAP)
-    set(LLVM_LIT_CONFIG_MAP "${LLVM_LIT_CONFIG_MAP}\n${PYTHON_STATEMENT}")
-    set_property(GLOBAL PROPERTY LLVM_LIT_CONFIG_MAP ${LLVM_LIT_CONFIG_MAP})
+    # Remember main config / generated site config for llvm-lit.in.
+    get_property(LLVM_LIT_CONFIG_FILES GLOBAL PROPERTY LLVM_LIT_CONFIG_FILES)
+    list(APPEND LLVM_LIT_CONFIG_FILES "${ARG_MAIN_CONFIG}" "${site_out}")
+    set_property(GLOBAL PROPERTY LLVM_LIT_CONFIG_FILES ${LLVM_LIT_CONFIG_FILES})
   endif()
 endfunction()
 
@@ -1436,7 +1700,7 @@ function(add_lit_target target comment)
     ALLOW_EXTERNAL
     )
 
-  set(LIT_COMMAND "${PYTHON_EXECUTABLE};${lit_base_dir}/${lit_file_name}")
+  set(LIT_COMMAND "${Python3_EXECUTABLE};${lit_base_dir}/${lit_file_name}")
   list(APPEND LIT_COMMAND ${LIT_ARGS})
   foreach(param ${ARG_PARAMS})
     list(APPEND LIT_COMMAND --param ${param})
@@ -1463,10 +1727,10 @@ endfunction()
 
 # A function to add a set of lit test suites to be driven through 'check-*' targets.
 function(add_lit_testsuite target comment)
-  cmake_parse_arguments(ARG "" "" "PARAMS;DEPENDS;ARGS" ${ARGN})
+  cmake_parse_arguments(ARG "EXCLUDE_FROM_CHECK_ALL" "" "PARAMS;DEPENDS;ARGS" ${ARGN})
 
   # EXCLUDE_FROM_ALL excludes the test ${target} out of check-all.
-  if(NOT EXCLUDE_FROM_ALL)
+  if(NOT ARG_EXCLUDE_FROM_CHECK_ALL)
     # Register the testsuites, params and depends for the global check rule.
     set_property(GLOBAL APPEND PROPERTY LLVM_LIT_TESTSUITES ${ARG_UNPARSED_ARGUMENTS})
     set_property(GLOBAL APPEND PROPERTY LLVM_LIT_PARAMS ${ARG_PARAMS})
@@ -1485,7 +1749,7 @@ endfunction()
 
 function(add_lit_testsuites project directory)
   if (NOT LLVM_ENABLE_IDE)
-    cmake_parse_arguments(ARG "" "" "PARAMS;DEPENDS;ARGS" ${ARGN})
+    cmake_parse_arguments(ARG "EXCLUDE_FROM_CHECK_ALL" "" "PARAMS;DEPENDS;ARGS" ${ARGN})
 
     # Search recursively for test directories by assuming anything not
     # in a directory called Inputs contains tests.
@@ -1508,6 +1772,7 @@ function(add_lit_testsuites project directory)
         string(TOLOWER "${project}${name_dashes}" name_var)
         add_lit_target("check-${name_var}" "Running lit suite ${lit_suite}"
           ${lit_suite}
+          ${EXCLUDE_FROM_CHECK_ALL}
           PARAMS ${ARG_PARAMS}
           DEPENDS ${ARG_DEPENDS}
           ARGS ${ARG_ARGS}
@@ -1545,8 +1810,9 @@ function(llvm_install_library_symlink name dest type)
 
   if (NOT LLVM_ENABLE_IDE AND NOT ARG_ALWAYS_GENERATE)
     add_llvm_install_targets(install-${name}
-                             DEPENDS ${name} ${dest} install-${dest}
-                             COMPONENT ${name})
+                             DEPENDS ${name} ${dest}
+                             COMPONENT ${name}
+                             SYMLINK ${dest})
   endif()
 endfunction()
 
@@ -1578,8 +1844,9 @@ function(llvm_install_symlink name dest)
 
   if (NOT LLVM_ENABLE_IDE AND NOT ARG_ALWAYS_GENERATE)
     add_llvm_install_targets(install-${name}
-                             DEPENDS ${name} ${dest} install-${dest}
-                             COMPONENT ${name})
+                             DEPENDS ${name} ${dest}
+                             COMPONENT ${name}
+                             SYMLINK ${dest})
   endif()
 endfunction()
 

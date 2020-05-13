@@ -80,7 +80,7 @@ Basic Usage
 Intro to how to use a C compiler for newbies.
 
 compile + link compile then link debug info enabling optimizations
-picking a language to use, defaults to C11 by default. Autosenses based
+picking a language to use, defaults to C17 by default. Autosenses based
 on extension. using a makefile
 
 Command Line Options
@@ -1466,7 +1466,7 @@ are listed below.
 
 **-f[no-]sanitize-recover=check1,check2,...**
 
-**-f[no-]sanitize-recover=all**
+**-f[no-]sanitize-recover[=all]**
 
    Controls which checks enabled by ``-fsanitize=`` flag are non-fatal.
    If the check is fatal, program will halt after the first error
@@ -1492,6 +1492,8 @@ are listed below.
 
 **-f[no-]sanitize-trap=check1,check2,...**
 
+**-f[no-]sanitize-trap[=all]**
+
    Controls which checks enabled by the ``-fsanitize=`` flag trap. This
    option is intended for use in cases where the sanitizer runtime cannot
    be used (for instance, when building libc or a kernel module), or where
@@ -1499,9 +1501,7 @@ are listed below.
 
    This flag is only compatible with :doc:`control flow integrity
    <ControlFlowIntegrity>` schemes and :doc:`UndefinedBehaviorSanitizer`
-   checks other than ``vptr``. If this flag
-   is supplied together with ``-fsanitize=undefined``, the ``vptr`` sanitizer
-   will be implicitly disabled.
+   checks other than ``vptr``.
 
    This flag is enabled by default for sanitizers in the ``cfi`` group.
 
@@ -1676,6 +1676,27 @@ are listed below.
    relocation scanning. Address-significance tables are enabled by default
    on ELF targets when using the integrated assembler. This flag currently
    only has an effect on ELF targets.
+
+**-f[no]-unique-internal-linkage-names**
+
+   Controls whether Clang emits a unique (best-effort) symbol name for internal
+   linkage symbols.  When this option is set, compiler hashes the main source
+   file path from the command line and appends it to all internal symbols. If a
+   program contains multiple objects compiled with the same command-line source
+   file path, the symbols are not guaranteed to be unique.  This option is
+   particularly useful in attributing profile information to the correct
+   function when multiple functions with the same private linkage name exist
+   in the binary.
+
+   It should be noted that this option cannot guarantee uniqueness and the
+   following is an example where it is not unique when two modules contain
+   symbols with the same private linkage name:
+
+   .. code-block:: console
+
+     $ cd $P/foo && clang -c -funique-internal-linkage-names name_conflict.c
+     $ cd $P/bar && clang -c -funique-internal-linkage-names name_conflict.c
+     $ cd $P && clang foo/name_conflict.o && bar/name_conflict.o
 
 Profile Guided Optimization
 ---------------------------
@@ -2399,10 +2420,10 @@ See :doc:`LanguageExtensions`.
 Differences between various standard modes
 ------------------------------------------
 
-clang supports the -std option, which changes what language mode clang
-uses. The supported modes for C are c89, gnu89, c99, gnu99, c11, gnu11,
-c17, gnu17, and various aliases for those modes. If no -std option is
-specified, clang defaults to gnu11 mode. Many C99 and C11 features are
+clang supports the -std option, which changes what language mode clang uses.
+The supported modes for C are c89, gnu89, c99, gnu99, c11, gnu11, c17, gnu17,
+c2x, gnu2x, and various aliases for those modes. If no -std option is
+specified, clang defaults to gnu17 mode. Many C99 and C11 features are
 supported in earlier modes as a conforming extension, with a warning. Use
 ``-pedantic-errors`` to request an error if a feature from a later standard
 revision is used in an earlier mode.
@@ -2661,7 +2682,8 @@ This will produce a generic test.bc file that can be used in vendor toolchains
 to perform machine code generation.
 
 Clang currently supports OpenCL C language standards up to v2.0. Starting from
-clang 9 a C++ mode is available for OpenCL (see :ref:`C++ for OpenCL <opencl_cpp>`).
+clang 9 a C++ mode is available for OpenCL (see
+:ref:`C++ for OpenCL <cxx_for_opencl>`).
 
 OpenCL Specific Options
 -----------------------
@@ -2856,6 +2878,10 @@ function to the custom ``my_ext`` extension.
 
 Declaring the same types in different vendor extensions is disallowed.
 
+Clang also supports language extensions documented in `The OpenCL C Language
+Extensions Documentation
+<https://github.com/KhronosGroup/Khronosdotorg/blob/master/api/opencl/assets/OpenCL_LangExt.pdf>`_.
+
 OpenCL Metadata
 ---------------
 
@@ -3020,7 +3046,7 @@ There are some standard OpenCL functions that are implemented as Clang builtins:
   enqueue query functions from `section 6.13.17.5
   <https://www.khronos.org/registry/cl/specs/opencl-2.0-openclc.pdf#171>`_.
 
-.. _opencl_cpp:
+.. _cxx_for_opencl:
 
 C++ for OpenCL
 --------------
@@ -3031,8 +3057,9 @@ implementation of `OpenCL C++
 <https://www.khronos.org/registry/OpenCL/specs/2.2/pdf/OpenCL_Cxx.pdf>`_ and
 there is no plan to support it in clang in any new releases in the near future.
 
-For detailed information about restrictions to allowed C++ features please
-refer to :doc:`LanguageExtensions`.
+For detailed information about this language refer to `The C++ for OpenCL
+Programming Language Documentation
+<https://github.com/KhronosGroup/Khronosdotorg/blob/master/api/opencl/assets/CXX_for_OpenCL.pdf>`_.
 
 Since C++ features are to be used on top of OpenCL C functionality, all existing
 restrictions from OpenCL C v2.0 will inherently apply. All OpenCL C builtin types
@@ -3059,6 +3086,35 @@ compiling ``.cl`` file ``-cl-std=clc++``, ``-cl-std=CLC++``, ``-std=clc++`` or
    .. code-block:: console
 
      clang -cl-std=clc++ test.cl
+
+Constructing and destroying global objects
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Global objects must be constructed before the first kernel using the global objects
+is executed and destroyed just after the last kernel using the program objects is
+executed. In OpenCL v2.0 drivers there is no specific API for invoking global
+constructors. However, an easy workaround would be to enqueue a constructor
+initialization kernel that has a name ``@_GLOBAL__sub_I_<compiled file name>``.
+This kernel is only present if there are any global objects to be initialized in
+the compiled binary. One way to check this is by passing ``CL_PROGRAM_KERNEL_NAMES``
+to ``clGetProgramInfo`` (OpenCL v2.0 s5.8.7).
+
+Note that if multiple files are compiled and linked into libraries, multiple kernels
+that initialize global objects for multiple modules would have to be invoked.
+
+Applications are currently required to run initialization of global objects manually
+before running any kernels in which the objects are used.
+
+   .. code-block:: console
+
+     clang -cl-std=clc++ test.cl
+
+If there are any global objects to be initialized, the final binary will contain
+the ``@_GLOBAL__sub_I_test.cl`` kernel to be enqueued.
+
+Global destructors can not be invoked in OpenCL v2.0 drivers. However, all memory used
+for program scope objects is released on ``clReleaseProgram``.
+
 
 .. _target_features:
 
@@ -3633,3 +3689,56 @@ This option is intended to be used as a temporary means to build projects where
 clang-cl cannot successfully compile all the files. clang-cl may fail to compile
 a file either because it cannot generate code for some C++ feature, or because
 it cannot parse some Microsoft language extension.
+
+Finding Clang runtime libraries
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+clang-cl supports several features that require runtime library support:
+
+- Address Sanitizer (ASan): ``-fsanitize=address``
+- Undefined Behavior Sanitizer (UBSan): ``-fsanitize=undefined``
+- Code coverage: ``-fprofile-instr-generate -fcoverage-mapping``
+- Profile Guided Optimization (PGO): ``-fprofile-instr-generate``
+- Certain math operations (int128 division) require the builtins library
+
+In order to use these features, the user must link the right runtime libraries
+into their program. These libraries are distributed alongside Clang in the
+library resource directory. Clang searches for the resource directory by
+searching relative to the Clang executable. For example, if LLVM is installed
+in ``C:\Program Files\LLVM``, then the profile runtime library will be located
+at the path
+``C:\Program Files\LLVM\lib\clang\11.0.0\lib\windows\clang_rt.profile-x86_64.lib``.
+
+For UBSan, PGO, and coverage, Clang will emit object files that auto-link the
+appropriate runtime library, but the user generally needs to help the linker
+(whether it is ``lld-link.exe`` or MSVC ``link.exe``) find the library resource
+directory. Using the example installation above, this would mean passing
+``/LIBPATH:C:\Program Files\LLVM\lib\clang\11.0.0\lib\windows`` to the linker.
+If the user links the program with the ``clang`` or ``clang-cl`` drivers, the
+driver will pass this flag for them.
+
+If the linker cannot find the appropriate library, it will emit an error like
+this::
+
+  $ clang-cl -c -fsanitize=undefined t.cpp
+
+  $ lld-link t.obj -dll
+  lld-link: error: could not open 'clang_rt.ubsan_standalone-x86_64.lib': no such file or directory
+  lld-link: error: could not open 'clang_rt.ubsan_standalone_cxx-x86_64.lib': no such file or directory
+
+  $ link t.obj -dll -nologo
+  LINK : fatal error LNK1104: cannot open file 'clang_rt.ubsan_standalone-x86_64.lib'
+
+To fix the error, add the appropriate ``/libpath:`` flag to the link line.
+
+For ASan, as of this writing, the user is also responsible for linking against
+the correct ASan libraries.
+
+If the user is using the dynamic CRT (``/MD``), then they should add
+``clang_rt.asan_dynamic-x86_64.lib`` to the link line as a regular input. For
+other architectures, replace x86_64 with the appropriate name here and below.
+
+If the user is using the static CRT (``/MT``), then different runtimes are used
+to produce DLLs and EXEs. To link a DLL, pass
+``clang_rt.asan_dll_thunk-x86_64.lib``. To link an EXE, pass
+``-wholearchive:clang_rt.asan-x86_64.lib``.

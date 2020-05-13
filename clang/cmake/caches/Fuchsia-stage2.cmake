@@ -16,7 +16,7 @@ set(LLVM_ENABLE_ZLIB ON CACHE BOOL "")
 set(LLVM_INCLUDE_DOCS OFF CACHE BOOL "")
 set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 set(LLVM_INCLUDE_GO_TESTS OFF CACHE BOOL "")
-set(LLVM_USE_RELATIVE_PATHS_IN_DEBUG_INFO ON CACHE BOOL "")
+set(LLVM_USE_RELATIVE_PATHS_IN_FILES ON CACHE BOOL "")
 
 set(CLANG_DEFAULT_CXX_STDLIB libc++ CACHE STRING "")
 if(NOT APPLE)
@@ -25,7 +25,7 @@ if(NOT APPLE)
 endif()
 set(CLANG_DEFAULT_RTLIB compiler-rt CACHE STRING "")
 set(CLANG_ENABLE_ARCMT OFF CACHE BOOL "")
-set(CLANG_ENABLE_STATIC_ANALYZER OFF CACHE BOOL "")
+set(CLANG_ENABLE_STATIC_ANALYZER ON CACHE BOOL "")
 set(CLANG_PLUGIN_SUPPORT OFF CACHE BOOL "")
 
 set(ENABLE_EXPERIMENTAL_NEW_PASS_MANAGER ON CACHE BOOL "")
@@ -105,15 +105,16 @@ endforeach()
 
 if(FUCHSIA_SDK)
   set(FUCHSIA_aarch64_NAME arm64)
+  set(FUCHSIA_i386_NAME x64)
   set(FUCHSIA_x86_64_NAME x64)
   set(FUCHSIA_riscv64_NAME riscv64)
-  foreach(target x86_64;aarch64;riscv64)
+  foreach(target i386;x86_64;aarch64;riscv64)
     set(FUCHSIA_${target}_COMPILER_FLAGS "-I${FUCHSIA_SDK}/pkg/fdio/include")
     set(FUCHSIA_${target}_LINKER_FLAGS "-L${FUCHSIA_SDK}/arch/${FUCHSIA_${target}_NAME}/lib")
     set(FUCHSIA_${target}_SYSROOT "${FUCHSIA_SDK}/arch/${FUCHSIA_${target}_NAME}/sysroot")
   endforeach()
 
-  foreach(target x86_64;aarch64;riscv64)
+  foreach(target i386;x86_64;aarch64;riscv64)
     # Set the per-target builtins options.
     list(APPEND BUILTIN_TARGETS "${target}-unknown-fuchsia")
     set(BUILTINS_${target}-unknown-fuchsia_CMAKE_SYSTEM_NAME Fuchsia CACHE STRING "")
@@ -195,6 +196,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-cxxfilt
   llvm-dwarfdump
   llvm-dwp
+  llvm-gsymutil
   llvm-lib
   llvm-nm
   llvm-objcopy
@@ -220,6 +222,7 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   clang-resource-headers
   clang-include-fixer
   clang-refactor
+  clang-scan-deps
   clang-tidy
   clangd
   builtins

@@ -1554,11 +1554,8 @@ define <2 x i64> @test46(<2 x float> %a) {
 ;
 ; CHECK-LE-LABEL: test46:
 ; CHECK-LE:       # %bb.0:
-; CHECK-LE-NEXT:    xxsldwi vs0, v2, v2, 3
-; CHECK-LE-NEXT:    xxswapd vs1, v2
-; CHECK-LE-NEXT:    xscvspdpn f0, vs0
-; CHECK-LE-NEXT:    xscvspdpn f1, vs1
-; CHECK-LE-NEXT:    xxmrghd vs0, vs1, vs0
+; CHECK-LE-NEXT:    xxmrglw vs0, v2, v2
+; CHECK-LE-NEXT:    xvcvspdp vs0, vs0
 ; CHECK-LE-NEXT:    xvcvdpuxds v2, vs0
 ; CHECK-LE-NEXT:    blr
   %v = fptoui <2 x float> %a to <2 x i64>
@@ -1625,11 +1622,8 @@ define <2 x i64> @test47(<2 x float> %a) {
 ;
 ; CHECK-LE-LABEL: test47:
 ; CHECK-LE:       # %bb.0:
-; CHECK-LE-NEXT:    xxsldwi vs0, v2, v2, 3
-; CHECK-LE-NEXT:    xxswapd vs1, v2
-; CHECK-LE-NEXT:    xscvspdpn f0, vs0
-; CHECK-LE-NEXT:    xscvspdpn f1, vs1
-; CHECK-LE-NEXT:    xxmrghd vs0, vs1, vs0
+; CHECK-LE-NEXT:    xxmrglw vs0, v2, v2
+; CHECK-LE-NEXT:    xvcvspdp vs0, vs0
 ; CHECK-LE-NEXT:    xvcvdpsxds v2, vs0
 ; CHECK-LE-NEXT:    blr
   %v = fptosi <2 x float> %a to <2 x i64>
@@ -2443,7 +2437,7 @@ define <2 x i32> @test80(i32 %v) {
 ;
 ; CHECK-LE-LABEL: test80:
 ; CHECK-LE:       # %bb.0:
-; CHECK-LE-NEXT:    mtvsrd f0, r3
+; CHECK-LE-NEXT:    mtfprd f0, r3
 ; CHECK-LE-NEXT:    addis r4, r2, .LCPI65_0@toc@ha
 ; CHECK-LE-NEXT:    addi r3, r4, .LCPI65_0@toc@l
 ; CHECK-LE-NEXT:    xxswapd vs0, vs0

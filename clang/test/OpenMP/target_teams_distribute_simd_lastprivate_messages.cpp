@@ -1,11 +1,13 @@
 // RUN: %clang_cc1 -verify=expected,le45 -fopenmp %s -Wuninitialized
 // RUN: %clang_cc1 -verify=expected,le45 -fopenmp-version=40 -fopenmp %s -Wuninitialized
 // RUN: %clang_cc1 -verify=expected,le45 -fopenmp-version=45 -fopenmp %s -Wuninitialized
-// RUN: %clang_cc1 -verify=expected -fopenmp-version=50 -fopenmp %s -Wuninitialized
+// RUN: %clang_cc1 -verify=expected,le50 -fopenmp-version=50 -fopenmp %s -Wuninitialized
 
 // RUN: %clang_cc1 -verify=expected,le45 -fopenmp-simd %s -Wuninitialized
+// RUN: %clang_cc1 -verify=expected,le50 -fopenmp-version=50 -fopenmp-simd %s -Wuninitialized
 
 typedef void **omp_allocator_handle_t;
+extern const omp_allocator_handle_t omp_null_allocator;
 extern const omp_allocator_handle_t omp_default_mem_alloc;
 extern const omp_allocator_handle_t omp_large_cap_mem_alloc;
 extern const omp_allocator_handle_t omp_const_mem_alloc;
@@ -104,6 +106,9 @@ int foomain(int argc, char **argv) {
 #pragma omp target teams distribute simd lastprivate(argc) allocate , allocate(, allocate(omp_default , allocate(omp_default_mem_alloc, allocate(omp_default_mem_alloc:, allocate(omp_default_mem_alloc: argc, allocate(omp_default_mem_alloc: argv), allocate(argv) // expected-error {{expected '(' after 'allocate'}} expected-error 2 {{expected expression}} expected-error 2 {{expected ')'}} expected-error {{use of undeclared identifier 'omp_default'}} expected-note 2 {{to match this '('}}
   for (int k = 0; k < argc; ++k) ++k;
 
+#pragma omp target teams distribute simd lastprivate(conditional: argc) lastprivate(conditional: // expected-error 2 {{use of undeclared identifier 'conditional'}} expected-error {{expected ')'}} expected-note {{to match this '('}}
+  for (int k = 0; k < argc; ++k) ++k;
+
 #pragma omp target teams distribute simd lastprivate(S1) // expected-error {{'S1' does not refer to a value}}
   for (int k = 0; k < argc; ++k) ++k;
 
@@ -120,7 +125,7 @@ int foomain(int argc, char **argv) {
   for (int k = 0; k < argc; ++k) ++k;
 
   int v = 0;
-#pragma omp target teams distribute simd allocate(omp_thread_mem_alloc: i) lastprivate(i) // expected-warning {{allocator with the 'thread' trait access has unspecified behavior on 'target teams distribute simd' directive}}
+#pragma omp target teams distribute simd allocate(omp_thread_mem_alloc: i) lastprivate(i) // expected-warning {{allocator with the 'thread' trait access has unspecified behavior on 'target teams distribute simd' directive}} le50-error {{allocator must be specified in the 'uses_allocators' clause}}
   for (int k = 0; k < argc; ++k) {
     i = k;
     v += i;

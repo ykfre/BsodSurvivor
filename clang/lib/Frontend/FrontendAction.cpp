@@ -201,7 +201,8 @@ FrontendAction::CreateWrappedASTConsumer(CompilerInstance &CI,
     }
     if ((ActionType == PluginASTAction::AddBeforeMainAction ||
          ActionType == PluginASTAction::AddAfterMainAction) &&
-        P->ParseArgs(CI, CI.getFrontendOpts().PluginArgs[it->getName()])) {
+        P->ParseArgs(
+            CI, CI.getFrontendOpts().PluginArgs[std::string(it->getName())])) {
       std::unique_ptr<ASTConsumer> PluginConsumer = P->CreateASTConsumer(CI, InFile);
       if (ActionType == PluginASTAction::AddBeforeMainAction) {
         Consumers.push_back(std::move(PluginConsumer));
@@ -363,6 +364,7 @@ static std::error_code collectModuleHeaderIncludes(
     llvm::sys::path::native(UmbrellaDir.Entry->getName(), DirNative);
 
     llvm::vfs::FileSystem &FS = FileMgr.getVirtualFileSystem();
+    SmallVector<std::pair<std::string, const FileEntry *>, 8> Headers;
     for (llvm::vfs::recursive_directory_iterator Dir(FS, DirNative, EC), End;
          Dir != End && !EC; Dir.increment(EC)) {
       // Check whether this entry has an extension typically associated with
@@ -393,13 +395,25 @@ static std::error_code collectModuleHeaderIncludes(
            ++It)
         llvm::sys::path::append(RelativeHeader, *It);
 
-      // Include this header as part of the umbrella directory.
-      Module->addTopHeader(*Header);
-      addHeaderInclude(RelativeHeader, Includes, LangOpts, Module->IsExternC);
+      std::string RelName = RelativeHeader.c_str();
+      Headers.push_back(std::make_pair(RelName, *Header));
     }
 
     if (EC)
       return EC;
+
+    // Sort header paths and make the header inclusion order deterministic
+    // across different OSs and filesystems.
+    llvm::sort(Headers.begin(), Headers.end(), [](
+      const std::pair<std::string, const FileEntry *> &LHS,
+      const std::pair<std::string, const FileEntry *> &RHS) {
+        return LHS.first < RHS.first;
+    });
+    for (auto &H : Headers) {
+      // Include this header as part of the umbrella directory.
+      Module->addTopHeader(H.second);
+      addHeaderInclude(H.first, Includes, LangOpts, Module->IsExternC);
+    }
   }
 
   // Recurse into submodules.
@@ -564,8 +578,9 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     StringRef InputFile = Input.getFile();
 
     std::unique_ptr<ASTUnit> AST = ASTUnit::LoadFromASTFile(
-        InputFile, CI.getPCHContainerReader(), ASTUnit::LoadPreprocessorOnly,
-        ASTDiags, CI.getFileSystemOpts(), CI.getCodeGenOpts().DebugTypeExtRefs);
+        std::string(InputFile), CI.getPCHContainerReader(),
+        ASTUnit::LoadPreprocessorOnly, ASTDiags, CI.getFileSystemOpts(),
+        CI.getCodeGenOpts().DebugTypeExtRefs);
     if (!AST)
       goto failure;
 
@@ -592,10 +607,11 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         if (&MF != &PrimaryModule)
           CI.getFrontendOpts().ModuleFiles.push_back(MF.FileName);
 
-      ASTReader->visitTopLevelModuleMaps(PrimaryModule,
-                                         [&](const FileEntry *FE) {
-        CI.getFrontendOpts().ModuleMapFiles.push_back(FE->getName());
-      });
+      ASTReader->visitTopLevelModuleMaps(
+          PrimaryModule, [&](const FileEntry *FE) {
+            CI.getFrontendOpts().ModuleMapFiles.push_back(
+                std::string(FE->getName()));
+          });
     }
 
     // Set up the input file for replay purposes.
@@ -630,8 +646,9 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     StringRef InputFile = Input.getFile();
 
     std::unique_ptr<ASTUnit> AST = ASTUnit::LoadFromASTFile(
-        InputFile, CI.getPCHContainerReader(), ASTUnit::LoadEverything, Diags,
-        CI.getFileSystemOpts(), CI.getCodeGenOpts().DebugTypeExtRefs);
+        std::string(InputFile), CI.getPCHContainerReader(),
+        ASTUnit::LoadEverything, Diags, CI.getFileSystemOpts(),
+        CI.getCodeGenOpts().DebugTypeExtRefs);
 
     if (!AST)
       goto failure;
@@ -725,7 +742,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
                 Dir->path(), FileMgr, CI.getPCHContainerReader(),
                 CI.getLangOpts(), CI.getTargetOpts(), CI.getPreprocessorOpts(),
                 SpecificModuleCachePath)) {
-          PPOpts.ImplicitPCHInclude = Dir->path();
+          PPOpts.ImplicitPCHInclude = std::string(Dir->path());
           Found = true;
           break;
         }
@@ -783,7 +800,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       auto Kind = CurrentModule->IsSystem ? SrcMgr::C_System : SrcMgr::C_User;
       auto &SourceMgr = CI.getSourceManager();
       auto BufferID = SourceMgr.createFileID(std::move(Buffer), Kind);
-      assert(BufferID.isValid() && "couldn't creaate module buffer ID");
+      assert(BufferID.isValid() && "couldn't create module buffer ID");
       SourceMgr.setMainFileID(BufferID);
     }
   }
@@ -817,7 +834,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
     // For preprocessed files, check if the first line specifies the original
     // source file name with a linemarker.
-    std::string PresumedInputFile = getCurrentFileOrBufferName();
+    std::string PresumedInputFile = std::string(getCurrentFileOrBufferName());
     if (Input.isPreprocessed())
       ReadOriginalFileName(CI, PresumedInputFile);
 
@@ -836,7 +853,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       source = createChainedIncludesSource(CI, FinalReader);
       if (!source)
         goto failure;
-      CI.setModuleManager(static_cast<ASTReader *>(FinalReader.get()));
+      CI.setASTReader(static_cast<ASTReader *>(FinalReader.get()));
       CI.getASTContext().setExternalSource(source);
     } else if (CI.getLangOpts().Modules ||
                !CI.getPreprocessorOpts().ImplicitPCHInclude.empty()) {
@@ -866,7 +883,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         if (!CI.getASTContext().getExternalSource())
           goto failure;
       }
-      // If modules are enabled, create the module manager before creating
+      // If modules are enabled, create the AST reader before creating
       // any builtins, so that all declarations know that they might be
       // extended by an external source.
       if (CI.getLangOpts().Modules || !CI.hasASTContext() ||
@@ -1076,6 +1093,9 @@ void WrapperFrontendAction::ExecuteAction() {
 }
 void WrapperFrontendAction::EndSourceFileAction() {
   WrappedAction->EndSourceFileAction();
+}
+bool WrapperFrontendAction::shouldEraseOutputFiles() {
+  return WrappedAction->shouldEraseOutputFiles();
 }
 
 bool WrapperFrontendAction::usesPreprocessorOnly() const {

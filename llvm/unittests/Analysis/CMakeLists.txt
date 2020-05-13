@@ -3,11 +3,13 @@ set(LLVM_LINK_COMPONENTS
   AsmParser
   Core
   Support
+  TransformUtils
   )
 
 add_llvm_unittest(AnalysisTests
   AliasAnalysisTest.cpp
   AliasSetTrackerTest.cpp
+  AssumeBundleQueriesTest.cpp
   BasicAliasAnalysisTest.cpp
   BlockFrequencyInfoTest.cpp
   BranchProbabilityInfoTest.cpp
@@ -20,10 +22,11 @@ add_llvm_unittest(AnalysisTests
   GlobalsModRefTest.cpp
   IVDescriptorsTest.cpp
   LazyCallGraphTest.cpp
+  LoadsTest.cpp
   LoopInfoTest.cpp
+  LoopNestTest.cpp
   MemoryBuiltinsTest.cpp
   MemorySSATest.cpp
-  OrderedBasicBlockTest.cpp
   OrderedInstructionsTest.cpp
   PhiValuesTest.cpp
   ProfileSummaryInfoTest.cpp

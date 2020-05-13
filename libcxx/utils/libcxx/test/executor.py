@@ -10,6 +10,7 @@ import platform
 import os
 import posixpath
 import ntpath
+import shutil
 
 from libcxx.test import tracing
 from libcxx.util import executeCommand
@@ -60,6 +61,12 @@ class LocalExecutor(Executor):
 
         if env:
             env = self.merge_environments(os.environ, env)
+
+        for dep in file_deps:
+            if os.path.isdir(dep):
+                shutil.copytree(dep, os.path.join(work_dir, os.path.basename(dep)), symlinks=True)
+            else:
+                shutil.copy2(dep, work_dir)
 
         out, err, rc = executeCommand(cmd, cwd=work_dir, env=env)
         return (cmd, out, err, rc)
@@ -133,7 +140,7 @@ class RemoteExecutor(Executor):
 
     def delete_remote(self, remote):
         try:
-            self._execute_command_remote(['rm', '-rf', remote])
+            self.execute_command_remote(['rm', '-rf', remote])
         except OSError:
             # TODO: Log failure to delete?
             pass
@@ -172,14 +179,14 @@ class RemoteExecutor(Executor):
             # TODO(jroelofs): capture the copy_in and delete_remote commands,
             # and conjugate them with '&&'s around the first tuple element
             # returned here:
-            return self._execute_command_remote(chmod_cmd + ['&&'] + cmd,
-                                                target_cwd,
-                                                env)
+            return self.execute_command_remote(chmod_cmd + ['&&'] + cmd,
+                                               target_cwd,
+                                               env)
         finally:
             if target_cwd:
                 self.delete_remote(target_cwd)
 
-    def _execute_command_remote(self, cmd, remote_work_dir='.', env=None):
+    def execute_command_remote(self, cmd, remote_work_dir='.', env=None):
         raise NotImplementedError()
 
 
@@ -206,7 +213,7 @@ class SSHExecutor(RemoteExecutor):
         # Not sure how to do suffix on osx yet
         dir_arg = '-d' if is_dir else ''
         cmd = 'mktemp -q {} /tmp/libcxx.XXXXXXXXXX'.format(dir_arg)
-        _, temp_path, err, exitCode = self._execute_command_remote([cmd])
+        _, temp_path, err, exitCode = self.execute_command_remote([cmd])
         temp_path = temp_path.strip()
         if exitCode != 0:
             raise RuntimeError(err)
@@ -238,7 +245,7 @@ class SSHExecutor(RemoteExecutor):
 
         return export_cmd
 
-    def _execute_command_remote(self, cmd, remote_work_dir='.', env=None):
+    def execute_command_remote(self, cmd, remote_work_dir='.', env=None):
         remote = self.user_prefix + self.host
         ssh_cmd = [self.ssh_command, '-oBatchMode=yes', remote]
         export_cmd = self._export_command(env)

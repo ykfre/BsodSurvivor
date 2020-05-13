@@ -286,8 +286,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_pd2qq_512(<8 x double> %x0, <8 x 
 ; X86-LABEL: test_int_x86_avx512_mask_cvtt_pd2qq_512:
 ; X86:       # %bb.0:
 ; X86-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
-; X86-NEXT:    vcvttpd2qq %zmm0, %zmm2 # encoding: [0x62,0xf1,0xfd,0x48,0x7a,0xd0]
-; X86-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X86-NEXT:    vcvttpd2qq %zmm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x7a,0xc8]
 ; X86-NEXT:    vcvttpd2qq {sae}, %zmm0, %zmm0 # encoding: [0x62,0xf1,0xfd,0x18,0x7a,0xc0]
 ; X86-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X86-NEXT:    retl # encoding: [0xc3]
@@ -295,8 +294,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_pd2qq_512(<8 x double> %x0, <8 x 
 ; X64-LABEL: test_int_x86_avx512_mask_cvtt_pd2qq_512:
 ; X64:       # %bb.0:
 ; X64-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-NEXT:    vcvttpd2qq %zmm0, %zmm2 # encoding: [0x62,0xf1,0xfd,0x48,0x7a,0xd0]
-; X64-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X64-NEXT:    vcvttpd2qq %zmm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x7a,0xc8]
 ; X64-NEXT:    vcvttpd2qq {sae}, %zmm0, %zmm0 # encoding: [0x62,0xf1,0xfd,0x18,0x7a,0xc0]
 ; X64-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X64-NEXT:    retq # encoding: [0xc3]
@@ -312,8 +310,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_pd2uqq_512(<8 x double> %x0, <8 x
 ; X86-LABEL: test_int_x86_avx512_mask_cvtt_pd2uqq_512:
 ; X86:       # %bb.0:
 ; X86-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
-; X86-NEXT:    vcvttpd2uqq %zmm0, %zmm2 # encoding: [0x62,0xf1,0xfd,0x48,0x78,0xd0]
-; X86-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X86-NEXT:    vcvttpd2uqq %zmm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x78,0xc8]
 ; X86-NEXT:    vcvttpd2uqq {sae}, %zmm0, %zmm0 # encoding: [0x62,0xf1,0xfd,0x18,0x78,0xc0]
 ; X86-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X86-NEXT:    retl # encoding: [0xc3]
@@ -321,8 +318,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_pd2uqq_512(<8 x double> %x0, <8 x
 ; X64-LABEL: test_int_x86_avx512_mask_cvtt_pd2uqq_512:
 ; X64:       # %bb.0:
 ; X64-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-NEXT:    vcvttpd2uqq %zmm0, %zmm2 # encoding: [0x62,0xf1,0xfd,0x48,0x78,0xd0]
-; X64-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X64-NEXT:    vcvttpd2uqq %zmm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x78,0xc8]
 ; X64-NEXT:    vcvttpd2uqq {sae}, %zmm0, %zmm0 # encoding: [0x62,0xf1,0xfd,0x18,0x78,0xc0]
 ; X64-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X64-NEXT:    retq # encoding: [0xc3]
@@ -338,8 +334,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_ps2qq_512(<8 x float> %x0, <8 x i
 ; X86-LABEL: test_int_x86_avx512_mask_cvtt_ps2qq_512:
 ; X86:       # %bb.0:
 ; X86-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
-; X86-NEXT:    vcvttps2qq %ymm0, %zmm2 # encoding: [0x62,0xf1,0x7d,0x48,0x7a,0xd0]
-; X86-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X86-NEXT:    vcvttps2qq %ymm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0x7d,0x49,0x7a,0xc8]
 ; X86-NEXT:    vcvttps2qq {sae}, %ymm0, %zmm0 # encoding: [0x62,0xf1,0x7d,0x18,0x7a,0xc0]
 ; X86-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X86-NEXT:    retl # encoding: [0xc3]
@@ -347,8 +342,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_ps2qq_512(<8 x float> %x0, <8 x i
 ; X64-LABEL: test_int_x86_avx512_mask_cvtt_ps2qq_512:
 ; X64:       # %bb.0:
 ; X64-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-NEXT:    vcvttps2qq %ymm0, %zmm2 # encoding: [0x62,0xf1,0x7d,0x48,0x7a,0xd0]
-; X64-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X64-NEXT:    vcvttps2qq %ymm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0x7d,0x49,0x7a,0xc8]
 ; X64-NEXT:    vcvttps2qq {sae}, %ymm0, %zmm0 # encoding: [0x62,0xf1,0x7d,0x18,0x7a,0xc0]
 ; X64-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X64-NEXT:    retq # encoding: [0xc3]
@@ -364,8 +358,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_ps2uqq_512(<8 x float> %x0, <8 x 
 ; X86-LABEL: test_int_x86_avx512_mask_cvtt_ps2uqq_512:
 ; X86:       # %bb.0:
 ; X86-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
-; X86-NEXT:    vcvttps2uqq %ymm0, %zmm2 # encoding: [0x62,0xf1,0x7d,0x48,0x78,0xd0]
-; X86-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X86-NEXT:    vcvttps2uqq %ymm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0x7d,0x49,0x78,0xc8]
 ; X86-NEXT:    vcvttps2uqq {sae}, %ymm0, %zmm0 # encoding: [0x62,0xf1,0x7d,0x18,0x78,0xc0]
 ; X86-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X86-NEXT:    retl # encoding: [0xc3]
@@ -373,8 +366,7 @@ define <8 x i64>@test_int_x86_avx512_mask_cvtt_ps2uqq_512(<8 x float> %x0, <8 x 
 ; X64-LABEL: test_int_x86_avx512_mask_cvtt_ps2uqq_512:
 ; X64:       # %bb.0:
 ; X64-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-NEXT:    vcvttps2uqq %ymm0, %zmm2 # encoding: [0x62,0xf1,0x7d,0x48,0x78,0xd0]
-; X64-NEXT:    vmovdqa64 %zmm2, %zmm1 {%k1} # encoding: [0x62,0xf1,0xfd,0x49,0x6f,0xca]
+; X64-NEXT:    vcvttps2uqq %ymm0, %zmm1 {%k1} # encoding: [0x62,0xf1,0x7d,0x49,0x78,0xc8]
 ; X64-NEXT:    vcvttps2uqq {sae}, %ymm0, %zmm0 # encoding: [0x62,0xf1,0x7d,0x18,0x78,0xc0]
 ; X64-NEXT:    vpaddq %zmm0, %zmm1, %zmm0 # encoding: [0x62,0xf1,0xf5,0x48,0xd4,0xc0]
 ; X64-NEXT:    retq # encoding: [0xc3]
@@ -595,9 +587,9 @@ define <4 x float>@test_int_x86_avx512_mask_range_ss(<4 x float> %x0, <4 x float
 ; X86-AVX512DQ:       # %bb.0:
 ; X86-AVX512DQ-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
 ; X86-AVX512DQ-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0x7d,0x19,0x51,0xd1,0x04]
-; X86-AVX512DQ-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x04]
+; X86-AVX512DQ-NEXT:    vrangess $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x05]
 ; X86-AVX512DQ-NEXT:    vaddps %xmm3, %xmm2, %xmm2 # encoding: [0xc5,0xe8,0x58,0xd3]
-; X86-AVX512DQ-NEXT:    vrangess $4, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x04]
+; X86-AVX512DQ-NEXT:    vrangess $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x06]
 ; X86-AVX512DQ-NEXT:    vaddps %xmm2, %xmm0, %xmm0 # encoding: [0xc5,0xf8,0x58,0xc2]
 ; X86-AVX512DQ-NEXT:    retl # encoding: [0xc3]
 ;
@@ -605,9 +597,9 @@ define <4 x float>@test_int_x86_avx512_mask_range_ss(<4 x float> %x0, <4 x float
 ; X86-AVX512DQVL:       # %bb.0:
 ; X86-AVX512DQVL-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
 ; X86-AVX512DQVL-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0x7d,0x19,0x51,0xd1,0x04]
-; X86-AVX512DQVL-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x04]
+; X86-AVX512DQVL-NEXT:    vrangess $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x05]
 ; X86-AVX512DQVL-NEXT:    vaddps %xmm3, %xmm2, %xmm2 # EVEX TO VEX Compression encoding: [0xc5,0xe8,0x58,0xd3]
-; X86-AVX512DQVL-NEXT:    vrangess $4, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x04]
+; X86-AVX512DQVL-NEXT:    vrangess $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x06]
 ; X86-AVX512DQVL-NEXT:    vaddps %xmm2, %xmm0, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xf8,0x58,0xc2]
 ; X86-AVX512DQVL-NEXT:    retl # encoding: [0xc3]
 ;
@@ -615,9 +607,9 @@ define <4 x float>@test_int_x86_avx512_mask_range_ss(<4 x float> %x0, <4 x float
 ; X64-AVX512DQ:       # %bb.0:
 ; X64-AVX512DQ-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
 ; X64-AVX512DQ-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0x7d,0x19,0x51,0xd1,0x04]
-; X64-AVX512DQ-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x04]
+; X64-AVX512DQ-NEXT:    vrangess $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x05]
 ; X64-AVX512DQ-NEXT:    vaddps %xmm3, %xmm2, %xmm2 # encoding: [0xc5,0xe8,0x58,0xd3]
-; X64-AVX512DQ-NEXT:    vrangess $4, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x04]
+; X64-AVX512DQ-NEXT:    vrangess $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x06]
 ; X64-AVX512DQ-NEXT:    vaddps %xmm2, %xmm0, %xmm0 # encoding: [0xc5,0xf8,0x58,0xc2]
 ; X64-AVX512DQ-NEXT:    retq # encoding: [0xc3]
 ;
@@ -625,14 +617,14 @@ define <4 x float>@test_int_x86_avx512_mask_range_ss(<4 x float> %x0, <4 x float
 ; X64-AVX512DQVL:       # %bb.0:
 ; X64-AVX512DQVL-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
 ; X64-AVX512DQVL-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0x7d,0x19,0x51,0xd1,0x04]
-; X64-AVX512DQVL-NEXT:    vrangess $4, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x04]
+; X64-AVX512DQVL-NEXT:    vrangess $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0x7d,0x18,0x51,0xd9,0x05]
 ; X64-AVX512DQVL-NEXT:    vaddps %xmm3, %xmm2, %xmm2 # EVEX TO VEX Compression encoding: [0xc5,0xe8,0x58,0xd3]
-; X64-AVX512DQVL-NEXT:    vrangess $4, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x04]
+; X64-AVX512DQVL-NEXT:    vrangess $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0x7d,0x08,0x51,0xc1,0x06]
 ; X64-AVX512DQVL-NEXT:    vaddps %xmm2, %xmm0, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xf8,0x58,0xc2]
 ; X64-AVX512DQVL-NEXT:    retq # encoding: [0xc3]
   %res = call <4 x float> @llvm.x86.avx512.mask.range.ss(<4 x float> %x0, <4 x float> %x1, <4 x float> %x3, i8 %x4, i32 4, i32 8)
-  %res1 = call <4 x float> @llvm.x86.avx512.mask.range.ss(<4 x float> %x0, <4 x float> %x1, <4 x float> %x3, i8 -1, i32 4, i32 8)
-  %res2 = call <4 x float> @llvm.x86.avx512.mask.range.ss(<4 x float> %x0, <4 x float> %x1, <4 x float> %x3, i8 -1, i32 4, i32 4)
+  %res1 = call <4 x float> @llvm.x86.avx512.mask.range.ss(<4 x float> %x0, <4 x float> %x1, <4 x float> %x3, i8 -1, i32 5, i32 8)
+  %res2 = call <4 x float> @llvm.x86.avx512.mask.range.ss(<4 x float> %x0, <4 x float> %x1, <4 x float> %x3, i8 -1, i32 6, i32 4)
   %res3 = fadd <4 x float> %res, %res1
   %res4 = fadd <4 x float> %res2, %res3
   ret <4 x float> %res4
@@ -685,44 +677,44 @@ define <2 x double>@test_int_x86_avx512_mask_range_sd(<2 x double> %x0, <2 x dou
 ; X86-AVX512DQ:       # %bb.0:
 ; X86-AVX512DQ-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
 ; X86-AVX512DQ-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0xfd,0x09,0x51,0xd1,0x04]
-; X86-AVX512DQ-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xd9,0x04]
-; X86-AVX512DQ-NEXT:    vrangesd $4, {sae}, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xc1,0x04]
-; X86-AVX512DQ-NEXT:    vaddpd %xmm0, %xmm2, %xmm0 # encoding: [0xc5,0xe9,0x58,0xc0]
-; X86-AVX512DQ-NEXT:    vaddpd %xmm0, %xmm3, %xmm0 # encoding: [0xc5,0xe1,0x58,0xc0]
+; X86-AVX512DQ-NEXT:    vrangesd $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xd9,0x05]
+; X86-AVX512DQ-NEXT:    vaddpd %xmm3, %xmm2, %xmm2 # encoding: [0xc5,0xe9,0x58,0xd3]
+; X86-AVX512DQ-NEXT:    vrangesd $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xc1,0x06]
+; X86-AVX512DQ-NEXT:    vaddpd %xmm2, %xmm0, %xmm0 # encoding: [0xc5,0xf9,0x58,0xc2]
 ; X86-AVX512DQ-NEXT:    retl # encoding: [0xc3]
 ;
 ; X86-AVX512DQVL-LABEL: test_int_x86_avx512_mask_range_sd:
 ; X86-AVX512DQVL:       # %bb.0:
 ; X86-AVX512DQVL-NEXT:    kmovb {{[0-9]+}}(%esp), %k1 # encoding: [0xc5,0xf9,0x90,0x4c,0x24,0x04]
 ; X86-AVX512DQVL-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0xfd,0x09,0x51,0xd1,0x04]
-; X86-AVX512DQVL-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xd9,0x04]
-; X86-AVX512DQVL-NEXT:    vrangesd $4, {sae}, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xc1,0x04]
-; X86-AVX512DQVL-NEXT:    vaddpd %xmm0, %xmm2, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xe9,0x58,0xc0]
-; X86-AVX512DQVL-NEXT:    vaddpd %xmm0, %xmm3, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xe1,0x58,0xc0]
+; X86-AVX512DQVL-NEXT:    vrangesd $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xd9,0x05]
+; X86-AVX512DQVL-NEXT:    vaddpd %xmm3, %xmm2, %xmm2 # EVEX TO VEX Compression encoding: [0xc5,0xe9,0x58,0xd3]
+; X86-AVX512DQVL-NEXT:    vrangesd $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xc1,0x06]
+; X86-AVX512DQVL-NEXT:    vaddpd %xmm2, %xmm0, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xf9,0x58,0xc2]
 ; X86-AVX512DQVL-NEXT:    retl # encoding: [0xc3]
 ;
 ; X64-AVX512DQ-LABEL: test_int_x86_avx512_mask_range_sd:
 ; X64-AVX512DQ:       # %bb.0:
 ; X64-AVX512DQ-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-AVX512DQ-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xd9,0x04]
 ; X64-AVX512DQ-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0xfd,0x09,0x51,0xd1,0x04]
-; X64-AVX512DQ-NEXT:    vrangesd $4, {sae}, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xc1,0x04]
-; X64-AVX512DQ-NEXT:    vaddpd %xmm0, %xmm2, %xmm0 # encoding: [0xc5,0xe9,0x58,0xc0]
-; X64-AVX512DQ-NEXT:    vaddpd %xmm0, %xmm3, %xmm0 # encoding: [0xc5,0xe1,0x58,0xc0]
+; X64-AVX512DQ-NEXT:    vrangesd $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xd9,0x05]
+; X64-AVX512DQ-NEXT:    vaddpd %xmm3, %xmm2, %xmm2 # encoding: [0xc5,0xe9,0x58,0xd3]
+; X64-AVX512DQ-NEXT:    vrangesd $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xc1,0x06]
+; X64-AVX512DQ-NEXT:    vaddpd %xmm2, %xmm0, %xmm0 # encoding: [0xc5,0xf9,0x58,0xc2]
 ; X64-AVX512DQ-NEXT:    retq # encoding: [0xc3]
 ;
 ; X64-AVX512DQVL-LABEL: test_int_x86_avx512_mask_range_sd:
 ; X64-AVX512DQVL:       # %bb.0:
 ; X64-AVX512DQVL-NEXT:    kmovw %edi, %k1 # encoding: [0xc5,0xf8,0x92,0xcf]
-; X64-AVX512DQVL-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xd9,0x04]
 ; X64-AVX512DQVL-NEXT:    vrangesd $4, %xmm1, %xmm0, %xmm2 {%k1} # encoding: [0x62,0xf3,0xfd,0x09,0x51,0xd1,0x04]
-; X64-AVX512DQVL-NEXT:    vrangesd $4, {sae}, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xc1,0x04]
-; X64-AVX512DQVL-NEXT:    vaddpd %xmm0, %xmm2, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xe9,0x58,0xc0]
-; X64-AVX512DQVL-NEXT:    vaddpd %xmm0, %xmm3, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xe1,0x58,0xc0]
+; X64-AVX512DQVL-NEXT:    vrangesd $5, {sae}, %xmm1, %xmm0, %xmm3 # encoding: [0x62,0xf3,0xfd,0x18,0x51,0xd9,0x05]
+; X64-AVX512DQVL-NEXT:    vaddpd %xmm3, %xmm2, %xmm2 # EVEX TO VEX Compression encoding: [0xc5,0xe9,0x58,0xd3]
+; X64-AVX512DQVL-NEXT:    vrangesd $6, %xmm1, %xmm0, %xmm0 # encoding: [0x62,0xf3,0xfd,0x08,0x51,0xc1,0x06]
+; X64-AVX512DQVL-NEXT:    vaddpd %xmm2, %xmm0, %xmm0 # EVEX TO VEX Compression encoding: [0xc5,0xf9,0x58,0xc2]
 ; X64-AVX512DQVL-NEXT:    retq # encoding: [0xc3]
   %res = call <2 x double> @llvm.x86.avx512.mask.range.sd(<2 x double> %x0, <2 x double> %x1, <2 x double> %x3, i8 %x4, i32 4, i32 4)
-  %res1 = call <2 x double> @llvm.x86.avx512.mask.range.sd(<2 x double> %x0, <2 x double> %x1, <2 x double> %x3, i8 -1, i32 4, i32 8)
-  %res2 = call <2 x double> @llvm.x86.avx512.mask.range.sd(<2 x double> %x0, <2 x double> %x1, <2 x double> %x3, i8 -1, i32 4, i32 4)
+  %res1 = call <2 x double> @llvm.x86.avx512.mask.range.sd(<2 x double> %x0, <2 x double> %x1, <2 x double> %x3, i8 -1, i32 5, i32 8)
+  %res2 = call <2 x double> @llvm.x86.avx512.mask.range.sd(<2 x double> %x0, <2 x double> %x1, <2 x double> %x3, i8 -1, i32 6, i32 4)
   %res3 = fadd <2 x double> %res, %res1
   %res4 = fadd <2 x double> %res2, %res3
   ret <2 x double> %res4

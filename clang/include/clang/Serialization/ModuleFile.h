@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_SERIALIZATION_MODULEFILE_H
 #define LLVM_CLANG_SERIALIZATION_MODULEFILE_H
 
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Serialization/ASTBitCodes.h"
@@ -33,8 +34,6 @@
 #include <vector>
 
 namespace clang {
-
-class FileEntry;
 
 namespace serialization {
 
@@ -252,6 +251,10 @@ public:
   /// The base offset in the source manager's view of this module.
   unsigned SLocEntryBaseOffset = 0;
 
+  /// Base file offset for the offsets in SLocEntryOffsets. Real file offset
+  /// for the entry is SLocEntryOffsetsBase + SLocEntryOffsets[i].
+  uint64_t SLocEntryOffsetsBase = 0;
+
   /// Offsets for all of the source location entries in the
   /// AST file.
   const uint32_t *SLocEntryOffsets = nullptr;
@@ -302,6 +305,10 @@ public:
 
   /// The number of macros in this AST file.
   unsigned LocalNumMacros = 0;
+
+  /// Base file offset for the offsets in MacroOffsets. Real file offset for
+  /// the entry is MacroOffsetsBase + MacroOffsets[i].
+  uint64_t MacroOffsetsBase = 0;
 
   /// Offsets of macros in the preprocessor block.
   ///
@@ -451,7 +458,7 @@ public:
 
   /// Offset of each type within the bitstream, indexed by the
   /// type ID, or the representation of a Type*.
-  const uint32_t *TypeOffsets = nullptr;
+  const UnderalignedInt64 *TypeOffsets = nullptr;
 
   /// Base type ID for types local to this module as represented in
   /// the global type ID space.

@@ -112,11 +112,9 @@ bool DWARFVerifier::verifyUnitHeader(const DWARFDataExtractor DebugInfoData,
   bool ValidAbbrevOffset = true;
 
   uint64_t OffsetStart = *Offset;
-  Length = DebugInfoData.getU32(Offset);
-  if (Length == dwarf::DW_LENGTH_DWARF64) {
-    Length = DebugInfoData.getU64(Offset);
-    isUnitDWARF64 = true;
-  }
+  DwarfFormat Format;
+  std::tie(Length, Format) = DebugInfoData.getInitialLength(Offset);
+  isUnitDWARF64 = Format == DWARF64;
   Version = DebugInfoData.getU16(Offset);
 
   if (Version >= 5) {
@@ -307,7 +305,7 @@ unsigned DWARFVerifier::verifyUnitSection(const DWARFSection &S,
         Unit = TypeUnitVector.addUnit(std::make_unique<DWARFTypeUnit>(
             DCtx, S, Header, DCtx.getDebugAbbrev(), &DObj.getRangesSection(),
             &DObj.getLocSection(), DObj.getStrSection(),
-            DObj.getStrOffsetsSection(), &DObj.getAppleObjCSection(),
+            DObj.getStrOffsetsSection(), &DObj.getAddrSection(),
             DObj.getLineSection(), DCtx.isLittleEndian(), false,
             TypeUnitVector));
         break;
@@ -321,7 +319,7 @@ unsigned DWARFVerifier::verifyUnitSection(const DWARFSection &S,
         Unit = CompileUnitVector.addUnit(std::make_unique<DWARFCompileUnit>(
             DCtx, S, Header, DCtx.getDebugAbbrev(), &DObj.getRangesSection(),
             &DObj.getLocSection(), DObj.getStrSection(),
-            DObj.getStrOffsetsSection(), &DObj.getAppleObjCSection(),
+            DObj.getStrOffsetsSection(), &DObj.getAddrSection(),
             DObj.getLineSection(), DCtx.isLittleEndian(), false,
             CompileUnitVector));
         break;
@@ -354,7 +352,7 @@ bool DWARFVerifier::handleDebugInfo() {
 
   OS << "Verifying .debug_types Unit Header Chain...\n";
   DObj.forEachTypesSections([&](const DWARFSection &S) {
-    NumErrors += verifyUnitSection(S, DW_SECT_TYPES);
+    NumErrors += verifyUnitSection(S, DW_SECT_EXT_TYPES);
   });
   return NumErrors == 0;
 }
@@ -459,8 +457,15 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
   case DW_AT_ranges:
     // Make sure the offset in the DW_AT_ranges attribute is valid.
     if (auto SectionOffset = AttrValue.Value.getAsSectionOffset()) {
-      if (*SectionOffset >= DObj.getRangesSection().Data.size())
-        ReportError("DW_AT_ranges offset is beyond .debug_ranges bounds:");
+      unsigned DwarfVersion = Die.getDwarfUnit()->getVersion();
+      const DWARFSection &RangeSection = DwarfVersion < 5
+                                             ? DObj.getRangesSection()
+                                             : DObj.getRnglistsSection();
+      if (*SectionOffset >= RangeSection.Data.size())
+        ReportError(
+            "DW_AT_ranges offset is beyond " +
+            StringRef(DwarfVersion < 5 ? ".debug_ranges" : ".debug_rnglists") +
+            " bounds: " + llvm::formatv("{0:x8}", *SectionOffset));
       break;
     }
     ReportError("DIE has invalid DW_AT_ranges encoding:");
@@ -481,8 +486,8 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
       DWARFUnit *U = Die.getDwarfUnit();
       for (const auto &Entry : *Loc) {
         DataExtractor Data(toStringRef(Entry.Expr), DCtx.isLittleEndian(), 0);
-        DWARFExpression Expression(Data, U->getVersion(),
-                                   U->getAddressByteSize());
+        DWARFExpression Expression(Data, U->getAddressByteSize(),
+                                   U->getFormParams().Format);
         bool Error = any_of(Expression, [](DWARFExpression::Operation &Op) {
           return Op.isError();
         });
@@ -642,7 +647,7 @@ unsigned DWARFVerifier::verifyDebugInfoReferences() {
   // getting the DIE by offset and emitting an error
   OS << "Verifying .debug_info references...\n";
   unsigned NumErrors = 0;
-  for (const std::pair<uint64_t, std::set<uint64_t>> &Pair :
+  for (const std::pair<const uint64_t, std::set<uint64_t>> &Pair :
        ReferenceToDIEOffsets) {
     if (DCtx.getDIEForOffset(Pair.first))
       continue;
@@ -1290,7 +1295,8 @@ static bool isVariableIndexable(const DWARFDie &Die, DWARFContext &DCtx) {
   for (const auto &Entry : *Loc) {
     DataExtractor Data(toStringRef(Entry.Expr), DCtx.isLittleEndian(),
                        U->getAddressByteSize());
-    DWARFExpression Expression(Data, U->getVersion(), U->getAddressByteSize());
+    DWARFExpression Expression(Data, U->getAddressByteSize(),
+                               U->getFormParams().Format);
     bool IsInteresting = any_of(Expression, [](DWARFExpression::Operation &Op) {
       return !Op.isError() && (Op.getCode() == DW_OP_addr ||
                                Op.getCode() == DW_OP_form_tls_address ||

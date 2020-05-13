@@ -50,7 +50,6 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/Analysis/OrderedBasicBlock.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -129,20 +128,13 @@ public:
 private:
   unsigned getPointerAddressSpace(Value *I);
 
-  unsigned getAlignment(LoadInst *LI) const {
-    unsigned Align = LI->getAlignment();
-    if (Align != 0)
-      return Align;
-
-    return DL.getABITypeAlignment(LI->getType());
+  Align getAlign(LoadInst *LI) const {
+    return DL.getValueOrABITypeAlignment(LI->getAlign(), LI->getType());
   }
 
-  unsigned getAlignment(StoreInst *SI) const {
-    unsigned Align = SI->getAlignment();
-    if (Align != 0)
-      return Align;
-
-    return DL.getABITypeAlignment(SI->getValueOperand()->getType());
+  Align getAlign(StoreInst *SI) const {
+    return DL.getValueOrABITypeAlignment(SI->getAlign(),
+                                         SI->getValueOperand()->getType());
   }
 
   static const unsigned MaxDepth = 3;
@@ -503,7 +495,6 @@ bool Vectorizer::lookThroughSelects(Value *PtrA, Value *PtrB,
 }
 
 void Vectorizer::reorder(Instruction *I) {
-  OrderedBasicBlock OBB(I->getParent());
   SmallPtrSet<Instruction *, 16> InstructionsToMove;
   SmallVector<Instruction *, 16> Worklist;
 
@@ -521,7 +512,7 @@ void Vectorizer::reorder(Instruction *I) {
       if (IM->getParent() != I->getParent())
         continue;
 
-      if (!OBB.dominates(IM, I)) {
+      if (!IM->comesBefore(I)) {
         InstructionsToMove.insert(IM);
         Worklist.push_back(IM);
       }
@@ -637,8 +628,6 @@ Vectorizer::getVectorizablePrefix(ArrayRef<Instruction *> Chain) {
     }
   }
 
-  OrderedBasicBlock OBB(Chain[0]->getParent());
-
   // Loop until we find an instruction in ChainInstrs that we can't vectorize.
   unsigned ChainInstrIdx = 0;
   Instruction *BarrierMemoryInstr = nullptr;
@@ -648,14 +637,14 @@ Vectorizer::getVectorizablePrefix(ArrayRef<Instruction *> Chain) {
 
     // If a barrier memory instruction was found, chain instructions that follow
     // will not be added to the valid prefix.
-    if (BarrierMemoryInstr && OBB.dominates(BarrierMemoryInstr, ChainInstr))
+    if (BarrierMemoryInstr && BarrierMemoryInstr->comesBefore(ChainInstr))
       break;
 
     // Check (in BB order) if any instruction prevents ChainInstr from being
     // vectorized. Find and store the first such "conflicting" instruction.
     for (Instruction *MemInstr : MemoryInstrs) {
       // If a barrier memory instruction was found, do not check past it.
-      if (BarrierMemoryInstr && OBB.dominates(BarrierMemoryInstr, MemInstr))
+      if (BarrierMemoryInstr && BarrierMemoryInstr->comesBefore(MemInstr))
         break;
 
       auto *MemLoad = dyn_cast<LoadInst>(MemInstr);
@@ -674,12 +663,12 @@ Vectorizer::getVectorizablePrefix(ArrayRef<Instruction *> Chain) {
       // vectorize it (the vectorized load is inserted at the location of the
       // first load in the chain).
       if (isa<StoreInst>(MemInstr) && ChainLoad &&
-          (IsInvariantLoad(ChainLoad) || OBB.dominates(ChainLoad, MemInstr)))
+          (IsInvariantLoad(ChainLoad) || ChainLoad->comesBefore(MemInstr)))
         continue;
 
       // Same case, but in reverse.
       if (MemLoad && isa<StoreInst>(ChainInstr) &&
-          (IsInvariantLoad(MemLoad) || OBB.dominates(MemLoad, ChainInstr)))
+          (IsInvariantLoad(MemLoad) || MemLoad->comesBefore(ChainInstr)))
         continue;
 
       if (!AA.isNoAlias(MemoryLocation::get(MemInstr),
@@ -705,7 +694,7 @@ Vectorizer::getVectorizablePrefix(ArrayRef<Instruction *> Chain) {
     // the basic block.
     if (IsLoadChain && BarrierMemoryInstr) {
       // The BarrierMemoryInstr is a store that precedes ChainInstr.
-      assert(OBB.dominates(BarrierMemoryInstr, ChainInstr));
+      assert(BarrierMemoryInstr->comesBefore(ChainInstr));
       break;
     }
   }
@@ -961,7 +950,7 @@ bool Vectorizer::vectorizeStoreChain(
   unsigned VecRegSize = TTI.getLoadStoreVecRegBitWidth(AS);
   unsigned VF = VecRegSize / Sz;
   unsigned ChainSize = Chain.size();
-  unsigned Alignment = getAlignment(S0);
+  Align Alignment = getAlign(S0);
 
   if (!isPowerOf2_32(Sz) || VF < 2 || ChainSize < 2) {
     InstructionsProcessed->insert(Chain.begin(), Chain.end());
@@ -1019,21 +1008,23 @@ bool Vectorizer::vectorizeStoreChain(
   InstructionsProcessed->insert(Chain.begin(), Chain.end());
 
   // If the store is going to be misaligned, don't vectorize it.
-  if (accessIsMisaligned(SzInBytes, AS, Alignment)) {
+  if (accessIsMisaligned(SzInBytes, AS, Alignment.value())) {
     if (S0->getPointerAddressSpace() != DL.getAllocaAddrSpace()) {
       auto Chains = splitOddVectorElts(Chain, Sz);
       return vectorizeStoreChain(Chains.first, InstructionsProcessed) |
              vectorizeStoreChain(Chains.second, InstructionsProcessed);
     }
 
-    unsigned NewAlign = getOrEnforceKnownAlignment(S0->getPointerOperand(),
-                                                   StackAdjustedAlignment,
-                                                   DL, S0, nullptr, &DT);
-    if (NewAlign != 0)
+    Align NewAlign = getOrEnforceKnownAlignment(S0->getPointerOperand(),
+                                                Align(StackAdjustedAlignment),
+                                                DL, S0, nullptr, &DT);
+    if (NewAlign >= Alignment)
       Alignment = NewAlign;
+    else
+      return false;
   }
 
-  if (!TTI.isLegalToVectorizeStoreChain(SzInBytes, Alignment, AS)) {
+  if (!TTI.isLegalToVectorizeStoreChain(SzInBytes, Alignment.value(), AS)) {
     auto Chains = splitOddVectorElts(Chain, Sz);
     return vectorizeStoreChain(Chains.first, InstructionsProcessed) |
            vectorizeStoreChain(Chains.second, InstructionsProcessed);
@@ -1112,7 +1103,7 @@ bool Vectorizer::vectorizeLoadChain(
   unsigned VecRegSize = TTI.getLoadStoreVecRegBitWidth(AS);
   unsigned VF = VecRegSize / Sz;
   unsigned ChainSize = Chain.size();
-  unsigned Alignment = getAlignment(L0);
+  Align Alignment = getAlign(L0);
 
   if (!isPowerOf2_32(Sz) || VF < 2 || ChainSize < 2) {
     InstructionsProcessed->insert(Chain.begin(), Chain.end());
@@ -1162,18 +1153,23 @@ bool Vectorizer::vectorizeLoadChain(
   InstructionsProcessed->insert(Chain.begin(), Chain.end());
 
   // If the load is going to be misaligned, don't vectorize it.
-  if (accessIsMisaligned(SzInBytes, AS, Alignment)) {
+  if (accessIsMisaligned(SzInBytes, AS, Alignment.value())) {
     if (L0->getPointerAddressSpace() != DL.getAllocaAddrSpace()) {
       auto Chains = splitOddVectorElts(Chain, Sz);
       return vectorizeLoadChain(Chains.first, InstructionsProcessed) |
              vectorizeLoadChain(Chains.second, InstructionsProcessed);
     }
 
-    Alignment = getOrEnforceKnownAlignment(
-        L0->getPointerOperand(), StackAdjustedAlignment, DL, L0, nullptr, &DT);
+    Align NewAlign = getOrEnforceKnownAlignment(L0->getPointerOperand(),
+                                                Align(StackAdjustedAlignment),
+                                                DL, L0, nullptr, &DT);
+    if (NewAlign >= Alignment)
+      Alignment = NewAlign;
+    else
+      return false;
   }
 
-  if (!TTI.isLegalToVectorizeLoadChain(SzInBytes, Alignment, AS)) {
+  if (!TTI.isLegalToVectorizeLoadChain(SzInBytes, Alignment.value(), AS)) {
     auto Chains = splitOddVectorElts(Chain, Sz);
     return vectorizeLoadChain(Chains.first, InstructionsProcessed) |
            vectorizeLoadChain(Chains.second, InstructionsProcessed);
@@ -1194,7 +1190,8 @@ bool Vectorizer::vectorizeLoadChain(
 
   Value *Bitcast =
       Builder.CreateBitCast(L0->getPointerOperand(), VecTy->getPointerTo(AS));
-  LoadInst *LI = Builder.CreateAlignedLoad(VecTy, Bitcast, Alignment);
+  LoadInst *LI =
+      Builder.CreateAlignedLoad(VecTy, Bitcast, MaybeAlign(Alignment));
   propagateMetadata(LI, Chain);
 
   if (VecLoadTy) {

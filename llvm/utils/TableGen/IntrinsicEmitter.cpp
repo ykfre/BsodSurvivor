@@ -39,8 +39,6 @@ public:
 
   void run(raw_ostream &OS, bool Enums);
 
-  void EmitPrefix(raw_ostream &OS);
-
   void EmitEnumInfo(const CodeGenIntrinsicTable &Ints, raw_ostream &OS);
   void EmitTargetInfo(const CodeGenIntrinsicTable &Ints, raw_ostream &OS);
   void EmitIntrinsicToNameTable(const CodeGenIntrinsicTable &Ints,
@@ -51,7 +49,6 @@ public:
   void EmitAttributes(const CodeGenIntrinsicTable &Ints, raw_ostream &OS);
   void EmitIntrinsicToBuiltinMap(const CodeGenIntrinsicTable &Ints, bool IsGCC,
                                  raw_ostream &OS);
-  void EmitSuffix(raw_ostream &OS);
 };
 } // End anonymous namespace
 
@@ -68,8 +65,6 @@ void IntrinsicEmitter::run(raw_ostream &OS, bool Enums) {
     // Emit the enum information.
     EmitEnumInfo(Ints, OS);
   } else {
-    EmitPrefix(OS);
-
     // Emit the target metadata.
     EmitTargetInfo(Ints, OS);
 
@@ -90,27 +85,7 @@ void IntrinsicEmitter::run(raw_ostream &OS, bool Enums) {
 
     // Emit code to translate MS builtins into LLVM intrinsics.
     EmitIntrinsicToBuiltinMap(Ints, false, OS);
-
-    EmitSuffix(OS);
   }
-}
-
-void IntrinsicEmitter::EmitPrefix(raw_ostream &OS) {
-  OS << "// VisualStudio defines setjmp as _setjmp\n"
-        "#if defined(_MSC_VER) && defined(setjmp) && \\\n"
-        "                         !defined(setjmp_undefined_for_msvc)\n"
-        "#  pragma push_macro(\"setjmp\")\n"
-        "#  undef setjmp\n"
-        "#  define setjmp_undefined_for_msvc\n"
-        "#endif\n\n";
-}
-
-void IntrinsicEmitter::EmitSuffix(raw_ostream &OS) {
-  OS << "#if defined(_MSC_VER) && defined(setjmp_undefined_for_msvc)\n"
-        "// let's return it to _setjmp state\n"
-        "#  pragma pop_macro(\"setjmp\")\n"
-        "#  undef setjmp_undefined_for_msvc\n"
-        "#endif\n\n";
 }
 
 void IntrinsicEmitter::EmitEnumInfo(const CodeGenIntrinsicTable &Ints,
@@ -143,8 +118,6 @@ void IntrinsicEmitter::EmitEnumInfo(const CodeGenIntrinsicTable &Ints,
     OS << "namespace llvm {\n";
     OS << "namespace Intrinsic {\n";
     OS << "enum " << UpperPrefix << "Intrinsics : unsigned {\n";
-  } else {
-    EmitPrefix(OS);
   }
 
   OS << "// Enum values for intrinsics\n";
@@ -165,7 +138,6 @@ void IntrinsicEmitter::EmitEnumInfo(const CodeGenIntrinsicTable &Ints,
   // Emit num_intrinsics into the target neutral enum.
   if (IntrinsicPrefix.empty()) {
     OS << "    num_intrinsics = " << (Ints.size() + 1) << "\n";
-    EmitSuffix(OS);
   } else {
     OS << "}; // enum\n";
     OS << "} // namespace Intrinsic\n";
@@ -272,7 +244,8 @@ enum IIT_Info {
   IIT_SCALABLE_VEC = 43,
   IIT_SUBDIVIDE2_ARG = 44,
   IIT_SUBDIVIDE4_ARG = 45,
-  IIT_VEC_OF_BITCASTS_TO_INT = 46
+  IIT_VEC_OF_BITCASTS_TO_INT = 46,
+  IIT_V128  = 47
 };
 
 static void EncodeFixedValueType(MVT::SimpleValueType VT,
@@ -408,6 +381,7 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
     case 16: Sig.push_back(IIT_V16); break;
     case 32: Sig.push_back(IIT_V32); break;
     case 64: Sig.push_back(IIT_V64); break;
+    case 128: Sig.push_back(IIT_V128); break;
     case 512: Sig.push_back(IIT_V512); break;
     case 1024: Sig.push_back(IIT_V1024); break;
     }
@@ -605,6 +579,9 @@ struct AttributeComparator {
     if (L->isNoReturn != R->isNoReturn)
       return R->isNoReturn;
 
+    if (L->isNoSync != R->isNoSync)
+      return R->isNoSync;
+
     if (L->isWillReturn != R->isWillReturn)
       return R->isWillReturn;
 
@@ -746,8 +723,8 @@ void IntrinsicEmitter::EmitAttributes(const CodeGenIntrinsicTable &Ints,
 
     if (!intrinsic.canThrow ||
         (intrinsic.ModRef != CodeGenIntrinsic::ReadWriteMem && !intrinsic.hasSideEffects) ||
-        intrinsic.isNoReturn || intrinsic.isWillReturn || intrinsic.isCold ||
-        intrinsic.isNoDuplicate || intrinsic.isConvergent ||
+        intrinsic.isNoReturn || intrinsic.isNoSync || intrinsic.isWillReturn ||
+        intrinsic.isCold || intrinsic.isNoDuplicate || intrinsic.isConvergent ||
         intrinsic.isSpeculatable) {
       OS << "      const Attribute::AttrKind Atts[] = {";
       bool addComma = false;
@@ -759,6 +736,12 @@ void IntrinsicEmitter::EmitAttributes(const CodeGenIntrinsicTable &Ints,
         if (addComma)
           OS << ",";
         OS << "Attribute::NoReturn";
+        addComma = true;
+      }
+      if (intrinsic.isNoSync) {
+        if (addComma)
+          OS << ",";
+        OS << "Attribute::NoSync";
         addComma = true;
       }
       if (intrinsic.isWillReturn) {

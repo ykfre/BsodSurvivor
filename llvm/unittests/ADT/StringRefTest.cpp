@@ -59,6 +59,16 @@ TEST(StringRefTest, Construction) {
   EXPECT_EQ("hello", StringRef("hello"));
   EXPECT_EQ("hello", StringRef("hello world", 5));
   EXPECT_EQ("hello", StringRef(std::string("hello")));
+#if __cplusplus > 201402L
+  EXPECT_EQ("hello", StringRef(std::string_view("hello")));
+#endif
+}
+
+TEST(StringRefTest, Conversion) {
+  EXPECT_EQ("hello", std::string(StringRef("hello")));
+#if __cplusplus > 201402L
+  EXPECT_EQ("hello", std::string_view(StringRef("hello")));
+#endif
 }
 
 TEST(StringRefTest, EmptyInitializerList) {
@@ -509,6 +519,14 @@ TEST(StringRefTest, Count) {
   EXPECT_EQ(1U, Str.count("hello"));
   EXPECT_EQ(1U, Str.count("ello"));
   EXPECT_EQ(0U, Str.count("zz"));
+  EXPECT_EQ(0U, Str.count(""));
+
+  StringRef OverlappingAbba("abbabba");
+  EXPECT_EQ(1U, OverlappingAbba.count("abba"));
+  StringRef NonOverlappingAbba("abbaabba");
+  EXPECT_EQ(2U, NonOverlappingAbba.count("abba"));
+  StringRef ComplexAbba("abbabbaxyzabbaxyz");
+  EXPECT_EQ(2U, ComplexAbba.count("abba"));
 }
 
 TEST(StringRefTest, EditDistance) {

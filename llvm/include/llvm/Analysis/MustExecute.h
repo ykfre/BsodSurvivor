@@ -122,8 +122,6 @@ public:
                                      const DominatorTree *DT,
                                      const Loop *CurLoop) const;
 
-  SimpleLoopSafetyInfo() : LoopSafetyInfo() {};
-
   virtual ~SimpleLoopSafetyInfo() {};
 };
 
@@ -171,12 +169,18 @@ public:
   /// this removal.
   void removeInstruction(const Instruction *Inst);
 
-  ICFLoopSafetyInfo(DominatorTree *DT) : LoopSafetyInfo(), ICF(DT), MW(DT) {};
-
   virtual ~ICFLoopSafetyInfo() {};
 };
 
+bool mayContainIrreducibleControl(const Function &F, const LoopInfo *LI);
+
 struct MustBeExecutedContextExplorer;
+
+/// Enum that allows us to spell out the direction.
+enum class ExplorationDirection {
+  BACKWARD = 0,
+  FORWARD = 1,
+};
 
 /// Must be executed iterators visit stretches of instructions that are
 /// guaranteed to be executed together, potentially with other instruction
@@ -282,16 +286,18 @@ struct MustBeExecutedIterator {
 
   MustBeExecutedIterator(const MustBeExecutedIterator &Other)
       : Visited(Other.Visited), Explorer(Other.Explorer),
-        CurInst(Other.CurInst) {}
+        CurInst(Other.CurInst), Head(Other.Head), Tail(Other.Tail) {}
 
   MustBeExecutedIterator(MustBeExecutedIterator &&Other)
       : Visited(std::move(Other.Visited)), Explorer(Other.Explorer),
-        CurInst(Other.CurInst) {}
+        CurInst(Other.CurInst), Head(Other.Head), Tail(Other.Tail) {}
 
   MustBeExecutedIterator &operator=(MustBeExecutedIterator &&Other) {
     if (this != &Other) {
       std::swap(Visited, Other.Visited);
       std::swap(CurInst, Other.CurInst);
+      std::swap(Head, Other.Head);
+      std::swap(Tail, Other.Tail);
     }
     return *this;
   }
@@ -315,7 +321,7 @@ struct MustBeExecutedIterator {
   /// Equality and inequality operators. Note that we ignore the history here.
   ///{
   bool operator==(const MustBeExecutedIterator &Other) const {
-    return CurInst == Other.CurInst;
+    return CurInst == Other.CurInst && Head == Other.Head && Tail == Other.Tail;
   }
 
   bool operator!=(const MustBeExecutedIterator &Other) const {
@@ -328,16 +334,23 @@ struct MustBeExecutedIterator {
   const Instruction *getCurrentInst() const { return CurInst; }
 
   /// Return true if \p I was encountered by this iterator already.
-  bool count(const Instruction *I) const { return Visited.count(I); }
+  bool count(const Instruction *I) const {
+    return Visited.count({I, ExplorationDirection::FORWARD}) ||
+           Visited.count({I, ExplorationDirection::BACKWARD});
+  }
 
 private:
-  using VisitedSetTy = DenseSet<const Instruction *>;
+  using VisitedSetTy =
+      DenseSet<PointerIntPair<const Instruction *, 1, ExplorationDirection>>;
 
   /// Private constructors.
   MustBeExecutedIterator(ExplorerTy &Explorer, const Instruction *I);
 
   /// Reset the iterator to its initial state pointing at \p I.
   void reset(const Instruction *I);
+
+  /// Reset the iterator to point at \p I, keep cached state.
+  void resetInstruction(const Instruction *I);
 
   /// Try to advance one of the underlying positions (Head or Tail).
   ///
@@ -356,6 +369,11 @@ private:
   /// instruction that we know is executed with the given program point,
   /// initially the program point itself.
   const Instruction *CurInst;
+
+  /// Two positions that mark the program points where this iterator will look
+  /// for the next instruction. Note that the current instruction is either the
+  /// one pointed to by Head, Tail, or both.
+  const Instruction *Head, *Tail;
 
   friend struct MustBeExecutedContextExplorer;
 };
@@ -379,19 +397,24 @@ struct MustBeExecutedContextExplorer {
   /// \param ExploreInterBlock    Flag to indicate if instructions in blocks
   ///                             other than the parent of PP should be
   ///                             explored.
+  /// \param ExploreCFGForward    Flag to indicate if instructions located after
+  ///                             PP in the CFG, e.g., post-dominating PP,
+  ///                             should be explored.
+  /// \param ExploreCFGBackward   Flag to indicate if instructions located
+  ///                             before PP in the CFG, e.g., dominating PP,
+  ///                             should be explored.
   MustBeExecutedContextExplorer(
-      bool ExploreInterBlock,
+      bool ExploreInterBlock, bool ExploreCFGForward, bool ExploreCFGBackward,
       GetterTy<const LoopInfo> LIGetter =
+          [](const Function &) { return nullptr; },
+      GetterTy<const DominatorTree> DTGetter =
           [](const Function &) { return nullptr; },
       GetterTy<const PostDominatorTree> PDTGetter =
           [](const Function &) { return nullptr; })
-      : ExploreInterBlock(ExploreInterBlock), LIGetter(LIGetter),
-        PDTGetter(PDTGetter), EndIterator(*this, nullptr) {}
-
-  /// Clean up the dynamically allocated iterators.
-  ~MustBeExecutedContextExplorer() {
-    DeleteContainerSeconds(InstructionIteratorMap);
-  }
+      : ExploreInterBlock(ExploreInterBlock),
+        ExploreCFGForward(ExploreCFGForward),
+        ExploreCFGBackward(ExploreCFGBackward), LIGetter(LIGetter),
+        DTGetter(DTGetter), PDTGetter(PDTGetter), EndIterator(*this, nullptr) {}
 
   /// Iterator-based interface. \see MustBeExecutedIterator.
   ///{
@@ -400,15 +423,15 @@ struct MustBeExecutedContextExplorer {
 
   /// Return an iterator to explore the context around \p PP.
   iterator &begin(const Instruction *PP) {
-    auto *&It = InstructionIteratorMap[PP];
+    auto &It = InstructionIteratorMap[PP];
     if (!It)
-      It = new iterator(*this, PP);
+      It.reset(new iterator(*this, PP));
     return *It;
   }
 
   /// Return an iterator to explore the cached context around \p PP.
   const_iterator &begin(const Instruction *PP) const {
-    return *InstructionIteratorMap.lookup(PP);
+    return *InstructionIteratorMap.find(PP)->second;
   }
 
   /// Return an universal end iterator.
@@ -430,6 +453,18 @@ struct MustBeExecutedContextExplorer {
     return llvm::make_range(begin(PP), end(PP));
   }
   ///}
+
+  /// Check \p Pred on all instructions in the context.
+  ///
+  /// This method will evaluate \p Pred and return
+  /// true if \p Pred holds in every instruction.
+  bool checkForAllContext(const Instruction *PP,
+                          function_ref<bool(const Instruction *)> Pred) {
+    for (auto EIt = begin(PP), EEnd = end(PP); EIt != EEnd; ++EIt)
+      if (!Pred(*EIt))
+        return false;
+    return true;
+  }
 
   /// Helper to look for \p I in the context of \p PP.
   ///
@@ -464,14 +499,28 @@ struct MustBeExecutedContextExplorer {
   const Instruction *
   getMustBeExecutedNextInstruction(MustBeExecutedIterator &It,
                                    const Instruction *PP);
+  /// Return the previous instr. that is guaranteed to be executed before \p PP.
+  ///
+  /// \param It              The iterator that is used to traverse the must be
+  ///                        executed context.
+  /// \param PP              The program point for which the previous instr.
+  ///                        that is guaranteed to execute is determined.
+  const Instruction *
+  getMustBeExecutedPrevInstruction(MustBeExecutedIterator &It,
+                                   const Instruction *PP);
 
   /// Find the next join point from \p InitBB in forward direction.
   const BasicBlock *findForwardJoinPoint(const BasicBlock *InitBB);
+
+  /// Find the next join point from \p InitBB in backward direction.
+  const BasicBlock *findBackwardJoinPoint(const BasicBlock *InitBB);
 
   /// Parameter that limit the performed exploration. See the constructor for
   /// their meaning.
   ///{
   const bool ExploreInterBlock;
+  const bool ExploreCFGForward;
+  const bool ExploreCFGBackward;
   ///}
 
 private:
@@ -479,6 +528,7 @@ private:
   /// PostDominatorTree.
   ///{
   GetterTy<const LoopInfo> LIGetter;
+  GetterTy<const DominatorTree> DTGetter;
   GetterTy<const PostDominatorTree> PDTGetter;
   ///}
 
@@ -489,7 +539,7 @@ private:
   DenseMap<const Function*, Optional<bool>> IrreducibleControlMap;
 
   /// Map from instructions to associated must be executed iterators.
-  DenseMap<const Instruction *, MustBeExecutedIterator *>
+  DenseMap<const Instruction *, std::unique_ptr<MustBeExecutedIterator>>
       InstructionIteratorMap;
 
   /// A unique end iterator.

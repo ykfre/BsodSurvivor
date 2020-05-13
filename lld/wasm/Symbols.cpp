@@ -20,6 +20,7 @@
 #define DEBUG_TYPE "lld"
 
 using namespace llvm;
+using namespace llvm::object;
 using namespace llvm::wasm;
 
 namespace lld {
@@ -28,9 +29,13 @@ std::string toString(const wasm::Symbol &sym) {
 }
 
 std::string maybeDemangleSymbol(StringRef name) {
+  // WebAssembly requires caller and callee signatures to match, so we mangle
+  // `main` in the case where we need to pass it arguments.
+  if (name == "__main_argc_argv")
+    return "main";
   if (wasm::config->demangle)
     return demangleItanium(name);
-  return name;
+  return std::string(name);
 }
 
 std::string toString(wasm::Symbol::Kind kind) {
@@ -151,7 +156,7 @@ void Symbol::setGOTIndex(uint32_t index) {
   LLVM_DEBUG(dbgs() << "setGOTIndex " << name << " -> " << index << "\n");
   assert(gotIndex == INVALID_INDEX);
   if (config->isPic) {
-    // Any symbol that is assigned a GOT entry must be exported othewise the
+    // Any symbol that is assigned a GOT entry must be exported otherwise the
     // dynamic linker won't be able create the entry that contains it.
     forceExport = true;
   }
@@ -333,6 +338,16 @@ const OutputSectionSymbol *SectionSymbol::getOutputSectionSymbol() const {
 }
 
 void LazySymbol::fetch() { cast<ArchiveFile>(file)->addMember(&archiveSymbol); }
+
+MemoryBufferRef LazySymbol::getMemberBuffer() {
+  Archive::Child c =
+      CHECK(archiveSymbol.getMember(),
+            "could not get the member for symbol " + toString(*this));
+
+  return CHECK(c.getMemoryBufferRef(),
+               "could not get the buffer for the member defining symbol " +
+                   toString(*this));
+}
 
 void printTraceSymbolUndefined(StringRef name, const InputFile* file) {
   message(toString(file) + ": reference to " + name);

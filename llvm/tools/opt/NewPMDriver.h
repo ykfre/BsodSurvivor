@@ -22,7 +22,6 @@
 
 namespace llvm {
 class StringRef;
-class LLVMContext;
 class Module;
 class TargetMachine;
 class ToolOutputFile;
@@ -64,7 +63,7 @@ bool runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
                      bool ShouldPreserveAssemblyUseListOrder,
                      bool ShouldPreserveBitcodeUseListOrder,
                      bool EmitSummaryIndex, bool EmitModuleHash,
-                     bool EnableDebugify);
+                     bool EnableDebugify, bool Coroutines);
 } // namespace llvm
 
 #endif

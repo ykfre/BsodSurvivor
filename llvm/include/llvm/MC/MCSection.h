@@ -38,6 +38,8 @@ template <> struct ilist_alloc_traits<MCFragment> {
 /// current translation unit.  The MCContext class uniques and creates these.
 class MCSection {
 public:
+  static constexpr unsigned NonUniqueID = ~0U;
+
   enum SectionVariant { SV_COFF = 0, SV_ELF, SV_MachO, SV_Wasm, SV_XCOFF };
 
   /// Express the state of bundle locked groups while emitting code.
@@ -78,10 +80,6 @@ private:
   /// Whether this section has had instructions emitted into it.
   bool HasInstructions : 1;
 
-  /// Whether this section has had data emitted into it.
-  /// Right now this is only used by the ARM backend.
-  bool HasData : 1;
-
   bool IsRegistered : 1;
 
   MCDummyFragment DummyFragment;
@@ -102,16 +100,19 @@ private:
   SmallVector<PendingLabel, 2> PendingLabels;
 
 protected:
+  // TODO Make Name private when possible.
+  StringRef Name;
   SectionVariant Variant;
   SectionKind Kind;
 
-  MCSection(SectionVariant V, SectionKind K, MCSymbol *Begin);
+  MCSection(SectionVariant V, StringRef Name, SectionKind K, MCSymbol *Begin);
   ~MCSection();
 
 public:
   MCSection(const MCSection &) = delete;
   MCSection &operator=(const MCSection &) = delete;
 
+  StringRef getName() const { return Name; }
   SectionKind getKind() const { return Kind; }
 
   SectionVariant getVariant() const { return Variant; }
@@ -150,9 +151,6 @@ public:
   bool hasInstructions() const { return HasInstructions; }
   void setHasInstructions(bool Value) { HasInstructions = Value; }
 
-  bool hasData() const { return HasData; }
-  void setHasData(bool Value) { HasData = Value; }
-
   bool isRegistered() const { return IsRegistered; }
   void setIsRegistered(bool Value) { IsRegistered = Value; }
 
@@ -175,12 +173,6 @@ public:
   iterator end() { return Fragments.end(); }
   const_iterator end() const { return Fragments.end(); }
 
-  reverse_iterator rbegin() { return Fragments.rbegin(); }
-  const_reverse_iterator rbegin() const { return Fragments.rbegin(); }
-
-  reverse_iterator rend() { return Fragments.rend(); }
-  const_reverse_iterator rend() const  { return Fragments.rend(); }
-
   MCSection::iterator getSubsectionInsertionPoint(unsigned Subsection);
 
   void dump() const;
@@ -196,6 +188,8 @@ public:
   /// Check whether this section is "virtual", that is has no actual object
   /// file contents.
   virtual bool isVirtualSection() const = 0;
+
+  virtual StringRef getVirtualSectionKind() const;
 
   /// Add a pending label for the requested subsection. This label will be
   /// associated with a fragment in flushPendingLabels()

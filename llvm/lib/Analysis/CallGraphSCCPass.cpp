@@ -549,7 +549,10 @@ void CallGraphSCC::ReplaceNode(CallGraphNode *Old, CallGraphNode *New) {
   for (unsigned i = 0; ; ++i) {
     assert(i != Nodes.size() && "Node not in SCC");
     if (Nodes[i] != Old) continue;
-    Nodes[i] = New;
+    if (New)
+      Nodes[i] = New;
+    else
+      Nodes.erase(Nodes.begin() + i);
     break;
   }
 
@@ -557,6 +560,10 @@ void CallGraphSCC::ReplaceNode(CallGraphNode *Old, CallGraphNode *New) {
   // pointers to the old CallGraphNode.
   scc_iterator<CallGraph*> *CGI = (scc_iterator<CallGraph*>*)Context;
   CGI->ReplaceNode(Old, New);
+}
+
+void CallGraphSCC::DeleteNode(CallGraphNode *Old) {
+  ReplaceNode(Old, /*New=*/nullptr);
 }
 
 //===----------------------------------------------------------------------===//

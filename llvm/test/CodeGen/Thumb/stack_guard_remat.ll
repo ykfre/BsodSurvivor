@@ -11,7 +11,7 @@
 ;PIC-NEXT:   add [[ORIGINAL_GUARD]], pc
 ;PIC-NEXT:   ldr [[ORIGINAL_GUARD]], {{\[}}[[ORIGINAL_GUARD]]{{\]}}
 ;PIC-NEXT:   ldr [[ORIGINAL_GUARD]], {{\[}}[[ORIGINAL_GUARD]]{{\]}}
-;PIC-NEXT:   subs {{r[0-9]+}}, [[ORIGINAL_GUARD]], [[SAVED_GUARD]]
+;PIC-NEXT:   cmp [[ORIGINAL_GUARD]], [[SAVED_GUARD]]
 
 ;PIC:      [[GUARD_STACK_OFFSET]]:
 ;PIC-NEXT:   .long 1028
@@ -26,7 +26,7 @@
 ;NO-PIC-NOT: LPC
 ;NO-PIC-NEXT:           ldr [[ORIGINAL_GUARD]], {{\[}}[[ORIGINAL_GUARD]]{{\]}}
 ;DYNAMIC-NO-PIC-NEXT:   ldr [[ORIGINAL_GUARD]], {{\[}}[[ORIGINAL_GUARD]]{{\]}}
-;NO-PIC-NEXT:           subs {{r[0-9]+}}, [[ORIGINAL_GUARD]], [[SAVED_GUARD]]
+;NO-PIC-NEXT:           cmp [[ORIGINAL_GUARD]], [[SAVED_GUARD]]
 
 ;STATIC:      [[GUARD_STACK_OFFSET]]:
 ;STATIC-NEXT:   .long 1028
@@ -58,4 +58,4 @@ declare void @foo3(i32*)
 ; Function Attrs: nounwind
 declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture)
 
-attributes #0 = { nounwind ssp "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind ssp "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }

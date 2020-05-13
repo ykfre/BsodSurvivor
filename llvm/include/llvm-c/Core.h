@@ -157,10 +157,11 @@ typedef enum {
   LLVMStructTypeKind,      /**< Structures */
   LLVMArrayTypeKind,       /**< Arrays */
   LLVMPointerTypeKind,     /**< Pointers */
-  LLVMVectorTypeKind,      /**< SIMD 'packed' format, or other vector type */
   LLVMMetadataTypeKind,    /**< Metadata */
   LLVMX86_MMXTypeKind,     /**< X86 MMX */
-  LLVMTokenTypeKind        /**< Tokens */
+  LLVMTokenTypeKind,       /**< Tokens */
+  LLVMFixedVectorTypeKind, /**< Fixed width SIMD vector type */
+  LLVMScalableVectorTypeKind /**< Scalable SIMD vector type */
 } LLVMTypeKind;
 
 typedef enum {
@@ -2690,7 +2691,7 @@ LLVMValueRef LLVMGetNextGlobalIFunc(LLVMValueRef IFunc);
  * no previous global aliases.
  */
 LLVMValueRef LLVMGetPreviousGlobalIFunc(LLVMValueRef IFunc);
-  
+
 /**
  * Retrieves the resolver function associated with this indirect function, or
  * NULL if it doesn't not exist.
@@ -2944,7 +2945,7 @@ void LLVMInsertExistingBasicBlockAfterInsertBlock(LLVMBuilderRef Builder,
  */
 void LLVMAppendExistingBasicBlock(LLVMValueRef Fn,
                                   LLVMBasicBlockRef BB);
-  
+
 /**
  * Create a new basic block without inserting it into a function.
  *
@@ -3251,8 +3252,8 @@ LLVMTypeRef LLVMGetCalledFunctionType(LLVMValueRef C);
  * This expects an LLVMValueRef that corresponds to a llvm::CallInst or
  * llvm::InvokeInst.
  *
- * @see llvm::CallInst::getCalledValue()
- * @see llvm::InvokeInst::getCalledValue()
+ * @see llvm::CallInst::getCalledOperand()
+ * @see llvm::InvokeInst::getCalledOperand()
  */
 LLVMValueRef LLVMGetCalledValue(LLVMValueRef Instr);
 
@@ -3755,7 +3756,7 @@ LLVMValueRef LLVMBuildArrayMalloc(LLVMBuilderRef, LLVMTypeRef Ty,
                                   LLVMValueRef Val, const char *Name);
 
 /**
- * Creates and inserts a memset to the specified pointer and the 
+ * Creates and inserts a memset to the specified pointer and the
  * specified value.
  *
  * @see llvm::IRRBuilder::CreateMemSet()
@@ -3768,7 +3769,7 @@ LLVMValueRef LLVMBuildMemSet(LLVMBuilderRef B, LLVMValueRef Ptr,
  *
  * @see llvm::IRRBuilder::CreateMemCpy()
  */
-LLVMValueRef LLVMBuildMemCpy(LLVMBuilderRef B, 
+LLVMValueRef LLVMBuildMemCpy(LLVMBuilderRef B,
                              LLVMValueRef Dst, unsigned DstAlign,
                              LLVMValueRef Src, unsigned SrcAlign,
                              LLVMValueRef Size);
@@ -3777,7 +3778,7 @@ LLVMValueRef LLVMBuildMemCpy(LLVMBuilderRef B,
  *
  * @see llvm::IRRBuilder::CreateMemMove()
  */
-LLVMValueRef LLVMBuildMemMove(LLVMBuilderRef B, 
+LLVMValueRef LLVMBuildMemMove(LLVMBuilderRef B,
                               LLVMValueRef Dst, unsigned DstAlign,
                               LLVMValueRef Src, unsigned SrcAlign,
                               LLVMValueRef Size);

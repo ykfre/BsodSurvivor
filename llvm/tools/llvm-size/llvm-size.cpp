@@ -196,11 +196,16 @@ static bool considerForSize(ObjectFile *Obj, SectionRef Section) {
 }
 
 /// Total size of all ELF common symbols
-static uint64_t getCommonSize(ObjectFile *Obj) {
+static Expected<uint64_t> getCommonSize(ObjectFile *Obj) {
   uint64_t TotalCommons = 0;
-  for (auto &Sym : Obj->symbols())
-    if (Obj->getSymbolFlags(Sym.getRawDataRefImpl()) & SymbolRef::SF_Common)
+  for (auto &Sym : Obj->symbols()) {
+    Expected<uint32_t> SymFlagsOrErr =
+        Obj->getSymbolFlags(Sym.getRawDataRefImpl());
+    if (!SymFlagsOrErr)
+      return SymFlagsOrErr.takeError();
+    if (*SymFlagsOrErr & SymbolRef::SF_Common)
       TotalCommons += Obj->getCommonSymbolSize(Sym.getRawDataRefImpl());
+  }
   return TotalCommons;
 }
 
@@ -435,10 +440,14 @@ static void printObjectSectionSizes(ObjectFile *Obj) {
     }
 
     if (ELFCommons) {
-      uint64_t CommonSize = getCommonSize(Obj);
-      total += CommonSize;
-      outs() << format(fmt.str().c_str(), std::string("*COM*").c_str(),
-                       CommonSize, static_cast<uint64_t>(0));
+      if (Expected<uint64_t> CommonSizeOrErr = getCommonSize(Obj)) {
+        total += *CommonSizeOrErr;
+        outs() << format(fmt.str().c_str(), std::string("*COM*").c_str(),
+                         *CommonSizeOrErr, static_cast<uint64_t>(0));
+      } else {
+        error(CommonSizeOrErr.takeError(), Obj->getFileName());
+        return;
+      }
     }
 
     // Print total.
@@ -446,7 +455,8 @@ static void printObjectSectionSizes(ObjectFile *Obj) {
     fmt << "%-" << max_name_len << "s "
         << "%#" << max_size_len << radix_fmt << "\n";
     outs() << format(fmt.str().c_str(), static_cast<const char *>("Total"),
-                     total);
+                     total)
+           << "\n\n";
   } else {
     // The Berkeley format does not display individual section sizes. It
     // displays the cumulative size for each section type.
@@ -468,8 +478,14 @@ static void printObjectSectionSizes(ObjectFile *Obj) {
         total_bss += size;
     }
 
-    if (ELFCommons)
-      total_bss += getCommonSize(Obj);
+    if (ELFCommons) {
+      if (Expected<uint64_t> CommonSizeOrErr = getCommonSize(Obj))
+        total_bss += *CommonSizeOrErr;
+      else {
+        error(CommonSizeOrErr.takeError(), Obj->getFileName());
+        return;
+      }
+    }
 
     total = total_text + total_data + total_bss;
 
@@ -839,9 +855,6 @@ static void printFileSectionSizes(StringRef file) {
   } else {
     error("unsupported file type", file);
   }
-  // System V adds an extra newline at the end of each file.
-  if (OutputFormat == sysv)
-    outs() << "\n";
 }
 
 static void printBerkeleyTotals() {

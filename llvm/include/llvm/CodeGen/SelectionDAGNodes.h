@@ -30,6 +30,7 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugLoc.h"
@@ -368,7 +369,6 @@ private:
   bool NoInfs : 1;
   bool NoSignedZeros : 1;
   bool AllowReciprocal : 1;
-  bool VectorReduction : 1;
   bool AllowContract : 1;
   bool ApproximateFuncs : 1;
   bool AllowReassociation : 1;
@@ -385,9 +385,9 @@ public:
   SDNodeFlags()
       : AnyDefined(false), NoUnsignedWrap(false), NoSignedWrap(false),
         Exact(false), NoNaNs(false), NoInfs(false),
-        NoSignedZeros(false), AllowReciprocal(false), VectorReduction(false),
+        NoSignedZeros(false), AllowReciprocal(false),
         AllowContract(false), ApproximateFuncs(false),
-        AllowReassociation(false), NoFPExcept(true) {}
+        AllowReassociation(false), NoFPExcept(false) {}
 
   /// Propagate the fast-math-flags from an IR FPMathOperator.
   void copyFMF(const FPMathOperator &FPMO) {
@@ -434,10 +434,6 @@ public:
     setDefined();
     AllowReciprocal = b;
   }
-  void setVectorReduction(bool b) {
-    setDefined();
-    VectorReduction = b;
-  }
   void setAllowContract(bool b) {
     setDefined();
     AllowContract = b;
@@ -450,9 +446,9 @@ public:
     setDefined();
     AllowReassociation = b;
   }
-  void setFPExcept(bool b) {
+  void setNoFPExcept(bool b) {
     setDefined();
-    NoFPExcept = !b;
+    NoFPExcept = b;
   }
 
   // These are accessors for each flag.
@@ -463,16 +459,10 @@ public:
   bool hasNoInfs() const { return NoInfs; }
   bool hasNoSignedZeros() const { return NoSignedZeros; }
   bool hasAllowReciprocal() const { return AllowReciprocal; }
-  bool hasVectorReduction() const { return VectorReduction; }
   bool hasAllowContract() const { return AllowContract; }
   bool hasApproximateFuncs() const { return ApproximateFuncs; }
   bool hasAllowReassociation() const { return AllowReassociation; }
-  bool hasFPExcept() const { return !NoFPExcept; }
-
-  bool isFast() const {
-    return NoSignedZeros && AllowReciprocal && NoNaNs && NoInfs && NoFPExcept &&
-           AllowContract && ApproximateFuncs && AllowReassociation;
-  }
+  bool hasNoFPExcept() const { return NoFPExcept; }
 
   /// Clear any flags in this flag set that aren't also set in Flags.
   /// If the given Flags are undefined then don't do anything.
@@ -486,7 +476,6 @@ public:
     NoInfs &= Flags.NoInfs;
     NoSignedZeros &= Flags.NoSignedZeros;
     AllowReciprocal &= Flags.AllowReciprocal;
-    VectorReduction &= Flags.VectorReduction;
     AllowContract &= Flags.AllowContract;
     ApproximateFuncs &= Flags.ApproximateFuncs;
     AllowReassociation &= Flags.AllowReassociation;
@@ -666,6 +655,15 @@ public:
   /// \<target\>ISD namespace).
   bool isTargetOpcode() const { return NodeType >= ISD::BUILTIN_OP_END; }
 
+  /// Test if this node has a target-specific opcode that may raise
+  /// FP exceptions (in the \<target\>ISD namespace and greater than
+  /// FIRST_TARGET_STRICTFP_OPCODE).  Note that all target memory
+  /// opcode are currently automatically considered to possibly raise
+  /// FP exceptions as well.
+  bool isTargetStrictFPOpcode() const {
+    return NodeType >= ISD::FIRST_TARGET_STRICTFP_OPCODE;
+  }
+
   /// Test if this node has a target-specific
   /// memory-referencing opcode (in the \<target\>ISD namespace and
   /// greater than FIRST_TARGET_MEMORY_OPCODE).
@@ -692,7 +690,9 @@ public:
     switch (NodeType) {
       default:
         return false;
-#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)                   \
+      case ISD::STRICT_FP16_TO_FP:
+      case ISD::STRICT_FP_TO_FP16:
+#define DAG_INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)               \
       case ISD::STRICT_##DAGN:
 #include "llvm/IR/ConstrainedOps.def"
         return true;
@@ -979,7 +979,6 @@ public:
 
   const SDNodeFlags getFlags() const { return Flags; }
   void setFlags(SDNodeFlags NewFlags) { Flags = NewFlags; }
-  bool isFast() { return Flags.isFast(); }
 
   /// Clear any flags in this node that aren't also set in Flags.
   /// If Flags is not in a defined state then this has no effect.
@@ -1012,6 +1011,9 @@ public:
 
   value_iterator value_begin() const { return ValueList; }
   value_iterator value_end() const { return ValueList+NumValues; }
+  iterator_range<value_iterator> values() const {
+    return llvm::make_range(value_begin(), value_end());
+  }
 
   /// Return the opcode of this operation for printing.
   std::string getOperationName(const SelectionDAG *G = nullptr) const;
@@ -1291,12 +1293,14 @@ public:
   bool writeMem() const { return MMO->isStore(); }
 
   /// Returns alignment and volatility of the memory access
-  unsigned getOriginalAlignment() const {
-    return MMO->getBaseAlignment();
+  Align getOriginalAlign() const { return MMO->getBaseAlign(); }
+  Align getAlign() const { return MMO->getAlign(); }
+  LLVM_ATTRIBUTE_DEPRECATED(unsigned getOriginalAlignment() const,
+                            "Use getOriginalAlign() instead") {
+    return MMO->getBaseAlign().value();
   }
-  unsigned getAlignment() const {
-    return MMO->getAlignment();
-  }
+  // FIXME: Remove once transition to getAlign is over.
+  unsigned getAlignment() const { return MMO->getAlign().value(); }
 
   /// Return the SubclassData value, without HasDebugValue. This contains an
   /// encoding of the volatile flag, as well as bits used by subclasses. This
@@ -1807,23 +1811,23 @@ class ConstantPoolSDNode : public SDNode {
     MachineConstantPoolValue *MachineCPVal;
   } Val;
   int Offset;  // It's a MachineConstantPoolValue if top bit is set.
-  unsigned Alignment;  // Minimum alignment requirement of CP (not log2 value).
+  Align Alignment; // Minimum alignment requirement of CP.
   unsigned TargetFlags;
 
   ConstantPoolSDNode(bool isTarget, const Constant *c, EVT VT, int o,
-                     unsigned Align, unsigned TF)
-    : SDNode(isTarget ? ISD::TargetConstantPool : ISD::ConstantPool, 0,
-             DebugLoc(), getSDVTList(VT)), Offset(o), Alignment(Align),
-             TargetFlags(TF) {
+                     Align Alignment, unsigned TF)
+      : SDNode(isTarget ? ISD::TargetConstantPool : ISD::ConstantPool, 0,
+               DebugLoc(), getSDVTList(VT)),
+        Offset(o), Alignment(Alignment), TargetFlags(TF) {
     assert(Offset >= 0 && "Offset is too large");
     Val.ConstVal = c;
   }
 
-  ConstantPoolSDNode(bool isTarget, MachineConstantPoolValue *v,
-                     EVT VT, int o, unsigned Align, unsigned TF)
-    : SDNode(isTarget ? ISD::TargetConstantPool : ISD::ConstantPool, 0,
-             DebugLoc(), getSDVTList(VT)), Offset(o), Alignment(Align),
-             TargetFlags(TF) {
+  ConstantPoolSDNode(bool isTarget, MachineConstantPoolValue *v, EVT VT, int o,
+                     Align Alignment, unsigned TF)
+      : SDNode(isTarget ? ISD::TargetConstantPool : ISD::ConstantPool, 0,
+               DebugLoc(), getSDVTList(VT)),
+        Offset(o), Alignment(Alignment), TargetFlags(TF) {
     assert(Offset >= 0 && "Offset is too large");
     Val.MachineCPVal = v;
     Offset |= 1 << (sizeof(unsigned)*CHAR_BIT-1);
@@ -1850,7 +1854,7 @@ public:
 
   // Return the alignment of this constant pool object, which is either 0 (for
   // default alignment) or the desired value.
-  unsigned getAlignment() const { return Alignment; }
+  Align getAlign() const { return Alignment; }
   unsigned getTargetFlags() const { return TargetFlags; }
 
   Type *getType() const;
@@ -2031,13 +2035,13 @@ public:
 class RegisterSDNode : public SDNode {
   friend class SelectionDAG;
 
-  unsigned Reg;
+  Register Reg;
 
-  RegisterSDNode(unsigned reg, EVT VT)
+  RegisterSDNode(Register reg, EVT VT)
     : SDNode(ISD::Register, 0, DebugLoc(), getSDVTList(VT)), Reg(reg) {}
 
 public:
-  unsigned getReg() const { return Reg; }
+  Register getReg() const { return Reg; }
 
   static bool classof(const SDNode *N) {
     return N->getOpcode() == ISD::Register;
@@ -2666,6 +2670,16 @@ namespace ISD {
       SDValue LHS, SDValue RHS,
       std::function<bool(ConstantSDNode *, ConstantSDNode *)> Match,
       bool AllowUndefs = false, bool AllowTypeMismatch = false);
+
+  /// Returns true if the specified value is the overflow result from one
+  /// of the overflow intrinsic nodes.
+  inline bool isOverflowIntrOpRes(SDValue Op) {
+    unsigned Opc = Op.getOpcode();
+    return (Op.getResNo() == 1 &&
+            (Opc == ISD::SADDO || Opc == ISD::UADDO || Opc == ISD::SSUBO ||
+             Opc == ISD::USUBO || Opc == ISD::SMULO || Opc == ISD::UMULO));
+  }
+
 } // end namespace ISD
 
 } // end namespace llvm

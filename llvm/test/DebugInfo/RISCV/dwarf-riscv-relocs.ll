@@ -1,6 +1,6 @@
 ; RUN: llc -filetype=obj -mtriple=riscv32 -mattr=+relax %s -o %t.o
 ; RUN: llvm-readobj -r %t.o | FileCheck -check-prefix=READOBJ-RELOCS %s
-; RUN: llvm-objdump --source %t.o | FileCheck -check-prefix=OBJDUMP-SOURCE %s
+; RUN: llvm-objdump --source %t.o | FileCheck --check-prefix=OBJDUMP-SOURCE %s
 ; RUN: llvm-dwarfdump --debug-info --debug-line %t.o | \
 ; RUN:     FileCheck -check-prefix=DWARF-DUMP %s
 
@@ -18,7 +18,7 @@
 ; Check that we can print the source, even with relocations.
 ; OBJDUMP-SOURCE: Disassembly of section .text:
 ; OBJDUMP-SOURCE-EMPTY:
-; OBJDUMP-SOURCE-NEXT: 00000000 main:
+; OBJDUMP-SOURCE-NEXT: 00000000 <main>:
 ; OBJDUMP-SOURCE: ; {
 ; OBJDUMP-SOURCE: ; return 0;
 
@@ -85,7 +85,7 @@ entry:
   ret i32 0, !dbg !11
 }
 
-attributes #0 = { noinline nounwind optnone "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+relax" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { noinline nounwind optnone "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "target-features"="+relax" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!3, !4, !5}

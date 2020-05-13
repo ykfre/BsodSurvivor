@@ -70,16 +70,18 @@ private:
 public:
   GlobalObject(const GlobalObject &) = delete;
 
+  /// FIXME: Remove this function once transition to Align is over.
   unsigned getAlignment() const {
-    unsigned Data = getGlobalValueSubClassData();
-    unsigned AlignmentData = Data & AlignmentMask;
-    MaybeAlign Align = decodeMaybeAlign(AlignmentData);
+    MaybeAlign Align = getAlign();
     return Align ? Align->value() : 0;
   }
 
-  /// FIXME: Remove this setter once the migration to MaybeAlign is over.
-  LLVM_ATTRIBUTE_DEPRECATED(void setAlignment(unsigned Align),
-                            "Please use `void setAlignment(MaybeAlign Align)`");
+  MaybeAlign getAlign() const {
+    unsigned Data = getGlobalValueSubClassData();
+    unsigned AlignmentData = Data & AlignmentMask;
+    return decodeMaybeAlign(AlignmentData);
+  }
+
   void setAlignment(MaybeAlign Align);
 
   unsigned getGlobalObjectSubClassData() const {
@@ -178,7 +180,7 @@ public:
   void copyMetadata(const GlobalObject *Src, unsigned Offset);
 
   void addTypeMetadata(unsigned Offset, Metadata *TypeID);
-  void addVCallVisibilityMetadata(VCallVisibility Visibility);
+  void setVCallVisibilityMetadata(VCallVisibility Visibility);
   VCallVisibility getVCallVisibility() const;
 
 protected:

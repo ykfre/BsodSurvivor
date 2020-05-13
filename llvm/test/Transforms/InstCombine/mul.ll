@@ -456,10 +456,9 @@ define i32 @test_mul_canonicalize_op0(i32 %x, i32 %y) {
 
 define i32 @test_mul_canonicalize_op1(i32 %x, i32 %z) {
 ; CHECK-LABEL: @test_mul_canonicalize_op1(
-; CHECK-NEXT:    [[Y:%.*]] = mul i32 [[Z:%.*]], 3
-; CHECK-NEXT:    [[TMP1:%.*]] = mul i32 [[Y]], [[X:%.*]]
-; CHECK-NEXT:    [[MUL:%.*]] = sub i32 0, [[TMP1]]
-; CHECK-NEXT:    ret i32 [[MUL]]
+; CHECK-NEXT:    [[Y_NEG:%.*]] = mul i32 [[Z:%.*]], -3
+; CHECK-NEXT:    [[DOTNEG:%.*]] = mul i32 [[Y_NEG]], [[X:%.*]]
+; CHECK-NEXT:    ret i32 [[DOTNEG]]
 ;
   %y = mul i32 %z, 3
   %neg = sub i32 0, %x
@@ -606,4 +605,78 @@ define i32 @mul_div_select(i32 %x, i32 %y, i1 %c) {
   %sel = select i1 %c, i32 %div, i32 1
   %mul = mul i32 %sel, %y
   ret i32 %mul
+}
+
+; fold mul(abs(x),abs(x)) -> mul(x,x)
+define i31 @combine_mul_abs_i31(i31 %0) {
+; CHECK-LABEL: @combine_mul_abs_i31(
+; CHECK-NEXT:    [[M:%.*]] = mul i31 [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret i31 [[M]]
+;
+  %c = icmp slt i31 %0, 0
+  %s = sub nsw i31 0, %0
+  %r = select i1 %c, i31 %s, i31 %0
+  %m = mul i31 %r, %r
+  ret i31 %m
+}
+
+define i32 @combine_mul_abs_i32(i32 %0) {
+; CHECK-LABEL: @combine_mul_abs_i32(
+; CHECK-NEXT:    [[M:%.*]] = mul i32 [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret i32 [[M]]
+;
+  %c = icmp slt i32 %0, 0
+  %s = sub nsw i32 0, %0
+  %r = select i1 %c, i32 %s, i32 %0
+  %m = mul i32 %r, %r
+  ret i32 %m
+}
+
+define <4 x i32> @combine_mul_abs_v4i32(<4 x i32> %0) {
+; CHECK-LABEL: @combine_mul_abs_v4i32(
+; CHECK-NEXT:    [[M:%.*]] = mul <4 x i32> [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret <4 x i32> [[M]]
+;
+  %c = icmp slt <4 x i32> %0, zeroinitializer
+  %s = sub nsw <4 x i32> zeroinitializer, %0
+  %r = select <4 x i1> %c, <4 x i32> %s, <4 x i32> %0
+  %m = mul <4 x i32> %r, %r
+  ret <4 x i32> %m
+}
+
+; fold mul(nabs(x),nabs(x)) -> mul(x,x)
+define i31 @combine_mul_nabs_i31(i31 %0) {
+; CHECK-LABEL: @combine_mul_nabs_i31(
+; CHECK-NEXT:    [[M:%.*]] = mul i31 [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret i31 [[M]]
+;
+  %c = icmp slt i31 %0, 0
+  %s = sub nsw i31 0, %0
+  %r = select i1 %c, i31 %0, i31 %s
+  %m = mul i31 %r, %r
+  ret i31 %m
+}
+
+define i32 @combine_mul_nabs_i32(i32 %0) {
+; CHECK-LABEL: @combine_mul_nabs_i32(
+; CHECK-NEXT:    [[M:%.*]] = mul i32 [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret i32 [[M]]
+;
+  %c = icmp slt i32 %0, 0
+  %s = sub nsw i32 0, %0
+  %r = select i1 %c, i32 %0, i32 %s
+  %m = mul i32 %r, %r
+  ret i32 %m
+}
+
+define <4 x i32> @combine_mul_nabs_v4i32(<4 x i32> %0) {
+; CHECK-LABEL: @combine_mul_nabs_v4i32(
+; CHECK-NEXT:    [[M:%.*]] = mul <4 x i32> [[TMP0:%.*]], [[TMP0]]
+; CHECK-NEXT:    ret <4 x i32> [[M]]
+;
+  %c = icmp slt <4 x i32> %0, zeroinitializer
+  %s = sub nsw <4 x i32> zeroinitializer, %0
+  %r = select <4 x i1> %c, <4 x i32> %0, <4 x i32> %s
+  %m = mul <4 x i32> %r, %r
+  ret <4 x i32> %m
 }

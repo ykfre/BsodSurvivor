@@ -225,7 +225,7 @@ class DominatorTreeBase {
   using ParentPtr = decltype(std::declval<NodeT *>()->getParent());
   static_assert(std::is_pointer<ParentPtr>::value,
                 "Currently NodeT's parent must be a pointer type");
-  using ParentType = typename std::remove_pointer<ParentPtr>::type;
+  using ParentType = std::remove_pointer_t<ParentPtr>;
   static constexpr bool IsPostDominator = IsPostDom;
 
   using UpdateType = cfg::Update<NodePtr>;
@@ -778,13 +778,13 @@ protected:
     NodeRef NewBBSucc = *GraphT::child_begin(NewBB);
 
     std::vector<NodeRef> PredBlocks;
-    for (const auto &Pred : children<Inverse<N>>(NewBB))
+    for (auto Pred : children<Inverse<N>>(NewBB))
       PredBlocks.push_back(Pred);
 
     assert(!PredBlocks.empty() && "No predblocks?");
 
     bool NewBBDominatesNewBBSucc = true;
-    for (const auto &Pred : children<Inverse<N>>(NewBBSucc)) {
+    for (auto Pred : children<Inverse<N>>(NewBBSucc)) {
       if (Pred != NewBB && !dominates(NewBBSucc, Pred) &&
           isReachableFromEntry(Pred)) {
         NewBBDominatesNewBBSucc = false;

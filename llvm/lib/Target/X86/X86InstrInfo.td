@@ -16,7 +16,10 @@
 // X86 specific DAG Nodes.
 //
 
-def SDTX86CmpTest : SDTypeProfile<1, 2, [SDTCisVT<0, i32>, SDTCisSameAs<1, 2>]>;
+def SDTX86CmpTest : SDTypeProfile<1, 2, [SDTCisVT<0, i32>, SDTCisInt<1>,
+                                         SDTCisSameAs<1, 2>]>;
+def SDTX86FCmp    : SDTypeProfile<1, 2, [SDTCisVT<0, i32>, SDTCisFP<1>,
+                                         SDTCisSameAs<1, 2>]>;
 
 def SDTX86Cmps : SDTypeProfile<1, 3, [SDTCisFP<0>, SDTCisSameAs<1, 2>, SDTCisVT<3, i8>]>;
 //def SDTX86Cmpss : SDTypeProfile<1, 3, [SDTCisVT<0, f32>, SDTCisSameAs<1, 2>, SDTCisVT<3, i8>]>;
@@ -121,6 +124,8 @@ def SDT_X86WIN_ALLOCA : SDTypeProfile<0, 1, [SDTCisVT<0, iPTR>]>;
 
 def SDT_X86SEG_ALLOCA : SDTypeProfile<1, 1, [SDTCisVT<0, iPTR>, SDTCisVT<1, iPTR>]>;
 
+def SDT_X86PROBED_ALLOCA : SDTypeProfile<1, 1, [SDTCisVT<0, iPTR>, SDTCisVT<1, iPTR>]>;
+
 def SDT_X86EHRET : SDTypeProfile<0, 1, [SDTCisInt<0>]>;
 
 def SDT_X86TCRET : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisVT<1, i32>]>;
@@ -138,12 +143,13 @@ def X86MFence : SDNode<"X86ISD::MFENCE", SDT_X86MEMBARRIER,
 
 def X86bsf     : SDNode<"X86ISD::BSF",      SDTUnaryArithWithFlags>;
 def X86bsr     : SDNode<"X86ISD::BSR",      SDTUnaryArithWithFlags>;
-def X86shld    : SDNode<"X86ISD::SHLD",     SDTIntShiftDOp>;
-def X86shrd    : SDNode<"X86ISD::SHRD",     SDTIntShiftDOp>;
+def X86fshl    : SDNode<"X86ISD::FSHL",     SDTIntShiftDOp>;
+def X86fshr    : SDNode<"X86ISD::FSHR",     SDTIntShiftDOp>;
 
 def X86cmp     : SDNode<"X86ISD::CMP" ,     SDTX86CmpTest>;
-def X86strict_fcmp : SDNode<"X86ISD::STRICT_FCMP", SDTX86CmpTest, [SDNPHasChain]>;
-def X86strict_fcmps : SDNode<"X86ISD::STRICT_FCMPS", SDTX86CmpTest, [SDNPHasChain]>;
+def X86fcmp    : SDNode<"X86ISD::FCMP",     SDTX86FCmp>;
+def X86strict_fcmp : SDNode<"X86ISD::STRICT_FCMP", SDTX86FCmp, [SDNPHasChain]>;
+def X86strict_fcmps : SDNode<"X86ISD::STRICT_FCMPS", SDTX86FCmp, [SDNPHasChain]>;
 def X86bt      : SDNode<"X86ISD::BT",       SDTX86CmpTest>;
 
 def X86cmov    : SDNode<"X86ISD::CMOV",     SDTX86Cmov>;
@@ -151,8 +157,6 @@ def X86brcond  : SDNode<"X86ISD::BRCOND",   SDTX86BrCond,
                         [SDNPHasChain]>;
 def X86setcc   : SDNode<"X86ISD::SETCC",    SDTX86SetCC>;
 def X86setcc_c : SDNode<"X86ISD::SETCC_CARRY", SDTX86SetCC_C>;
-
-def X86sahf    : SDNode<"X86ISD::SAHF",     SDTX86sahf>;
 
 def X86rdrand  : SDNode<"X86ISD::RDRAND",   SDTX86rdrand,
                         [SDNPHasChain, SDNPSideEffect]>;
@@ -286,12 +290,18 @@ def X86bextr  : SDNode<"X86ISD::BEXTR",  SDTIntBinOp>;
 
 def X86bzhi   : SDNode<"X86ISD::BZHI",   SDTIntBinOp>;
 
+def X86pdep   : SDNode<"X86ISD::PDEP",   SDTIntBinOp>;
+def X86pext   : SDNode<"X86ISD::PEXT",   SDTIntBinOp>;
+
 def X86mul_imm : SDNode<"X86ISD::MUL_IMM", SDTIntBinOp>;
 
 def X86WinAlloca : SDNode<"X86ISD::WIN_ALLOCA", SDT_X86WIN_ALLOCA,
                           [SDNPHasChain, SDNPOutGlue]>;
 
 def X86SegAlloca : SDNode<"X86ISD::SEG_ALLOCA", SDT_X86SEG_ALLOCA,
+                          [SDNPHasChain]>;
+
+def X86ProbedAlloca : SDNode<"X86ISD::PROBED_ALLOCA", SDT_X86PROBED_ALLOCA,
                           [SDNPHasChain]>;
 
 def X86TLSCall : SDNode<"X86ISD::TLSCALL", SDT_X86TLSCALL,
@@ -378,8 +388,8 @@ class X86VMemOperand<RegisterClass RC, string printMethod,
 
 def anymem : X86MemOperand<"printanymem">;
 def X86any_fcmp : PatFrags<(ops node:$lhs, node:$rhs),
-                          [(X86cmp node:$lhs, node:$rhs),
-                           (X86strict_fcmp node:$lhs, node:$rhs)]>;
+                          [(X86strict_fcmp node:$lhs, node:$rhs),
+                           (X86fcmp node:$lhs, node:$rhs)]>;
 
 // FIXME: Right now we allow any size during parsing, but we might want to
 // restrict to only unsized memory.
@@ -454,18 +464,6 @@ def i64mem_TC : Operand<i64> {
   let OperandType = "OPERAND_MEMORY";
 }
 
-let OperandType = "OPERAND_PCREL",
-    ParserMatchClass = X86AbsMemAsmOperand,
-    PrintMethod = "printPCRelImm" in {
-def i32imm_pcrel : Operand<i32>;
-def i16imm_pcrel : Operand<i16>;
-
-// Branch targets have OtherVT type and print as pc-relative values.
-def brtarget : Operand<OtherVT>;
-def brtarget8 : Operand<OtherVT>;
-
-}
-
 // Special parser to detect 16-bit mode to select 16-bit displacement.
 def X86AbsMem16AsmOperand : AsmOperandClass {
   let Name = "AbsMem16";
@@ -473,14 +471,26 @@ def X86AbsMem16AsmOperand : AsmOperandClass {
   let SuperClasses = [X86AbsMemAsmOperand];
 }
 
-// Branch targets have OtherVT type and print as pc-relative values.
-let OperandType = "OPERAND_PCREL",
-    PrintMethod = "printPCRelImm" in {
-let ParserMatchClass = X86AbsMem16AsmOperand in
-  def brtarget16 : Operand<OtherVT>;
-let ParserMatchClass = X86AbsMemAsmOperand in
-  def brtarget32 : Operand<OtherVT>;
+// Branch targets print as pc-relative values.
+class BranchTargetOperand<ValueType ty> : Operand<ty> {
+  let OperandType = "OPERAND_PCREL";
+  let PrintMethod = "printPCRelImm";
+  let ParserMatchClass = X86AbsMemAsmOperand;
 }
+
+def i32imm_brtarget : BranchTargetOperand<i32>;
+def i16imm_brtarget : BranchTargetOperand<i16>;
+
+// 64-bits but only 32 bits are significant, and those bits are treated as being
+// pc relative.
+def i64i32imm_brtarget : BranchTargetOperand<i64>;
+
+def brtarget : BranchTargetOperand<OtherVT>;
+def brtarget8 : BranchTargetOperand<OtherVT>;
+def brtarget16 : BranchTargetOperand<OtherVT> {
+  let ParserMatchClass = X86AbsMem16AsmOperand;
+}
+def brtarget32 : BranchTargetOperand<OtherVT>;
 
 let RenderMethod = "addSrcIdxOperands" in {
   def X86SrcIdx8Operand : AsmOperandClass {
@@ -756,14 +766,6 @@ def i64u8imm : Operand<i64> {
   let OperandType = "OPERAND_IMMEDIATE";
 }
 
-// 64-bits but only 32 bits are significant, and those bits are treated as being
-// pc relative.
-def i64i32imm_pcrel : Operand<i64> {
-  let PrintMethod = "printPCRelImm";
-  let ParserMatchClass = X86AbsMemAsmOperand;
-  let OperandType = "OPERAND_PCREL";
-}
-
 def lea64_32mem : Operand<i32> {
   let PrintMethod = "printanymem";
   let MIOperandInfo = (ops GR64, i8imm, GR64_NOSP, i32imm, SEGMENT_REG);
@@ -956,18 +958,20 @@ def HasCmpxchg8b : Predicate<"Subtarget->hasCmpxchg8b()">;
 def HasCmpxchg16b: Predicate<"Subtarget->hasCmpxchg16b()">;
 def HasPCONFIG   : Predicate<"Subtarget->hasPCONFIG()">;
 def HasENQCMD    : Predicate<"Subtarget->hasENQCMD()">;
+def HasSERIALIZE : Predicate<"Subtarget->hasSERIALIZE()">;
+def HasTSXLDTRK  : Predicate<"Subtarget->hasTSXLDTRK()">;
 def Not64BitMode : Predicate<"!Subtarget->is64Bit()">,
-                             AssemblerPredicate<"!Mode64Bit", "Not 64-bit mode">;
+                             AssemblerPredicate<(all_of (not Mode64Bit)), "Not 64-bit mode">;
 def In64BitMode  : Predicate<"Subtarget->is64Bit()">,
-                             AssemblerPredicate<"Mode64Bit", "64-bit mode">;
+                             AssemblerPredicate<(all_of Mode64Bit), "64-bit mode">;
 def IsLP64  : Predicate<"Subtarget->isTarget64BitLP64()">;
 def NotLP64 : Predicate<"!Subtarget->isTarget64BitLP64()">;
 def In16BitMode  : Predicate<"Subtarget->is16Bit()">,
-                             AssemblerPredicate<"Mode16Bit", "16-bit mode">;
+                             AssemblerPredicate<(all_of Mode16Bit), "16-bit mode">;
 def Not16BitMode : Predicate<"!Subtarget->is16Bit()">,
-                             AssemblerPredicate<"!Mode16Bit", "Not 16-bit mode">;
+                             AssemblerPredicate<(all_of (not Mode16Bit)), "Not 16-bit mode">;
 def In32BitMode  : Predicate<"Subtarget->is32Bit()">,
-                             AssemblerPredicate<"Mode32Bit", "32-bit mode">;
+                             AssemblerPredicate<(all_of Mode32Bit), "32-bit mode">;
 def IsWin64      : Predicate<"Subtarget->isTargetWin64()">;
 def NotWin64     : Predicate<"!Subtarget->isTargetWin64()">;
 def NotWin64WithoutFP : Predicate<"!Subtarget->isTargetWin64() ||"
@@ -1004,8 +1008,8 @@ def HasFastLZCNT : Predicate<"Subtarget->hasFastLZCNT()">;
 def HasFastSHLDRotate : Predicate<"Subtarget->hasFastSHLDRotate()">;
 def HasERMSB : Predicate<"Subtarget->hasERMSB()">;
 def HasMFence    : Predicate<"Subtarget->hasMFence()">;
-def UseRetpolineIndirectCalls : Predicate<"Subtarget->useRetpolineIndirectCalls()">;
-def NotUseRetpolineIndirectCalls : Predicate<"!Subtarget->useRetpolineIndirectCalls()">;
+def UseIndirectThunkCalls : Predicate<"Subtarget->useIndirectThunkCalls()">;
+def NotUseIndirectThunkCalls : Predicate<"!Subtarget->useIndirectThunkCalls()">;
 
 //===----------------------------------------------------------------------===//
 // X86 Instruction Format Definitions.
@@ -1795,9 +1799,8 @@ def MOV8rm_NOREX : I<0x8A, MRMSrcMem,
 
 // Condition code ops, incl. set if equal/not equal/...
 let SchedRW = [WriteLAHFSAHF] in {
-let Defs = [EFLAGS], Uses = [AH] in
-def SAHF     : I<0x9E, RawFrm, (outs),  (ins), "sahf",
-                 [(set EFLAGS, (X86sahf AH))]>,
+let Defs = [EFLAGS], Uses = [AH], hasSideEffects = 0 in
+def SAHF     : I<0x9E, RawFrm, (outs),  (ins), "sahf", []>,  // flags = AH
                  Requires<[HasLAHFSAHF]>;
 let Defs = [AH], Uses = [EFLAGS], hasSideEffects = 0 in
 def LAHF     : I<0x9F, RawFrm, (outs),  (ins), "lahf", []>,  // AH = flags
@@ -2171,24 +2174,24 @@ def CMPXCHG16B : RI<0xC7, MRM1m, (outs), (ins i128mem:$dst),
 
 // Lock instruction prefix
 let SchedRW = [WriteMicrocoded] in
-def LOCK_PREFIX : I<0xF0, RawFrm, (outs),  (ins), "lock", []>;
+def LOCK_PREFIX : I<0xF0, PrefixByte, (outs),  (ins), "lock", []>;
 
 let SchedRW = [WriteNop] in {
 
 // Rex64 instruction prefix
-def REX64_PREFIX : I<0x48, RawFrm, (outs),  (ins), "rex64", []>,
+def REX64_PREFIX : I<0x48, PrefixByte, (outs),  (ins), "rex64", []>,
                      Requires<[In64BitMode]>;
 
 // Data16 instruction prefix
-def DATA16_PREFIX : I<0x66, RawFrm, (outs),  (ins), "data16", []>;
+def DATA16_PREFIX : I<0x66, PrefixByte, (outs),  (ins), "data16", []>;
 } // SchedRW
 
 // Repeat string operation instruction prefixes
 let Defs = [ECX], Uses = [ECX,DF], SchedRW = [WriteMicrocoded] in {
 // Repeat (used with INS, OUTS, MOVS, LODS and STOS)
-def REP_PREFIX : I<0xF3, RawFrm, (outs),  (ins), "rep", []>;
+def REP_PREFIX : I<0xF3, PrefixByte, (outs),  (ins), "rep", []>;
 // Repeat while not equal (used with CMPS and SCAS)
-def REPNE_PREFIX : I<0xF2, RawFrm, (outs),  (ins), "repne", []>;
+def REPNE_PREFIX : I<0xF2, PrefixByte, (outs),  (ins), "repne", []>;
 }
 
 // String manipulation instructions
@@ -2589,27 +2592,27 @@ let Predicates = [HasBMI2, NoTBM] in {
 }
 
 multiclass bmi_pdep_pext<string mnemonic, RegisterClass RC,
-                         X86MemOperand x86memop, Intrinsic Int,
+                         X86MemOperand x86memop, SDNode OpNode,
                          PatFrag ld_frag> {
   def rr : I<0xF5, MRMSrcReg, (outs RC:$dst), (ins RC:$src1, RC:$src2),
              !strconcat(mnemonic, "\t{$src2, $src1, $dst|$dst, $src1, $src2}"),
-             [(set RC:$dst, (Int RC:$src1, RC:$src2))]>,
+             [(set RC:$dst, (OpNode RC:$src1, RC:$src2))]>,
              VEX_4V, Sched<[WriteALU]>;
   def rm : I<0xF5, MRMSrcMem, (outs RC:$dst), (ins RC:$src1, x86memop:$src2),
              !strconcat(mnemonic, "\t{$src2, $src1, $dst|$dst, $src1, $src2}"),
-             [(set RC:$dst, (Int RC:$src1, (ld_frag addr:$src2)))]>,
+             [(set RC:$dst, (OpNode RC:$src1, (ld_frag addr:$src2)))]>,
              VEX_4V, Sched<[WriteALU.Folded, WriteALU.ReadAfterFold]>;
 }
 
 let Predicates = [HasBMI2] in {
   defm PDEP32 : bmi_pdep_pext<"pdep{l}", GR32, i32mem,
-                               int_x86_bmi_pdep_32, loadi32>, T8XD;
+                               X86pdep, loadi32>, T8XD;
   defm PDEP64 : bmi_pdep_pext<"pdep{q}", GR64, i64mem,
-                               int_x86_bmi_pdep_64, loadi64>, T8XD, VEX_W;
+                               X86pdep, loadi64>, T8XD, VEX_W;
   defm PEXT32 : bmi_pdep_pext<"pext{l}", GR32, i32mem,
-                               int_x86_bmi_pext_32, loadi32>, T8XS;
+                               X86pext, loadi32>, T8XS;
   defm PEXT64 : bmi_pdep_pext<"pext{q}", GR64, i64mem,
-                               int_x86_bmi_pext_64, loadi64>, T8XS, VEX_W;
+                               X86pext, loadi64>, T8XS, VEX_W;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2851,7 +2854,7 @@ let SchedRW = [WriteStore], Defs = [EFLAGS] in {
 //===----------------------------------------------------------------------===//
 // CLZERO Instruction
 //
-let SchedRW = [WriteSystem] in {
+let SchedRW = [WriteLoad] in {
   let Uses = [EAX] in
   def CLZERO32r : I<0x01, MRM_FC, (outs), (ins), "clzero", []>,
                   TB, Requires<[HasCLZERO, Not64BitMode]>;
@@ -2862,6 +2865,23 @@ let SchedRW = [WriteSystem] in {
 
 def : InstAlias<"clzero\t{%eax|eax}", (CLZERO32r)>, Requires<[Not64BitMode]>;
 def : InstAlias<"clzero\t{%rax|rax}", (CLZERO64r)>, Requires<[In64BitMode]>;
+
+//===----------------------------------------------------------------------===//
+// SERIALIZE Instruction
+//
+def SERIALIZE : I<0x01, MRM_E8, (outs), (ins), "serialize",
+                  [(int_x86_serialize)]>, PS,
+                  Requires<[HasSERIALIZE]>;
+
+//===----------------------------------------------------------------------===//
+// TSXLDTRK - TSX Suspend Load Address Tracking
+//
+let Predicates = [HasTSXLDTRK] in {
+  def XSUSLDTRK : I<0x01, MRM_E8, (outs), (ins), "xsusldtrk",
+                    [(int_x86_xsusldtrk)]>, XD;
+  def XRESLDTRK : I<0x01, MRM_E9, (outs), (ins), "xresldtrk",
+                    [(int_x86_xresldtrk)]>, XD;
+}
 
 //===----------------------------------------------------------------------===//
 // Pattern fragments to auto generate TBM instructions.
@@ -2921,6 +2941,11 @@ let Predicates = [HasTBM] in {
             (TZMSK64rr GR64:$src)>;
 
   // Patterns to match flag producing ops.
+  def : Pat<(and_flag_nocf GR32:$src, (add GR32:$src, 1)),
+            (BLCFILL32rr GR32:$src)>;
+  def : Pat<(and_flag_nocf GR64:$src, (add GR64:$src, 1)),
+            (BLCFILL64rr GR64:$src)>;
+
   def : Pat<(or_flag_nocf GR32:$src, (not (add GR32:$src, 1))),
             (BLCI32rr GR32:$src)>;
   def : Pat<(or_flag_nocf GR64:$src, (not (add GR64:$src, 1))),

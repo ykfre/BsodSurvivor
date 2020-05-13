@@ -16,13 +16,13 @@
 #include "target_impl.h"
 
 EXTERN double omp_get_wtick(void) {
-  double rc = __target_impl_get_wtick();
+  double rc = __kmpc_impl_get_wtick();
   PRINT(LD_IO, "omp_get_wtick() returns %g\n", rc);
   return rc;
 }
 
 EXTERN double omp_get_wtime(void) {
-  double rc = __target_impl_get_wtime();
+  double rc = __kmpc_impl_get_wtime();
   PRINT(LD_IO, "call omp_get_wtime() returns %g\n", rc);
   return rc;
 }
@@ -90,7 +90,7 @@ EXTERN int omp_in_parallel(void) {
 EXTERN int omp_in_final(void) {
   // treat all tasks as final... Specs may expect runtime to keep
   // track more precisely if a task was actively set by users... This
-  // is not explicitely specified; will treat as if runtime can
+  // is not explicitly specified; will treat as if runtime can
   // actively decide to put a non-final task into a final one.
   int rc = 1;
   PRINT(LD_IO, "call omp_in_final() returns %d\n", rc);
@@ -363,8 +363,8 @@ EXTERN int omp_test_lock(omp_lock_t *lock) {
   return rc;
 }
 
-// for xlf Fotran
-// Fotran, the return is LOGICAL type
+// for xlf Fortran
+// Fortran, the return is LOGICAL type
 
 #define FLOGICAL long
 EXTERN FLOGICAL __xlf_omp_is_initial_device_i8() {

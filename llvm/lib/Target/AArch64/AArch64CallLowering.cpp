@@ -62,10 +62,9 @@ struct IncomingArgHandler : public CallLowering::ValueHandler {
     auto &MFI = MIRBuilder.getMF().getFrameInfo();
     int FI = MFI.CreateFixedObject(Size, Offset, true);
     MPO = MachinePointerInfo::getFixedStack(MIRBuilder.getMF(), FI);
-    Register AddrReg = MRI.createGenericVirtualRegister(LLT::pointer(0, 64));
-    MIRBuilder.buildFrameIndex(AddrReg, FI);
+    auto AddrReg = MIRBuilder.buildFrameIndex(LLT::pointer(0, 64), FI);
     StackUsed = std::max(StackUsed, Size + Offset);
-    return AddrReg;
+    return AddrReg.getReg(0);
   }
 
   void assignValueToReg(Register ValVReg, Register PhysReg,
@@ -87,10 +86,10 @@ struct IncomingArgHandler : public CallLowering::ValueHandler {
 
   void assignValueToAddress(Register ValVReg, Register Addr, uint64_t Size,
                             MachinePointerInfo &MPO, CCValAssign &VA) override {
-    // FIXME: Get alignment
-    auto MMO = MIRBuilder.getMF().getMachineMemOperand(
+    MachineFunction &MF = MIRBuilder.getMF();
+    auto MMO = MF.getMachineMemOperand(
         MPO, MachineMemOperand::MOLoad | MachineMemOperand::MOInvariant, Size,
-        1);
+        inferAlignFromPtrInfo(MF, MPO));
     MIRBuilder.buildLoad(ValVReg, Addr, *MMO);
   }
 
@@ -134,7 +133,7 @@ struct OutgoingArgHandler : public CallLowering::ValueHandler {
                      int FPDiff = 0)
       : ValueHandler(MIRBuilder, MRI, AssignFn), MIB(MIB),
         AssignFnVarArg(AssignFnVarArg), IsTailCall(IsTailCall), FPDiff(FPDiff),
-        StackSize(0) {}
+        StackSize(0), SPReg(0) {}
 
   bool isIncomingArgumentHandler() const override { return false; }
 
@@ -147,23 +146,20 @@ struct OutgoingArgHandler : public CallLowering::ValueHandler {
     if (IsTailCall) {
       Offset += FPDiff;
       int FI = MF.getFrameInfo().CreateFixedObject(Size, Offset, true);
-      Register FIReg = MRI.createGenericVirtualRegister(p0);
-      MIRBuilder.buildFrameIndex(FIReg, FI);
+      auto FIReg = MIRBuilder.buildFrameIndex(p0, FI);
       MPO = MachinePointerInfo::getFixedStack(MF, FI);
-      return FIReg;
+      return FIReg.getReg(0);
     }
 
-    Register SPReg = MRI.createGenericVirtualRegister(p0);
-    MIRBuilder.buildCopy(SPReg, Register(AArch64::SP));
+    if (!SPReg)
+      SPReg = MIRBuilder.buildCopy(p0, Register(AArch64::SP)).getReg(0);
 
-    Register OffsetReg = MRI.createGenericVirtualRegister(s64);
-    MIRBuilder.buildConstant(OffsetReg, Offset);
+    auto OffsetReg = MIRBuilder.buildConstant(s64, Offset);
 
-    Register AddrReg = MRI.createGenericVirtualRegister(p0);
-    MIRBuilder.buildPtrAdd(AddrReg, SPReg, OffsetReg);
+    auto AddrReg = MIRBuilder.buildPtrAdd(p0, SPReg, OffsetReg);
 
     MPO = MachinePointerInfo::getStack(MF, Offset);
-    return AddrReg;
+    return AddrReg.getReg(0);
   }
 
   void assignValueToReg(Register ValVReg, Register PhysReg,
@@ -175,15 +171,31 @@ struct OutgoingArgHandler : public CallLowering::ValueHandler {
 
   void assignValueToAddress(Register ValVReg, Register Addr, uint64_t Size,
                             MachinePointerInfo &MPO, CCValAssign &VA) override {
-    if (VA.getLocInfo() == CCValAssign::LocInfo::AExt) {
-      Size = VA.getLocVT().getSizeInBits() / 8;
-      ValVReg = MIRBuilder.buildAnyExt(LLT::scalar(Size * 8), ValVReg)
-                    ->getOperand(0)
-                    .getReg();
-    }
-    auto MMO = MIRBuilder.getMF().getMachineMemOperand(
-        MPO, MachineMemOperand::MOStore, Size, 1);
+    MachineFunction &MF = MIRBuilder.getMF();
+    auto MMO = MF.getMachineMemOperand(MPO, MachineMemOperand::MOStore, Size,
+                                       inferAlignFromPtrInfo(MF, MPO));
     MIRBuilder.buildStore(ValVReg, Addr, *MMO);
+  }
+
+  void assignValueToAddress(const CallLowering::ArgInfo &Arg, Register Addr,
+                            uint64_t Size, MachinePointerInfo &MPO,
+                            CCValAssign &VA) override {
+    unsigned MaxSize = Size * 8;
+    // For varargs, we always want to extend them to 8 bytes, in which case
+    // we disable setting a max.
+    if (!Arg.IsFixed)
+      MaxSize = 0;
+
+    Register ValVReg = VA.getLocInfo() != CCValAssign::LocInfo::FPExt
+                           ? extendRegister(Arg.Regs[0], VA, MaxSize)
+                           : Arg.Regs[0];
+
+    // If we extended we might need to adjust the MMO's Size.
+    const LLT RegTy = MRI.getType(ValVReg);
+    if (RegTy.getSizeInBytes() > Size)
+      Size = RegTy.getSizeInBytes();
+
+    assignValueToAddress(ValVReg, Addr, Size, MPO, VA);
   }
 
   bool assignArg(unsigned ValNo, MVT ValVT, MVT LocVT,
@@ -209,6 +221,9 @@ struct OutgoingArgHandler : public CallLowering::ValueHandler {
   /// callee's. Unused elsewhere.
   int FPDiff;
   uint64_t StackSize;
+
+  // Cache the SP register vreg if we need it more than once in this call site.
+  Register SPReg;
 };
 } // namespace
 
@@ -322,8 +337,7 @@ bool AArch64CallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
                 }
                 auto Undef = MIRBuilder.buildUndef({OldLLT});
                 CurVReg =
-                    MIRBuilder.buildMerge({NewLLT}, {CurVReg, Undef.getReg(0)})
-                        .getReg(0);
+                    MIRBuilder.buildMerge({NewLLT}, {CurVReg, Undef}).getReg(0);
               } else {
                 // Just do a vector extend.
                 CurVReg = MIRBuilder.buildInstr(ExtendOp, {NewLLT}, {CurVReg})
@@ -424,7 +438,7 @@ bool AArch64CallLowering::lowerFormalArguments(
   SmallVector<ArgInfo, 8> SplitArgs;
   unsigned i = 0;
   for (auto &Arg : F.args()) {
-    if (DL.getTypeStoreSize(Arg.getType()) == 0)
+    if (DL.getTypeStoreSize(Arg.getType()).isZero())
       continue;
 
     ArgInfo OrigArg{VRegs[i], Arg.getType()};
@@ -1000,7 +1014,7 @@ bool AArch64CallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
         0));
 
   // Finally we can copy the returned value back into its virtual-register. In
-  // symmetry with the arugments, the physical register must be an
+  // symmetry with the arguments, the physical register must be an
   // implicit-define of the call instruction.
   if (!Info.OrigRet.Ty->isVoidTy()) {
     CCAssignFn *RetAssignFn = TLI.CCAssignFnForReturn(Info.CallConv);

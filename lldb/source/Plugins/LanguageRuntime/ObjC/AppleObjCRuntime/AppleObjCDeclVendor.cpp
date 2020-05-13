@@ -1,4 +1,4 @@
-//===-- AppleObjCDeclVendor.cpp ---------------------------------*- C++ -*-===//
+//===-- AppleObjCDeclVendor.cpp -------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,39 +8,36 @@
 
 #include "AppleObjCDeclVendor.h"
 
+#include "Plugins/ExpressionParser/Clang/ClangASTMetadata.h"
+#include "Plugins/ExpressionParser/Clang/ClangUtil.h"
 #include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 #include "lldb/Core/Module.h"
-#include "lldb/Symbol/ClangExternalASTSourceCommon.h"
-#include "lldb/Symbol/ClangUtil.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/Log.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
-
+#include "clang/AST/ExternalASTSource.h"
 
 using namespace lldb_private;
 
 class lldb_private::AppleObjCExternalASTSource
-    : public ClangExternalASTSourceCommon {
+    : public clang::ExternalASTSource {
 public:
   AppleObjCExternalASTSource(AppleObjCDeclVendor &decl_vendor)
       : m_decl_vendor(decl_vendor) {}
 
   bool FindExternalVisibleDeclsByName(const clang::DeclContext *decl_ctx,
                                       clang::DeclarationName name) override {
-    static unsigned int invocation_id = 0;
-    unsigned int current_id = invocation_id++;
 
     Log *log(GetLogIfAllCategoriesSet(
         LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     if (log) {
       LLDB_LOGF(log,
-                "AppleObjCExternalASTSource::FindExternalVisibleDeclsByName[%"
-                "u] on (ASTContext*)%p Looking for %s in (%sDecl*)%p",
-                current_id,
+                "AppleObjCExternalASTSource::FindExternalVisibleDeclsByName"
+                " on (ASTContext*)%p Looking for %s in (%sDecl*)%p",
                 static_cast<void *>(&decl_ctx->getParentASTContext()),
                 name.getAsString().c_str(), decl_ctx->getDeclKindName(),
                 static_cast<const void *>(decl_ctx));
@@ -70,44 +67,37 @@ public:
   }
 
   void CompleteType(clang::TagDecl *tag_decl) override {
-    static unsigned int invocation_id = 0;
-    unsigned int current_id = invocation_id++;
 
     Log *log(GetLogIfAllCategoriesSet(
         LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     LLDB_LOGF(log,
-              "AppleObjCExternalASTSource::CompleteType[%u] on "
+              "AppleObjCExternalASTSource::CompleteType on "
               "(ASTContext*)%p Completing (TagDecl*)%p named %s",
-              current_id, static_cast<void *>(&tag_decl->getASTContext()),
+              static_cast<void *>(&tag_decl->getASTContext()),
               static_cast<void *>(tag_decl), tag_decl->getName().str().c_str());
 
-    LLDB_LOG(log, "  AOEAS::CT[{0}] Before:\n{1}", current_id,
-             ClangUtil::DumpDecl(tag_decl));
+    LLDB_LOG(log, "  AOEAS::CT Before:\n{1}", ClangUtil::DumpDecl(tag_decl));
 
-    LLDB_LOG(log, "  AOEAS::CT[{1}] After:{1}", current_id,
-             ClangUtil::DumpDecl(tag_decl));
+    LLDB_LOG(log, "  AOEAS::CT After:{1}", ClangUtil::DumpDecl(tag_decl));
 
     return;
   }
 
   void CompleteType(clang::ObjCInterfaceDecl *interface_decl) override {
-    static unsigned int invocation_id = 0;
-    unsigned int current_id = invocation_id++;
 
     Log *log(GetLogIfAllCategoriesSet(
         LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     if (log) {
       LLDB_LOGF(log,
-                "AppleObjCExternalASTSource::CompleteType[%u] on "
+                "AppleObjCExternalASTSource::CompleteType on "
                 "(ASTContext*)%p Completing (ObjCInterfaceDecl*)%p named %s",
-                current_id,
                 static_cast<void *>(&interface_decl->getASTContext()),
                 static_cast<void *>(interface_decl),
                 interface_decl->getName().str().c_str());
 
-      LLDB_LOGF(log, "  AOEAS::CT[%u] Before:", current_id);
+      LLDB_LOGF(log, "  AOEAS::CT Before:");
       LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
     }
 
@@ -143,12 +133,9 @@ private:
 
 AppleObjCDeclVendor::AppleObjCDeclVendor(ObjCLanguageRuntime &runtime)
     : ClangDeclVendor(eAppleObjCDeclVendor), m_runtime(runtime),
-      m_ast_ctx(runtime.GetProcess()
-                    ->GetTarget()
-                    .GetArchitecture()
-                    .GetTriple()
-                    .getTriple()
-                    .c_str()),
+      m_ast_ctx(
+          "AppleObjCDeclVendor AST",
+          runtime.GetProcess()->GetTarget().GetArchitecture().GetTriple()),
       m_type_realizer_sp(m_runtime.GetEncodingToType()) {
   m_external_source = new AppleObjCExternalASTSource(*this);
   llvm::IntrusiveRefCntPtr<clang::ExternalASTSource> external_source_owning_ptr(
@@ -182,7 +169,7 @@ AppleObjCDeclVendor::GetDeclForISA(ObjCLanguageRuntime::ObjCISA isa) {
 
   ClangASTMetadata meta_data;
   meta_data.SetISAPtr(isa);
-  m_external_source->SetMetadata(new_iface_decl, meta_data);
+  m_ast_ctx.SetMetadata(new_iface_decl, meta_data);
 
   new_iface_decl->setHasExternalVisibleStorage();
   new_iface_decl->setHasExternalLexicalStorage();
@@ -311,7 +298,8 @@ public:
   }
 
   clang::ObjCMethodDecl *
-  BuildMethod(clang::ObjCInterfaceDecl *interface_decl, const char *name,
+  BuildMethod(TypeSystemClang &clang_ast_ctxt,
+              clang::ObjCInterfaceDecl *interface_decl, const char *name,
               bool instance,
               ObjCLanguageRuntime::EncodingToTypeSP type_realizer_sp) {
     if (!m_is_valid || m_type_vector.size() < 3)
@@ -360,8 +348,7 @@ public:
 
     clang::QualType ret_type =
         ClangUtil::GetQualType(type_realizer_sp->RealizeType(
-            interface_decl->getASTContext(), m_type_vector[0].c_str(),
-            for_expression));
+            clang_ast_ctxt, m_type_vector[0].c_str(), for_expression));
 
     if (ret_type.isNull())
       return nullptr;
@@ -378,7 +365,7 @@ public:
       const bool for_expression = true;
       clang::QualType arg_type =
           ClangUtil::GetQualType(type_realizer_sp->RealizeType(
-              ast_ctx, m_type_vector[ai].c_str(), for_expression));
+              clang_ast_ctxt, m_type_vector[ai].c_str(), for_expression));
 
       if (arg_type.isNull())
         return nullptr; // well, we just wasted a bunch of time.  Wish we could
@@ -413,7 +400,7 @@ bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
   Log *log(GetLogIfAllCategoriesSet(
       LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
-  ClangASTMetadata *metadata = m_external_source->GetMetadata(interface_decl);
+  ClangASTMetadata *metadata = m_ast_ctx.GetMetadata(interface_decl);
   ObjCLanguageRuntime::ObjCISA objc_isa = 0;
   if (metadata)
     objc_isa = metadata->GetISAPtr();
@@ -455,8 +442,8 @@ bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
 
     ObjCRuntimeMethodType method_type(types);
 
-    clang::ObjCMethodDecl *method_decl =
-        method_type.BuildMethod(interface_decl, name, true, m_type_realizer_sp);
+    clang::ObjCMethodDecl *method_decl = method_type.BuildMethod(
+        m_ast_ctx, interface_decl, name, true, m_type_realizer_sp);
 
     LLDB_LOGF(log, "[  AOTV::FD] Instance method [%s] [%s]", name, types);
 
@@ -474,7 +461,7 @@ bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
     ObjCRuntimeMethodType method_type(types);
 
     clang::ObjCMethodDecl *method_decl = method_type.BuildMethod(
-        interface_decl, name, false, m_type_realizer_sp);
+        m_ast_ctx, interface_decl, name, false, m_type_realizer_sp);
 
     LLDB_LOGF(log, "[  AOTV::FD] Class method [%s] [%s]", name, types);
 
@@ -537,19 +524,16 @@ bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
   return true;
 }
 
-uint32_t
-AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
-                               uint32_t max_matches,
-                               std::vector<clang::NamedDecl *> &decls) {
-  static unsigned int invocation_id = 0;
-  unsigned int current_id = invocation_id++;
+uint32_t AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
+                                        uint32_t max_matches,
+                                        std::vector<CompilerDecl> &decls) {
 
   Log *log(GetLogIfAllCategoriesSet(
       LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
-  LLDB_LOGF(log, "AppleObjCDeclVendor::FindDecls [%u] ('%s', %s, %u, )",
-            current_id, (const char *)name.AsCString(),
-            append ? "true" : "false", max_matches);
+  LLDB_LOGF(log, "AppleObjCDeclVendor::FindDecls ('%s', %s, %u, )",
+            (const char *)name.AsCString(), append ? "true" : "false",
+            max_matches);
 
   if (!append)
     decls.clear();
@@ -577,30 +561,26 @@ AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
               ast_ctx.getObjCInterfaceType(result_iface_decl);
 
           uint64_t isa_value = LLDB_INVALID_ADDRESS;
-          ClangASTMetadata *metadata =
-              m_external_source->GetMetadata(result_iface_decl);
+          ClangASTMetadata *metadata = m_ast_ctx.GetMetadata(result_iface_decl);
           if (metadata)
             isa_value = metadata->GetISAPtr();
 
           LLDB_LOG(log,
-                   "AOCTV::FT [%u] Found %s (isa 0x%" PRIx64
-                   ") in the ASTContext",
-                   current_id, result_iface_type.getAsString(), isa_value);
+                   "AOCTV::FT Found %s (isa 0x%" PRIx64 ") in the ASTContext",
+                   result_iface_type.getAsString(), isa_value);
         }
 
-        decls.push_back(result_iface_decl);
+        decls.push_back(m_ast_ctx.GetCompilerDecl(result_iface_decl));
         ret++;
         break;
       } else {
-        LLDB_LOGF(log,
-                  "AOCTV::FT [%u] There's something in the ASTContext, but "
-                  "it's not something we know about",
-                  current_id);
+        LLDB_LOGF(log, "AOCTV::FT There's something in the ASTContext, but "
+                       "it's not something we know about");
         break;
       }
     } else if (log) {
-      LLDB_LOGF(log, "AOCTV::FT [%u] Couldn't find %s in the ASTContext",
-                current_id, name.AsCString());
+      LLDB_LOGF(log, "AOCTV::FT Couldn't find %s in the ASTContext",
+                name.AsCString());
     }
 
     // It's not.  If it exists, we have to put it into our ASTContext.
@@ -608,7 +588,7 @@ AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
     ObjCLanguageRuntime::ObjCISA isa = m_runtime.GetISA(name);
 
     if (!isa) {
-      LLDB_LOGF(log, "AOCTV::FT [%u] Couldn't find the isa", current_id);
+      LLDB_LOGF(log, "AOCTV::FT Couldn't find the isa");
 
       break;
     }
@@ -617,9 +597,9 @@ AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
 
     if (!iface_decl) {
       LLDB_LOGF(log,
-                "AOCTV::FT [%u] Couldn't get the Objective-C interface for "
+                "AOCTV::FT Couldn't get the Objective-C interface for "
                 "isa 0x%" PRIx64,
-                current_id, (uint64_t)isa);
+                (uint64_t)isa);
 
       break;
     }
@@ -627,11 +607,11 @@ AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
     if (log) {
       clang::QualType new_iface_type = ast_ctx.getObjCInterfaceType(iface_decl);
 
-      LLDB_LOG(log, "AOCTV::FT [{0}] Created {1} (isa 0x{2:x})", current_id,
+      LLDB_LOG(log, "AOCTV::FT Created {1} (isa 0x{2:x})",
                new_iface_type.getAsString(), (uint64_t)isa);
     }
 
-    decls.push_back(iface_decl);
+    decls.push_back(m_ast_ctx.GetCompilerDecl(iface_decl));
     ret++;
     break;
   } while (false);

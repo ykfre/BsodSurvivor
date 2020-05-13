@@ -300,6 +300,11 @@ protected:
   Tool *buildAssembler() const override;
   Tool *buildLinker() const override;
 
+  virtual std::string getMultiarchTriple(const Driver &D,
+                                         const llvm::Triple &TargetTriple,
+                                         StringRef SysRoot) const
+  { return TargetTriple.str(); }
+
   /// \name ToolChain Implementation Helper Functions
   /// @{
 
@@ -308,6 +313,16 @@ protected:
 
   /// Check whether the target triple's architecture is 32-bits.
   bool isTarget32Bit() const { return getTriple().isArch32Bit(); }
+
+  void PushPPaths(ToolChain::path_list &PPaths);
+  void AddMultilibPaths(const Driver &D, const std::string &SysRoot,
+                        const std::string &OSLibDir,
+                        const std::string &MultiarchTriple,
+                        path_list &Paths);
+  void AddMultiarchPaths(const Driver &D, const std::string &SysRoot,
+                         const std::string &OSLibDir, path_list &Paths);
+  void AddMultilibIncludeArgs(const llvm::opt::ArgList &DriverArgs,
+                              llvm::opt::ArgStringList &CC1Args) const;
 
   // FIXME: This should be final, but the CrossWindows toolchain does weird
   // things that can't be easily generalized.
@@ -320,6 +335,10 @@ protected:
                         llvm::opt::ArgStringList &CC1Args) const;
   virtual void
   addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                           llvm::opt::ArgStringList &CC1Args) const;
+
+  bool
+  addGCCLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
                            llvm::opt::ArgStringList &CC1Args) const;
 
   bool addLibStdCXXIncludePaths(Twine Base, Twine Suffix, StringRef GCCTriple,
@@ -347,6 +366,12 @@ public:
   void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                              llvm::opt::ArgStringList &CC1Args,
                              Action::OffloadKind DeviceOffloadKind) const override;
+
+  virtual std::string getDynamicLinker(const llvm::opt::ArgList &Args) const {
+    return {};
+  }
+
+  virtual void addExtraOpts(llvm::opt::ArgStringList &CmdArgs) const {}
 };
 
 } // end namespace toolchains

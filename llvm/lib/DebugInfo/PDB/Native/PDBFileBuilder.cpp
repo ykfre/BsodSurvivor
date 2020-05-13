@@ -95,7 +95,7 @@ Error PDBFileBuilder::addNamedStream(StringRef Name, StringRef Data) {
   if (!ExpectedIndex)
     return ExpectedIndex.takeError();
   assert(NamedStreamData.count(*ExpectedIndex) == 0);
-  NamedStreamData[*ExpectedIndex] = Data;
+  NamedStreamData[*ExpectedIndex] = std::string(Data);
   return Error::success();
 }
 
@@ -144,7 +144,7 @@ Error PDBFileBuilder::finalizeMsfLayout() {
     if (Dbi) {
       Dbi->setPublicsStreamIndex(Gsi->getPublicsStreamIndex());
       Dbi->setGlobalsStreamIndex(Gsi->getGlobalsStreamIndex());
-      Dbi->setSymbolRecordStreamIndex(Gsi->getRecordStreamIdx());
+      Dbi->setSymbolRecordStreamIndex(Gsi->getRecordStreamIndex());
     }
   }
   if (Tpi) {

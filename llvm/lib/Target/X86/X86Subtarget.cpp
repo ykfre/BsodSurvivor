@@ -10,14 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "X86Subtarget.h"
+#include "MCTargetDesc/X86BaseInfo.h"
 #include "X86.h"
-
 #include "X86CallLowering.h"
 #include "X86LegalizerInfo.h"
 #include "X86MacroFusion.h"
 #include "X86RegisterBankInfo.h"
-#include "X86Subtarget.h"
-#include "MCTargetDesc/X86BaseInfo.h"
 #include "X86TargetMachine.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
@@ -227,11 +226,11 @@ bool X86Subtarget::isLegalToCallImmediateAddr() const {
 }
 
 void X86Subtarget::initSubtargetFeatures(StringRef CPU, StringRef FS) {
-  std::string CPUName = CPU;
+  std::string CPUName = std::string(CPU);
   if (CPUName.empty())
     CPUName = "generic";
 
-  std::string FullFS = FS;
+  std::string FullFS = std::string(FS);
   if (In64BitMode) {
     // SSE2 should default to enabled in 64-bit mode, but can be turned off
     // explicitly.

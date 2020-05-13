@@ -2295,4 +2295,42 @@ TEST_F(ConstantRangeTest, Abs) {
   });
 }
 
+TEST_F(ConstantRangeTest, castOps) {
+  ConstantRange A(APInt(16, 66), APInt(16, 128));
+  ConstantRange FpToI8 = A.castOp(Instruction::FPToSI, 8);
+  EXPECT_EQ(8u, FpToI8.getBitWidth());
+  EXPECT_TRUE(FpToI8.isFullSet());
+
+  ConstantRange FpToI16 = A.castOp(Instruction::FPToSI, 16);
+  EXPECT_EQ(16u, FpToI16.getBitWidth());
+  EXPECT_EQ(A, FpToI16);
+
+  ConstantRange FPExtToDouble = A.castOp(Instruction::FPExt, 64);
+  EXPECT_EQ(64u, FPExtToDouble.getBitWidth());
+  EXPECT_TRUE(FPExtToDouble.isFullSet());
+
+  ConstantRange PtrToInt = A.castOp(Instruction::PtrToInt, 64);
+  EXPECT_EQ(64u, PtrToInt.getBitWidth());
+  EXPECT_TRUE(PtrToInt.isFullSet());
+
+  ConstantRange IntToPtr = A.castOp(Instruction::IntToPtr, 64);
+  EXPECT_EQ(64u, IntToPtr.getBitWidth());
+  EXPECT_TRUE(IntToPtr.isFullSet());
+}
+
+TEST_F(ConstantRangeTest, binaryXor) {
+  // Single element ranges.
+  ConstantRange R16(APInt(8, 16));
+  ConstantRange R20(APInt(8, 20));
+  EXPECT_EQ(*R16.binaryXor(R16).getSingleElement(), APInt(8, 0));
+  EXPECT_EQ(*R16.binaryXor(R20).getSingleElement(), APInt(8, 16 ^ 20));
+
+  // Ranges with more than a single element. Handled conservatively for now.
+  ConstantRange R16_35(APInt(8, 16), APInt(8, 35));
+  ConstantRange R0_99(APInt(8, 0), APInt(8, 99));
+  EXPECT_TRUE(R16_35.binaryXor(R16_35).isFullSet());
+  EXPECT_TRUE(R16_35.binaryXor(R0_99).isFullSet());
+  EXPECT_TRUE(R0_99.binaryXor(R16_35).isFullSet());
+}
+
 }  // anonymous namespace
