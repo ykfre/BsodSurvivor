@@ -1824,6 +1824,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenMPDeclarativeDirectiveWithExtDecl(
     // Skip last tokens.
     skipUntilPragmaOpenMPEnd(OMPD_begin_declare_variant);
 
+    ParsingOpenMPDirectiveRAII NormalScope(*this, /*Value=*/false);
+
     VariantMatchInfo VMI;
     ASTContext &ASTCtx = Actions.getASTContext();
     TI.getAsVariantMatchInfo(ASTCtx, VMI);
@@ -1921,6 +1923,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenMPDeclarativeDirectiveWithExtDecl(
     if (!Actions.ActOnStartOpenMPDeclareTargetDirective(DTLoc))
       return DeclGroupPtrTy();
 
+    ParsingOpenMPDirectiveRAII NormalScope(*this, /*Value=*/false);
     llvm::SmallVector<Decl *, 4>  Decls;
     DKind = parseOpenMPDirectiveKind(*this);
     while (DKind != OMPD_end_declare_target && Tok.isNot(tok::eof) &&
@@ -2333,6 +2336,7 @@ Parser::ParseOpenMPDeclarativeOrExecutableDirective(ParsedStmtContext StmtCtx) {
       // FIXME: We create a bogus CompoundStmt scope to hold the contents of
       // the captured region. Code elsewhere assumes that any FunctionScopeInfo
       // should have at least one compound statement scope within it.
+      ParsingOpenMPDirectiveRAII NormalScope(*this, /*Value=*/false);
       AssociatedStmt = (Sema::CompoundScopeRAII(Actions), ParseStatement());
       AssociatedStmt = Actions.ActOnOpenMPRegionEnd(AssociatedStmt, Clauses);
     } else if (DKind == OMPD_target_update || DKind == OMPD_target_enter_data ||
@@ -2497,7 +2501,7 @@ OMPClause *Parser::ParseOpenMPUsesAllocatorClause(OpenMPDirectiveKind DKind) {
 ///       in_reduction-clause | allocator-clause | allocate-clause |
 ///       acq_rel-clause | acquire-clause | release-clause | relaxed-clause |
 ///       depobj-clause | destroy-clause | detach-clause | inclusive-clause |
-///       exclusive-clause | uses_allocators-clause
+///       exclusive-clause | uses_allocators-clause | use_device_addr-clause
 ///
 OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
                                      OpenMPClauseKind CKind, bool FirstClause) {
@@ -2663,11 +2667,13 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
   case OMPC_to:
   case OMPC_from:
   case OMPC_use_device_ptr:
+  case OMPC_use_device_addr:
   case OMPC_is_device_ptr:
   case OMPC_allocate:
   case OMPC_nontemporal:
   case OMPC_inclusive:
   case OMPC_exclusive:
+  case OMPC_affinity:
     Clause = ParseOpenMPVarListClause(DKind, CKind, WrongDirective);
     break;
   case OMPC_uses_allocators:
@@ -3275,7 +3281,7 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
                          getOpenMPClauseName(Kind).data()))
     return true;
 
-  bool DependWithIterator = false;
+  bool HasIterator = false;
   bool NeedRParenForLinear = false;
   BalancedDelimiterTracker LinearT(*this, tok::l_paren,
                                   tok::annot_pragma_openmp_end);
@@ -3321,7 +3327,7 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
         // iterators-definition ]
         // where iterator-specifier is [ iterator-type ] identifier =
         // range-specification
-        DependWithIterator = true;
+        HasIterator = true;
         EnterScope(Scope::OpenMPDirectiveScope | Scope::DeclScope);
         ExprResult IteratorRes = ParseOpenMPIteratorsExpr();
         Data.DepModOrTailExpr = IteratorRes.get();
@@ -3440,12 +3446,24 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
           ConsumeToken();
       }
     }
-  } else if (Kind == OMPC_allocate) {
+  } else if (Kind == OMPC_allocate ||
+             (Kind == OMPC_affinity && Tok.is(tok::identifier) &&
+              PP.getSpelling(Tok) == "iterator")) {
     // Handle optional allocator expression followed by colon delimiter.
     ColonProtectionRAIIObject ColonRAII(*this);
     TentativeParsingAction TPA(*this);
-    ExprResult Tail =
-        Actions.CorrectDelayedTyposInExpr(ParseAssignmentExpression());
+    // OpenMP 5.0, 2.10.1, task Construct.
+    // where aff-modifier is one of the following:
+    // iterator(iterators-definition)
+    ExprResult Tail;
+    if (Kind == OMPC_allocate) {
+      Tail = ParseAssignmentExpression();
+    } else {
+      HasIterator = true;
+      EnterScope(Scope::OpenMPDirectiveScope | Scope::DeclScope);
+      Tail = ParseOpenMPIteratorsExpr();
+    }
+    Tail = Actions.CorrectDelayedTyposInExpr(Tail);
     Tail = Actions.ActOnFinishFullExpr(Tail.get(), T.getOpenLocation(),
                                        /*DiscardedValue=*/false);
     if (Tail.isUsable()) {
@@ -3454,8 +3472,7 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
         Data.ColonLoc = ConsumeToken();
         TPA.Commit();
       } else {
-        // colon not found, no allocator specified, parse only list of
-        // variables.
+        // Colon not found, parse only list of variables.
         TPA.Revert();
       }
     } else {
@@ -3524,7 +3541,7 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
   if (!T.consumeClose())
     Data.RLoc = T.getCloseLocation();
   // Exit from scope when the iterator is used in depend clause.
-  if (DependWithIterator)
+  if (HasIterator)
     ExitScope();
   return (Kind != OMPC_depend && Kind != OMPC_map && Vars.empty()) ||
          (MustHaveTail && !Data.DepModOrTailExpr) || InvalidReductionId ||
@@ -3569,6 +3586,8 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
 ///       'from' '(' [ mapper '(' mapper-identifier ')' ':' ] list ')'
 ///    use_device_ptr-clause:
 ///       'use_device_ptr' '(' list ')'
+///    use_device_addr-clause:
+///       'use_device_addr' '(' list ')'
 ///    is_device_ptr-clause:
 ///       'is_device_ptr' '(' list ')'
 ///    allocate-clause:

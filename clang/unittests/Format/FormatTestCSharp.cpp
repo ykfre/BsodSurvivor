@@ -523,6 +523,33 @@ var x = foo(className, $@"some code:
   EXPECT_EQ(Code, format(Code, Style));
 }
 
+TEST_F(FormatTestCSharp, CSharpLambdas) {
+  FormatStyle GoogleStyle = getGoogleStyle(FormatStyle::LK_CSharp);
+  FormatStyle MicrosoftStyle = getMicrosoftStyle(FormatStyle::LK_CSharp);
+
+  verifyFormat(R"(//
+class MyClass {
+  Action<string> greet = name => {
+    string greeting = $"Hello {name}!";
+    Console.WriteLine(greeting);
+  };
+})",
+               GoogleStyle);
+
+  // Microsoft Style:
+  // https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/statements-expressions-operators/lambda-expressions#statement-lambdas
+  verifyFormat(R"(//
+class MyClass
+{
+    Action<string> greet = name =>
+    {
+        string greeting = $"Hello {name}!";
+        Console.WriteLine(greeting);
+    };
+})",
+               MicrosoftStyle);
+}
+
 TEST_F(FormatTestCSharp, CSharpObjectInitializers) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_CSharp);
 
@@ -581,8 +608,7 @@ TEST_F(FormatTestCSharp, CSharpNamedArguments) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_CSharp);
 
   verifyFormat(R"(//
-PrintOrderDetails(orderNum: 31, productName: "Red Mug",
-                  sellerName: "Gift Shop");)",
+PrintOrderDetails(orderNum: 31, productName: "Red Mug", sellerName: "Gift Shop");)",
                Style);
 
   // Ensure that trailing comments do not cause problems.
@@ -639,8 +665,7 @@ class TimePeriod {
     get { return _seconds / 3600; }
     set {
       if (value < 0 || value > 24)
-        throw new ArgumentOutOfRangeException(
-            $"{nameof(value)} must be between 0 and 24.");
+        throw new ArgumentOutOfRangeException($"{nameof(value)} must be between 0 and 24.");
       _seconds = value * 3600;
     }
   }
@@ -677,6 +702,36 @@ class MyClass {
                                      DefaultThirdArgument);
 })",
                Style);
+
+  // Brace wrapping and single-lining of accessor can be controlled by config.
+  Style.AllowShortBlocksOnASingleLine = FormatStyle::SBS_Never;
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterFunction = true;
+
+  verifyFormat(R"(//
+class TimePeriod {
+  public double Hours
+  {
+    get {
+      return _seconds / 3600;
+    }
+    set {
+      _seconds = value * 3600;
+    }
+  }
+})",
+               Style);
+ 
+  // Microsoft style trivial property accessors have no line break before the
+  // opening brace.
+  auto MicrosoftStyle = getMicrosoftStyle(FormatStyle::LK_CSharp);
+  verifyFormat(R"(//
+public class SaleItem
+{
+    public decimal Price { get; set; }
+})",
+               MicrosoftStyle);
+
 }
 
 TEST_F(FormatTestCSharp, CSharpSpaces) {
@@ -715,6 +770,9 @@ foreach ((A a, B b) in someList) {
 })",
                Style);
 
+  // space after lock in `lock (processes)`.
+  verifyFormat("lock (process)", Style);
+
   Style.SpacesInSquareBrackets = true;
   verifyFormat(R"(private float[ , ] Values;)", Style);
   verifyFormat(R"(string dirPath = args?[ 0 ];)", Style);
@@ -727,7 +785,9 @@ TEST_F(FormatTestCSharp, CSharpNullableTypes) {
 
   verifyFormat(R"(//
 public class A {
-  void foo() { int? value = some.bar(); }
+  void foo() {
+    int? value = some.bar();
+  }
 })",
                Style); // int? is nullable not a conditional expression.
 
@@ -772,16 +832,15 @@ class Dictionary<TKey, TVal>
     where TKey : IComparable<TKey>
     where TVal : IMyInterface {
   public void MyMethod<T>(T t)
-      where T : IMyInterface { doThing(); }
+      where T : IMyInterface {
+    doThing();
+  }
 })",
                Style);
 
   verifyFormat(R"(//
 class ItemFactory<T>
-    where T : new(),
-              IAnInterface<T>,
-              IAnotherInterface<T>,
-              IAnotherInterfaceStill<T> {})",
+    where T : new(), IAnInterface<T>, IAnotherInterface<T>, IAnotherInterfaceStill<T> {})",
                Style);
 
   Style.ColumnLimit = 50; // Force lines to be wrapped.

@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===---------------------------------------------------------------------===//
-// UNSUPPORTED: c++98, c++03, c++11, c++14, c++17
+// UNSUPPORTED: c++03, c++11, c++14, c++17
 
 // <span>
 
@@ -23,7 +23,6 @@
 //   — data(cont) and size(cont) are both well-formed, and
 //   — remove_pointer_t<decltype(data(cont))>(*)[] is convertible to ElementType(*)[].
 //
-
 
 #include <span>
 #include <cassert>

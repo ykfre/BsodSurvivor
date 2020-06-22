@@ -336,10 +336,7 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
     NewCS->setAttributes(
         AttributeList::get(F->getContext(), CallPAL.getFnAttributes(),
                            CallPAL.getRetAttributes(), ArgAttrVec));
-    NewCS->setDebugLoc(CB.getDebugLoc());
-    uint64_t W;
-    if (CB.extractProfTotalWeight(W))
-      NewCS->setProfWeight(W);
+    NewCS->copyMetadata(CB, {LLVMContext::MD_prof, LLVMContext::MD_dbg});
     Args.clear();
     ArgAttrVec.clear();
 
@@ -385,9 +382,10 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
 
       // Just add all the struct element types.
       Type *AgTy = cast<PointerType>(I->getType())->getElementType();
-      Value *TheAlloca =
-          new AllocaInst(AgTy, DL.getAllocaAddrSpace(), nullptr,
-                         MaybeAlign(I->getParamAlignment()), "", InsertPt);
+      Value *TheAlloca = new AllocaInst(
+          AgTy, DL.getAllocaAddrSpace(), nullptr,
+          I->getParamAlign().getValueOr(DL.getPrefTypeAlign(AgTy)), "",
+          InsertPt);
       StructType *STy = cast<StructType>(AgTy);
       Value *Idxs[2] = {ConstantInt::get(Type::getInt32Ty(F->getContext()), 0),
                         nullptr};

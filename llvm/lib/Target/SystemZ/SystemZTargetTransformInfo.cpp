@@ -361,9 +361,8 @@ static unsigned getScalarSizeInBits(Type *Ty) {
 // type until it is legal. This would e.g. return 4 for <6 x i64>, instead of
 // 3.
 static unsigned getNumVectorRegs(Type *Ty) {
-  assert(Ty->isVectorTy() && "Expected vector type");
-  unsigned WideBits =
-      getScalarSizeInBits(Ty) * cast<VectorType>(Ty)->getNumElements();
+  auto *VTy = cast<FixedVectorType>(Ty);
+  unsigned WideBits = getScalarSizeInBits(Ty) * VTy->getNumElements();
   assert(WideBits > 0 && "Could not compute size of vector");
   return ((WideBits % 128U) ? ((WideBits / 128U) + 1) : (WideBits / 128U));
 }
@@ -374,6 +373,12 @@ int SystemZTTIImpl::getArithmeticInstrCost(
     TTI::OperandValueKind Op2Info, TTI::OperandValueProperties Opd1PropInfo,
     TTI::OperandValueProperties Opd2PropInfo, ArrayRef<const Value *> Args,
     const Instruction *CxtI) {
+
+  // TODO: Handle more cost kinds.
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Op1Info,
+                                         Op2Info, Opd1PropInfo,
+                                         Opd2PropInfo, Args, CxtI);
 
   // TODO: return a good value for BB-VECTORIZER that includes the
   // immediate loads, which we do not want to count for the loop
@@ -464,7 +469,7 @@ int SystemZTTIImpl::getArithmeticInstrCost(
       return DivInstrCost;
   }
   else if (ST->hasVector()) {
-    auto *VTy = cast<VectorType>(Ty);
+    auto *VTy = cast<FixedVectorType>(Ty);
     unsigned VF = VTy->getNumElements();
     unsigned NumVectors = getNumVectorRegs(Ty);
 
@@ -585,8 +590,8 @@ getVectorTruncCost(Type *SrcTy, Type *DstTy) {
   assert (SrcTy->isVectorTy() && DstTy->isVectorTy());
   assert (SrcTy->getPrimitiveSizeInBits() > DstTy->getPrimitiveSizeInBits() &&
           "Packing must reduce size of vector type.");
-  assert(cast<VectorType>(SrcTy)->getNumElements() ==
-             cast<VectorType>(DstTy)->getNumElements() &&
+  assert(cast<FixedVectorType>(SrcTy)->getNumElements() ==
+             cast<FixedVectorType>(DstTy)->getNumElements() &&
          "Packing should not change number of elements.");
 
   // TODO: Since fp32 is expanded, the extract cost should always be 0.
@@ -602,7 +607,7 @@ getVectorTruncCost(Type *SrcTy, Type *DstTy) {
 
   unsigned Cost = 0;
   unsigned Log2Diff = getElSizeLog2Diff(SrcTy, DstTy);
-  unsigned VF = cast<VectorType>(SrcTy)->getNumElements();
+  unsigned VF = cast<FixedVectorType>(SrcTy)->getNumElements();
   for (unsigned P = 0; P < Log2Diff; ++P) {
     if (NumParts > 1)
       NumParts /= 2;
@@ -664,7 +669,7 @@ static Type *getCmpOpsType(const Instruction *I, unsigned VF = 1) {
     // Return the potentially vectorized type based on 'I' and 'VF'.  'I' may
     // be either scalar or already vectorized with a same or lesser VF.
     Type *ElTy = OpTy->getScalarType();
-    return VectorType::get(ElTy, VF);
+    return FixedVectorType::get(ElTy, VF);
   }
 
   return nullptr;
@@ -675,8 +680,8 @@ static Type *getCmpOpsType(const Instruction *I, unsigned VF = 1) {
 unsigned SystemZTTIImpl::
 getBoolVecToIntConversionCost(unsigned Opcode, Type *Dst,
                               const Instruction *I) {
-  assert (Dst->isVectorTy());
-  unsigned VF = cast<VectorType>(Dst)->getNumElements();
+  auto *DstVTy = cast<FixedVectorType>(Dst);
+  unsigned VF = DstVTy->getNumElements();
   unsigned Cost = 0;
   // If we know what the widths of the compared operands, get any cost of
   // converting it to match Dst. Otherwise assume same widths.
@@ -692,6 +697,12 @@ getBoolVecToIntConversionCost(unsigned Opcode, Type *Dst,
 int SystemZTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
                                      TTI::TargetCostKind CostKind,
                                      const Instruction *I) {
+  // FIXME: Can the logic below also be used for these cost kinds?
+  if (CostKind == TTI::TCK_CodeSize || CostKind == TTI::TCK_SizeAndLatency) {
+    int BaseCost = BaseT::getCastInstrCost(Opcode, Dst, Src, CostKind, I);
+    return BaseCost == 0 ? BaseCost : 1;
+  }
+
   unsigned DstScalarBits = Dst->getScalarSizeInBits();
   unsigned SrcScalarBits = Src->getScalarSizeInBits();
 
@@ -725,8 +736,8 @@ int SystemZTTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
     }
   }
   else if (ST->hasVector()) {
-    auto *SrcVecTy = cast<VectorType>(Src);
-    auto *DstVecTy = cast<VectorType>(Dst);
+    auto *SrcVecTy = cast<FixedVectorType>(Src);
+    auto *DstVecTy = cast<FixedVectorType>(Dst);
     unsigned VF = SrcVecTy->getNumElements();
     unsigned NumDstVectors = getNumVectorRegs(Dst);
     unsigned NumSrcVectors = getNumVectorRegs(Src);
@@ -832,6 +843,9 @@ int SystemZTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
                                        Type *CondTy,
                                        TTI::TargetCostKind CostKind,
                                        const Instruction *I) {
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return BaseT::getCmpSelInstrCost(Opcode, ValTy, CondTy, CostKind);
+
   if (!ValTy->isVectorTy()) {
     switch (Opcode) {
     case Instruction::ICmp: {
@@ -857,7 +871,7 @@ int SystemZTTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
     }
   }
   else if (ST->hasVector()) {
-    unsigned VF = cast<VectorType>(ValTy)->getNumElements();
+    unsigned VF = cast<FixedVectorType>(ValTy)->getNumElements();
 
     // Called with a compare instruction.
     if (Opcode == Instruction::ICmp || Opcode == Instruction::FCmp) {
@@ -1024,6 +1038,10 @@ int SystemZTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                     const Instruction *I) {
   assert(!Src->isVoidTy() && "Invalid type");
 
+  // TODO: Handle other cost kinds.
+  if (CostKind != TTI::TCK_RecipThroughput)
+    return 1;
+
   if (!Src->isVectorTy() && Opcode == Instruction::Load && I != nullptr) {
     // Store the load or its truncated or extended value in FoldedValue.
     const Instruction *FoldedValue = nullptr;
@@ -1102,7 +1120,7 @@ int SystemZTTIImpl::getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
   // Return the ceiling of dividing A by B.
   auto ceil = [](unsigned A, unsigned B) { return (A + B - 1) / B; };
 
-  unsigned NumElts = cast<VectorType>(VecTy)->getNumElements();
+  unsigned NumElts = cast<FixedVectorType>(VecTy)->getNumElements();
   assert(Factor > 1 && NumElts % Factor == 0 && "Invalid interleave factor");
   unsigned VF = NumElts / Factor;
   unsigned NumEltsPerVecReg = (128U / getScalarSizeInBits(VecTy));
@@ -1152,26 +1170,10 @@ static int getVectorIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy) {
   return -1;
 }
 
-int SystemZTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-                                          ArrayRef<Value *> Args,
-                                          FastMathFlags FMF, unsigned VF,
-                                          TTI::TargetCostKind CostKind,
-                                          const Instruction *I) {
-  int Cost = getVectorIntrinsicInstrCost(ID, RetTy);
+int SystemZTTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
+                                          TTI::TargetCostKind CostKind) {
+  int Cost = getVectorIntrinsicInstrCost(ICA.getID(), ICA.getReturnType());
   if (Cost != -1)
     return Cost;
-  return BaseT::getIntrinsicInstrCost(ID, RetTy, Args, FMF, VF, CostKind, I);
-}
-
-int SystemZTTIImpl::getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-                                          ArrayRef<Type *> Tys,
-                                          FastMathFlags FMF,
-                                          unsigned ScalarizationCostPassed,
-                                          TTI::TargetCostKind CostKind,
-                                          const Instruction *I) {
-  int Cost = getVectorIntrinsicInstrCost(ID, RetTy);
-  if (Cost != -1)
-    return Cost;
-  return BaseT::getIntrinsicInstrCost(ID, RetTy, Tys, FMF,
-                                      ScalarizationCostPassed, CostKind, I);
+  return BaseT::getIntrinsicInstrCost(ICA, CostKind);
 }

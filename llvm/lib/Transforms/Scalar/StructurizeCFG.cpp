@@ -8,13 +8,12 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LegacyDivergenceAnalysis.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/RegionIterator.h"
 #include "llvm/Analysis/RegionPass.h"
@@ -89,6 +88,59 @@ using BBPhiMap = DenseMap<BasicBlock *, PhiMap>;
 using BBPredicates = DenseMap<BasicBlock *, Value *>;
 using PredMap = DenseMap<BasicBlock *, BBPredicates>;
 using BB2BBMap = DenseMap<BasicBlock *, BasicBlock *>;
+
+// A traits type that is intended to be used in graph algorithms. The graph
+// traits starts at an entry node, and traverses the RegionNodes that are in
+// the Nodes set.
+struct SubGraphTraits {
+  using NodeRef = std::pair<RegionNode *, SmallDenseSet<RegionNode *> *>;
+  using BaseSuccIterator = GraphTraits<RegionNode *>::ChildIteratorType;
+
+  // This wraps a set of Nodes into the iterator, so we know which edges to
+  // filter out.
+  class WrappedSuccIterator
+      : public iterator_adaptor_base<
+            WrappedSuccIterator, BaseSuccIterator,
+            typename std::iterator_traits<BaseSuccIterator>::iterator_category,
+            NodeRef, std::ptrdiff_t, NodeRef *, NodeRef> {
+    SmallDenseSet<RegionNode *> *Nodes;
+
+  public:
+    WrappedSuccIterator(BaseSuccIterator It, SmallDenseSet<RegionNode *> *Nodes)
+        : iterator_adaptor_base(It), Nodes(Nodes) {}
+
+    NodeRef operator*() const { return {*I, Nodes}; }
+  };
+
+  static bool filterAll(const NodeRef &N) { return true; }
+  static bool filterSet(const NodeRef &N) { return N.second->count(N.first); }
+
+  using ChildIteratorType =
+      filter_iterator<WrappedSuccIterator, bool (*)(const NodeRef &)>;
+
+  static NodeRef getEntryNode(Region *R) {
+    return {GraphTraits<Region *>::getEntryNode(R), nullptr};
+  }
+
+  static NodeRef getEntryNode(NodeRef N) { return N; }
+
+  static iterator_range<ChildIteratorType> children(const NodeRef &N) {
+    auto *filter = N.second ? &filterSet : &filterAll;
+    return make_filter_range(
+        make_range<WrappedSuccIterator>(
+            {GraphTraits<RegionNode *>::child_begin(N.first), N.second},
+            {GraphTraits<RegionNode *>::child_end(N.first), N.second}),
+        filter);
+  }
+
+  static ChildIteratorType child_begin(const NodeRef &N) {
+    return children(N).begin();
+  }
+
+  static ChildIteratorType child_end(const NodeRef &N) {
+    return children(N).end();
+  }
+};
 
 /// Finds the nearest common dominator of a set of BasicBlocks.
 ///
@@ -194,7 +246,6 @@ class StructurizeCFG : public RegionPass {
 
   LegacyDivergenceAnalysis *DA;
   DominatorTree *DT;
-  LoopInfo *LI;
 
   SmallVector<RegionNode *, 8> Order;
   BBSet Visited;
@@ -213,8 +264,6 @@ class StructurizeCFG : public RegionPass {
   RegionNode *PrevNode;
 
   void orderNodes();
-
-  Loop *getAdjustedLoop(RegionNode *RN);
 
   void analyzeLoops(RegionNode *N);
 
@@ -281,7 +330,6 @@ public:
       AU.addRequired<LegacyDivergenceAnalysis>();
     AU.addRequiredID(LowerSwitchID);
     AU.addRequired<DominatorTreeWrapperPass>();
-    AU.addRequired<LoopInfoWrapperPass>();
 
     AU.addPreserved<DominatorTreeWrapperPass>();
     RegionPass::getAnalysisUsage(AU);
@@ -313,118 +361,60 @@ bool StructurizeCFG::doInitialization(Region *R, RGPassManager &RGM) {
   return false;
 }
 
-/// Use the exit block to determine the loop if RN is a SubRegion.
-Loop *StructurizeCFG::getAdjustedLoop(RegionNode *RN) {
-  if (RN->isSubRegion()) {
-    Region *SubRegion = RN->getNodeAs<Region>();
-    return LI->getLoopFor(SubRegion->getExit());
-  }
-
-  return LI->getLoopFor(RN->getEntry());
-}
-
-/// Build up the general order of nodes, by performing a topology sort of the
-/// parent region's nodes, while ensuring that there is no outer loop node
-/// between any two inner loop nodes.
+/// Build up the general order of nodes, by performing a topological sort of the
+/// parent region's nodes, while ensuring that there is no outer cycle node
+/// between any two inner cycle nodes.
 void StructurizeCFG::orderNodes() {
-  SmallVector<RegionNode *, 32> POT;
-  SmallDenseMap<Loop *, unsigned, 8> LoopSizes;
-  for (RegionNode *RN : post_order(ParentRegion)) {
-    POT.push_back(RN);
-
-    // Accumulate the number of nodes inside the region that belong to a loop.
-    Loop *Loop = getAdjustedLoop(RN);
-    ++LoopSizes[Loop];
-  }
-  // A quick exit for the case where all nodes belong to the same loop (or no
-  // loop at all).
-  if (LoopSizes.size() <= 1U) {
-    Order.assign(POT.begin(), POT.end());
+  Order.resize(std::distance(GraphTraits<Region *>::nodes_begin(ParentRegion),
+                             GraphTraits<Region *>::nodes_end(ParentRegion)));
+  if (Order.empty())
     return;
-  }
-  Order.resize(POT.size());
 
-  // The post-order traversal of the list gives us an ordering close to what we
-  // want. The only problem with it is that sometimes backedges for outer loops
-  // will be visited before backedges for inner loops. So now we fix that by
-  // inserting the nodes in order, while making sure that encountered inner loop
-  // are complete before their parents (outer loops).
+  SmallDenseSet<RegionNode *> Nodes;
+  auto EntryNode = SubGraphTraits::getEntryNode(ParentRegion);
 
-  SmallVector<Loop *, 8> WorkList;
-  // Get the size of the outermost region (the nodes that don't belong to any
-  // loop inside ParentRegion).
-  unsigned ZeroCurrentLoopSize = 0U;
-  auto LSI = LoopSizes.find(nullptr);
-  unsigned *CurrentLoopSize =
-      LSI != LoopSizes.end() ? &LSI->second : &ZeroCurrentLoopSize;
-  Loop *CurrentLoop = nullptr;
+  // A list of range indices of SCCs in Order, to be processed.
+  SmallVector<std::pair<unsigned, unsigned>, 8> WorkList;
+  unsigned I = 0, E = Order.size();
+  while (true) {
+    // Run through all the SCCs in the subgraph starting with Entry.
+    for (auto SCCI =
+             scc_iterator<SubGraphTraits::NodeRef, SubGraphTraits>::begin(
+                 EntryNode);
+         !SCCI.isAtEnd(); ++SCCI) {
+      auto &SCC = *SCCI;
 
-  // The "skipped" list is actually located at the (reversed) beginning of the
-  // POT. This saves us the use of an intermediate container.
-  // Note that there is always enough room, for the skipped nodes, before the
-  // current location, as we have just passed at least that amount of nodes.
+      // An SCC up to the size of 2, can be reduced to an entry (the last node),
+      // and a possible additional node. Therefore, it is already in order, and
+      // there is no need to add it to the work-list.
+      unsigned Size = SCC.size();
+      if (Size > 2)
+        WorkList.emplace_back(I, I + Size);
 
-  auto Begin = POT.rbegin();
-  auto I = Begin, SkippedEnd = Begin;
-  auto O = Order.rbegin(), OE = Order.rend();
-  while (O != OE) {
-    // If we have any skipped nodes, then erase the gap between the end of the
-    // "skipped" list, and the current location.
-    if (SkippedEnd != Begin) {
-      POT.erase(I.base(), SkippedEnd.base());
-      I = SkippedEnd = Begin = POT.rbegin();
-    }
-
-    // Keep processing outer loops, in order (from inner most, to outer).
-    if (!WorkList.empty()) {
-      CurrentLoop = WorkList.pop_back_val();
-      CurrentLoopSize = &LoopSizes.find(CurrentLoop)->second;
-    }
-
-    // Keep processing loops while only going deeper (into inner loops).
-    do {
-      assert(I != POT.rend());
-      RegionNode *RN = *I++;
-
-      Loop *L = getAdjustedLoop(RN);
-      if (L != CurrentLoop) {
-        // If L is a loop inside CurrentLoop, then CurrentLoop must be the
-        // parent of L.
-        // To prove this, we will contradict the opposite:
-        //   Let P be the parent of L. If CurrentLoop is the parent of P, then
-        //   the header of P must have been processed already, as it must
-        //   dominate the other blocks of P (otherwise P is an irreducible loop,
-        //   and won't be recorded in the LoopInfo), especially L (inside). But
-        //   then CurrentLoop must have been updated to P at the time of
-        //   processing the header of P, which conflicts with the assumption
-        //   that CurrentLoop is not P.
-
-        // If L is not a loop inside CurrentLoop, then skip RN.
-        if (!L || L->getParentLoop() != CurrentLoop) {
-          // Skip the node by pushing it to the end of the "skipped" list.
-          *SkippedEnd++ = RN;
-          continue;
-        }
-
-        // If we still haven't processed all the nodes that belong to
-        // CurrentLoop, then make sure we come back later, to finish the job, by
-        // pushing it to the WorkList.
-        if (*CurrentLoopSize)
-          WorkList.push_back(CurrentLoop);
-
-        CurrentLoop = L;
-        CurrentLoopSize = &LoopSizes.find(CurrentLoop)->second;
+      // Add the SCC nodes to the Order array.
+      for (auto &N : SCC) {
+        assert(I < E && "SCC size mismatch!");
+        Order[I++] = N.first;
       }
+    }
+    assert(I == E && "SCC size mismatch!");
 
-      assert(O != OE);
-      *O++ = RN;
+    // If there are no more SCCs to order, then we are done.
+    if (WorkList.empty())
+      break;
 
-      // If we have finished processing the current loop, then we are done here.
-      --*CurrentLoopSize;
-    } while (*CurrentLoopSize);
+    std::tie(I, E) = WorkList.pop_back_val();
+
+    // Collect the set of nodes in the SCC's subgraph. These are only the
+    // possible child nodes; we do not add the entry (last node) otherwise we
+    // will have the same exact SCC all over again.
+    Nodes.clear();
+    Nodes.insert(Order.begin() + I, Order.begin() + E - 1);
+
+    // Update the entry node.
+    EntryNode.first = Order[E - 1];
+    EntryNode.second = &Nodes;
   }
-  assert(WorkList.empty());
-  assert(SkippedEnd == Begin);
 }
 
 /// Determine the end of the loops
@@ -532,8 +522,7 @@ void StructurizeCFG::collectInfos() {
   for (RegionNode *RN : reverse(Order)) {
     LLVM_DEBUG(dbgs() << "Visiting: "
                       << (RN->isSubRegion() ? "SubRegion with entry: " : "")
-                      << RN->getEntry()->getName() << " Loop Depth: "
-                      << LI->getLoopDepth(RN->getEntry()) << "\n");
+                      << RN->getEntry()->getName() << "\n");
 
     // Analyze all the conditions leading to a node
     gatherPredicates(RN);
@@ -1055,7 +1044,6 @@ bool StructurizeCFG::runOnRegion(Region *R, RGPassManager &RGM) {
   ParentRegion = R;
 
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
 
   orderNodes();
   collectInfos();

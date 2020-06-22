@@ -8,6 +8,8 @@
 
 #include "MPFRUtils.h"
 
+#include "utils/FPUtil/FPBits.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -15,52 +17,16 @@
 #include <stdint.h>
 #include <string>
 
+template <typename T> using FPBits = __llvm_libc::fputil::FPBits<T>;
+
 namespace __llvm_libc {
 namespace testing {
 namespace mpfr {
 
-template <typename T> struct FloatProperties {};
-
-template <> struct FloatProperties<float> {
-  typedef uint32_t BitsType;
-  static_assert(sizeof(BitsType) == sizeof(float),
-                "Unexpected size of 'float' type.");
-
-  static constexpr uint32_t mantissaWidth = 23;
-  static constexpr BitsType signMask = 0x7FFFFFFFU;
-  static constexpr uint32_t exponentOffset = 127;
-};
-
-template <> struct FloatProperties<double> {
-  typedef uint64_t BitsType;
-  static_assert(sizeof(BitsType) == sizeof(double),
-                "Unexpected size of 'double' type.");
-
-  static constexpr uint32_t mantissaWidth = 52;
-  static constexpr BitsType signMask = 0x7FFFFFFFFFFFFFFFULL;
-  static constexpr uint32_t exponentOffset = 1023;
-};
-
-template <typename T> typename FloatProperties<T>::BitsType getBits(T x) {
-  using BitsType = typename FloatProperties<T>::BitsType;
-  return *reinterpret_cast<BitsType *>(&x);
-}
-
-// Returns the zero adjusted exponent value of abs(x).
-template <typename T> int getExponent(T x) {
-  using Properties = FloatProperties<T>;
-  using BitsType = typename Properties::BitsType;
-  BitsType bits = *reinterpret_cast<BitsType *>(&x);
-  bits &= Properties::signMask;                // Zero the sign bit.
-  int e = (bits >> Properties::mantissaWidth); // Shift out the mantissa.
-  e -= Properties::exponentOffset;             // Zero adjust.
-  return e;
-}
-
 class MPFRNumber {
   // A precision value which allows sufficiently large additional
-  // precision even compared to double precision floating point values.
-  static constexpr unsigned int mpfrPrecision = 96;
+  // precision even compared to quad-precision floating point values.
+  static constexpr unsigned int mpfrPrecision = 128;
 
   mpfr_t value;
 
@@ -85,6 +51,13 @@ public:
   }
 
   template <typename XType,
+            cpp::EnableIfType<cpp::IsSame<long double, XType>::Value, int> = 0>
+  explicit MPFRNumber(XType x) {
+    mpfr_init2(value, mpfrPrecision);
+    mpfr_set_ld(value, x, MPFR_RNDN);
+  }
+
+  template <typename XType,
             cpp::EnableIfType<cpp::IsIntegral<XType>::Value, int> = 0>
   explicit MPFRNumber(XType x) {
     mpfr_init2(value, mpfrPrecision);
@@ -94,7 +67,7 @@ public:
   template <typename XType> MPFRNumber(XType x, const Tolerance &t) {
     mpfr_init2(value, mpfrPrecision);
     mpfr_set_zero(value, 1); // Set to positive zero.
-    MPFRNumber xExponent(getExponent(x));
+    MPFRNumber xExponent(fputil::FPBits<XType>(x).getExponent());
     // E = 2^E
     mpfr_exp2(xExponent.value, xExponent.value, MPFR_RNDN);
     uint32_t bitMask = 1 << (t.width - 1);
@@ -122,11 +95,32 @@ public:
     mpfr_init2(value, mpfrPrecision);
     MPFRNumber mpfrInput(rawValue);
     switch (op) {
-    case OP_Cos:
+    case Operation::Abs:
+      mpfr_abs(value, mpfrInput.value, MPFR_RNDN);
+      break;
+    case Operation::Ceil:
+      mpfr_ceil(value, mpfrInput.value);
+      break;
+    case Operation::Cos:
       mpfr_cos(value, mpfrInput.value, MPFR_RNDN);
       break;
-    case OP_Sin:
+    case Operation::Exp:
+      mpfr_exp(value, mpfrInput.value, MPFR_RNDN);
+      break;
+    case Operation::Exp2:
+      mpfr_exp2(value, mpfrInput.value, MPFR_RNDN);
+      break;
+    case Operation::Floor:
+      mpfr_floor(value, mpfrInput.value);
+      break;
+    case Operation::Round:
+      mpfr_round(value, mpfrInput.value);
+      break;
+    case Operation::Sin:
       mpfr_sin(value, mpfrInput.value, MPFR_RNDN);
+      break;
+    case Operation::Trunc:
+      mpfr_trunc(value, mpfrInput.value);
       break;
     }
   }
@@ -174,17 +168,24 @@ void MPFRMatcher<T>::explainError(testutils::StreamWrapper &OS) {
   MPFRNumber mpfrInput(input);
   MPFRNumber mpfrMatchValue(matchValue);
   MPFRNumber mpfrToleranceValue(matchValue, tolerance);
+  FPBits<T> inputBits(input);
+  FPBits<T> matchBits(matchValue);
+  // TODO: Call to llvm::utohexstr implicitly converts __uint128_t values to
+  // uint64_t values. This can be fixed using a custom wrapper for
+  // llvm::utohexstr to handle __uint128_t values correctly.
   OS << "Match value not within tolerance value of MPFR result:\n"
      << "  Input decimal: " << mpfrInput.str() << '\n'
-     << "     Input bits: 0x" << llvm::utohexstr(getBits(input)) << '\n'
+     << "     Input bits: 0x" << llvm::utohexstr(inputBits.bitsAsUInt()) << '\n'
      << "  Match decimal: " << mpfrMatchValue.str() << '\n'
-     << "     Match bits: 0x" << llvm::utohexstr(getBits(matchValue)) << '\n'
+     << "     Match bits: 0x" << llvm::utohexstr(matchBits.bitsAsUInt()) << '\n'
      << "    MPFR result: " << mpfrResult.str() << '\n'
      << "Tolerance value: " << mpfrToleranceValue.str() << '\n';
 }
 
 template void MPFRMatcher<float>::explainError(testutils::StreamWrapper &);
 template void MPFRMatcher<double>::explainError(testutils::StreamWrapper &);
+template void
+MPFRMatcher<long double>::explainError(testutils::StreamWrapper &);
 
 template <typename T>
 bool compare(Operation op, T input, T libcResult, const Tolerance &t) {
@@ -197,6 +198,8 @@ bool compare(Operation op, T input, T libcResult, const Tolerance &t) {
 
 template bool compare<float>(Operation, float, float, const Tolerance &);
 template bool compare<double>(Operation, double, double, const Tolerance &);
+template bool compare<long double>(Operation, long double, long double,
+                                   const Tolerance &);
 
 } // namespace internal
 

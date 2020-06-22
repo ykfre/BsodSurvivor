@@ -356,7 +356,27 @@ public:
   ArrayRef<std::pair<unsigned, const char *>>
   getSerializableBitmaskMachineOperandTargetFlags() const override;
 
+  /// ARM supports the MachineOutliner.
+  bool isFunctionSafeToOutlineFrom(MachineFunction &MF,
+                                   bool OutlineFromLinkOnceODRs) const override;
+  outliner::OutlinedFunction getOutliningCandidateInfo(
+      std::vector<outliner::Candidate> &RepeatedSequenceLocs) const override;
+  outliner::InstrType getOutliningType(MachineBasicBlock::iterator &MIT,
+                                       unsigned Flags) const override;
+  bool isMBBSafeToOutlineFrom(MachineBasicBlock &MBB,
+                              unsigned &Flags) const override;
+  void buildOutlinedFrame(MachineBasicBlock &MBB, MachineFunction &MF,
+                          const outliner::OutlinedFunction &OF) const override;
+  MachineBasicBlock::iterator
+  insertOutlinedCall(Module &M, MachineBasicBlock &MBB,
+                     MachineBasicBlock::iterator &It, MachineFunction &MF,
+                     const outliner::Candidate &C) const override;
+
 private:
+  /// Returns an unused general-purpose register which can be used for
+  /// constructing an outlined call if one exists. Returns 0 otherwise.
+  unsigned findRegisterToSaveLRTo(const outliner::Candidate &C) const;
+
   unsigned getInstBundleLength(const MachineInstr &MI) const;
 
   int getVLDMDefCycle(const InstrItineraryData *ItinData,

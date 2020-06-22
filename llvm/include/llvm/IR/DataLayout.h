@@ -262,7 +262,7 @@ public:
 
   /// Returns true if the given alignment exceeds the natural stack alignment.
   bool exceedsNaturalStackAlignment(Align Alignment) const {
-    return StackNaturalAlign && (Alignment > StackNaturalAlign);
+    return StackNaturalAlign && (Alignment > *StackNaturalAlign);
   }
 
   Align getStackAlignment() const {
@@ -651,6 +651,7 @@ inline TypeSize DataLayout::getTypeSizeInBits(Type *Ty) const {
   case Type::IntegerTyID:
     return TypeSize::Fixed(Ty->getIntegerBitWidth());
   case Type::HalfTyID:
+  case Type::BFloatTyID:
     return TypeSize::Fixed(16);
   case Type::FloatTyID:
     return TypeSize::Fixed(32);

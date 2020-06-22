@@ -42,8 +42,10 @@ lldb_framework_path = None
 count = 1
 
 # The 'arch' and 'compiler' can be specified via command line.
-arch = None        # Must be initialized after option parsing
-compiler = None    # Must be initialized after option parsing
+arch = None
+compiler = None
+dsymutil = None
+sdkroot = None
 
 # The overriden dwarf verison.
 dwarf_version = 0
@@ -163,6 +165,15 @@ def get_filecheck_path():
 
 def is_reproducer_replay():
     """
-    Returns true when test is replayed from a reproducer.
+    Returns true when dotest is being replayed from a reproducer. Never use
+    this method to guard SB API calls as it will cause a divergence between
+    capture and replay.
     """
     return replay_path is not None
+
+def is_reproducer():
+    """
+    Returns true when dotest is capturing a reproducer or is being replayed
+    from a reproducer. Use this method to guard SB API calls.
+    """
+    return capture_path or replay_path

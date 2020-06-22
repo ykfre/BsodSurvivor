@@ -157,12 +157,7 @@ unsigned FloatType::getWidth() {
 /// Returns the floating semantics for the given type.
 const llvm::fltSemantics &FloatType::getFloatSemantics() {
   if (isBF16())
-    // Treat BF16 like a double. This is unfortunate but BF16 fltSemantics is
-    // not defined in LLVM.
-    // TODO(jpienaar): add BF16 to LLVM? fltSemantics are internal to APFloat.cc
-    // else one could add it.
-    //  static const fltSemantics semBF16 = {127, -126, 8, 16};
-    return APFloat::IEEEdouble();
+    return APFloat::BFloat();
   if (isF16())
     return APFloat::IEEEhalf();
   if (isF32())
@@ -204,7 +199,9 @@ int64_t ShapedType::getNumElements() const {
 
 int64_t ShapedType::getRank() const { return getShape().size(); }
 
-bool ShapedType::hasRank() const { return !isa<UnrankedTensorType>(); }
+bool ShapedType::hasRank() const {
+  return !isa<UnrankedMemRefType>() && !isa<UnrankedTensorType>();
+}
 
 int64_t ShapedType::getDimSize(unsigned idx) const {
   assert(idx < getRank() && "invalid index for shaped type");
@@ -762,6 +759,14 @@ AffineExpr mlir::makeCanonicalStridedLayoutExpr(ArrayRef<int64_t> sizes,
       dynamicPoisonBit = true;
   }
   return simplifyAffineExpr(expr, numDims, nSymbols);
+}
+
+/// Return a version of `t` with a layout that has all dynamic offset and
+/// strides. This is used to erase the static layout.
+MemRefType mlir::eraseStridedLayout(MemRefType t) {
+  auto val = ShapedType::kDynamicStrideOrOffset;
+  return MemRefType::Builder(t).setAffineMaps(makeStridedLinearLayoutMap(
+      SmallVector<int64_t, 4>(t.getRank(), val), val, t.getContext()));
 }
 
 AffineExpr mlir::makeCanonicalStridedLayoutExpr(ArrayRef<int64_t> sizes,

@@ -1,5 +1,6 @@
 add_mlir_dialect_library(MLIRStandardOpsTransforms
   ExpandAtomic.cpp
+  ExpandTanh.cpp
   FuncConversions.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -7,13 +8,10 @@ add_mlir_dialect_library(MLIRStandardOpsTransforms
 
   DEPENDS
   MLIRStandardTransformsIncGen
-  )
-target_link_libraries(MLIRStandardOpsTransforms
-  PUBLIC
+
+  LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
   MLIRStandardOps
-  MLIRSupport
   MLIRTransforms
-  LLVMSupport
   )

@@ -27,6 +27,7 @@
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Host.h"
@@ -51,7 +52,9 @@ using llvm::orc::DynamicLibrarySearchGenerator;
 using llvm::orc::ExecutionSession;
 using llvm::orc::IRCompileLayer;
 using llvm::orc::JITTargetMachineBuilder;
+using llvm::orc::MangleAndInterner;
 using llvm::orc::RTDyldObjectLinkingLayer;
+using llvm::orc::SymbolMap;
 using llvm::orc::ThreadSafeModule;
 using llvm::orc::TMOwningSimpleCompiler;
 
@@ -99,6 +102,14 @@ void ExecutionEngine::dumpToObjectFile(StringRef filename) {
   cache->dumpToObjectFile(filename);
 }
 
+void ExecutionEngine::registerSymbols(
+    llvm::function_ref<SymbolMap(MangleAndInterner)> symbolMap) {
+  auto &mainJitDylib = jit->getMainJITDylib();
+  cantFail(mainJitDylib.define(
+      absoluteSymbols(symbolMap(llvm::orc::MangleAndInterner(
+          mainJitDylib.getExecutionSession(), jit->getDataLayout())))));
+}
+
 // Setup LLVM target triple from the current machine.
 bool ExecutionEngine::setupTargetTriple(Module *llvmModule) {
   // Setup the machine properties from the current architecture.
@@ -109,8 +120,17 @@ bool ExecutionEngine::setupTargetTriple(Module *llvmModule) {
     errs() << "NO target: " << errorMessage << "\n";
     return true;
   }
-  std::unique_ptr<llvm::TargetMachine> machine(
-      target->createTargetMachine(targetTriple, "generic", "", {}, {}));
+
+  std::string cpu(llvm::sys::getHostCPUName());
+  llvm::SubtargetFeatures features;
+  llvm::StringMap<bool> hostFeatures;
+
+  if (llvm::sys::getHostCPUFeatures(hostFeatures))
+    for (auto &f : hostFeatures)
+      features.AddFeature(f.first(), f.second);
+
+  std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+      targetTriple, cpu, features.getString(), {}, {}));
   llvmModule->setDataLayout(machine->createDataLayout());
   llvmModule->setTargetTriple(targetTriple);
   return false;
@@ -194,7 +214,7 @@ ExecutionEngine::ExecutionEngine(bool enableObjectCache,
                        : nullptr) {}
 
 Expected<std::unique_ptr<ExecutionEngine>> ExecutionEngine::create(
-    ModuleOp m, std::function<Error(llvm::Module *)> transformer,
+    ModuleOp m, llvm::function_ref<Error(llvm::Module *)> transformer,
     Optional<llvm::CodeGenOpt::Level> jitCodeGenOptLevel,
     ArrayRef<StringRef> sharedLibPaths, bool enableObjectCache,
     bool enableGDBNotificationListener, bool enablePerfNotificationListener) {

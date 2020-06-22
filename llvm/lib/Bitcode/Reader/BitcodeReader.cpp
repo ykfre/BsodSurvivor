@@ -152,8 +152,7 @@ static bool convertToString(ArrayRef<uint64_t> Record, unsigned Idx,
   if (Idx > Record.size())
     return true;
 
-  for (unsigned i = Idx, e = Record.size(); i != e; ++i)
-    Result += (char)Record[i];
+  Result.append(Record.begin() + Idx, Record.end());
   return false;
 }
 
@@ -577,8 +576,11 @@ public:
 
   /// Main interface to parsing a bitcode buffer.
   /// \returns true if an error occurred.
-  Error parseBitcodeInto(Module *M, bool ShouldLazyLoadMetadata = false,
-                         bool IsImporting = false);
+  Error parseBitcodeInto(
+      Module *M, bool ShouldLazyLoadMetadata = false, bool IsImporting = false,
+      DataLayoutCallbackTy DataLayoutCallback = [](std::string) {
+        return None;
+      });
 
   static uint64_t decodeSignRotatedValue(uint64_t V);
 
@@ -723,7 +725,9 @@ private:
   /// a corresponding error code.
   Error parseAlignmentValue(uint64_t Exponent, MaybeAlign &Alignment);
   Error parseAttrKind(uint64_t Code, Attribute::AttrKind *Kind);
-  Error parseModule(uint64_t ResumeBit, bool ShouldLazyLoadMetadata = false);
+  Error parseModule(
+      uint64_t ResumeBit, bool ShouldLazyLoadMetadata = false,
+      DataLayoutCallbackTy DataLayoutCallback = [](StringRef) { return None; });
 
   Error parseComdatRecord(ArrayRef<uint64_t> Record);
   Error parseGlobalVarRecord(ArrayRef<uint64_t> Record);
@@ -1464,6 +1468,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NoCfCheck;
   case bitc::ATTR_KIND_NO_UNWIND:
     return Attribute::NoUnwind;
+  case bitc::ATTR_KIND_NULL_POINTER_IS_VALID:
+    return Attribute::NullPointerIsValid;
   case bitc::ATTR_KIND_OPT_FOR_FUZZING:
     return Attribute::OptForFuzzing;
   case bitc::ATTR_KIND_OPTIMIZE_FOR_SIZE:
@@ -1649,7 +1655,7 @@ Error BitcodeReader::parseAttributeGroupBlock() {
         }
       }
 
-      UpgradeFramePointerAttributes(B);
+      UpgradeAttributes(B);
       MAttributeGroups[GrpID] = AttributeList::get(Context, Idx, B);
       break;
     }
@@ -1714,6 +1720,9 @@ Error BitcodeReader::parseTypeTableBody() {
       break;
     case bitc::TYPE_CODE_HALF:     // HALF
       ResultTy = Type::getHalfTy(Context);
+      break;
+    case bitc::TYPE_CODE_BFLOAT:    // BFLOAT
+      ResultTy = Type::getBFloatTy(Context);
       break;
     case bitc::TYPE_CODE_FLOAT:     // FLOAT
       ResultTy = Type::getFloatTy(Context);
@@ -2424,6 +2433,9 @@ Error BitcodeReader::parseConstants() {
       if (CurTy->isHalfTy())
         V = ConstantFP::get(Context, APFloat(APFloat::IEEEhalf(),
                                              APInt(16, (uint16_t)Record[0])));
+      else if (CurTy->isBFloatTy())
+        V = ConstantFP::get(Context, APFloat(APFloat::BFloat(),
+                                             APInt(16, (uint32_t)Record[0])));
       else if (CurTy->isFloatTy())
         V = ConstantFP::get(Context, APFloat(APFloat::IEEEsingle(),
                                              APInt(32, (uint32_t)Record[0])));
@@ -2521,21 +2533,27 @@ Error BitcodeReader::parseConstants() {
       } else if (EltTy->isHalfTy()) {
         SmallVector<uint16_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
+      } else if (EltTy->isBFloatTy()) {
+        SmallVector<uint16_t, 16> Elts(Record.begin(), Record.end());
+        if (isa<VectorType>(CurTy))
+          V = ConstantDataVector::getFP(EltTy, Elts);
+        else
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else if (EltTy->isFloatTy()) {
         SmallVector<uint32_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else if (EltTy->isDoubleTy()) {
         SmallVector<uint64_t, 16> Elts(Record.begin(), Record.end());
         if (isa<VectorType>(CurTy))
-          V = ConstantDataVector::getFP(Context, Elts);
+          V = ConstantDataVector::getFP(EltTy, Elts);
         else
-          V = ConstantDataArray::getFP(Context, Elts);
+          V = ConstantDataArray::getFP(EltTy, Elts);
       } else {
         return error("Invalid type for value");
       }
@@ -2984,6 +3002,7 @@ Error BitcodeReader::globalCleanup() {
     return error("Malformed global initializer set");
 
   // Look for intrinsic functions which need to be upgraded at some point
+  // and functions that need to have their function attributes upgraded.
   for (Function &F : *TheModule) {
     MDLoader->upgradeDebugIntrinsics(F);
     Function *NewFn;
@@ -2994,6 +3013,8 @@ Error BitcodeReader::globalCleanup() {
       // loaded in the same LLVMContext (LTO scenario). In this case we should
       // remangle intrinsics names as well.
       RemangledIntrinsics[&F] = Remangled.getValue();
+    // Look for functions that rely on old function attribute behavior.
+    UpgradeFunctionAttributes(F);
   }
 
   // Look for global variables which need to be renamed.
@@ -3419,7 +3440,8 @@ Error BitcodeReader::parseGlobalIndirectSymbolRecord(
 }
 
 Error BitcodeReader::parseModule(uint64_t ResumeBit,
-                                 bool ShouldLazyLoadMetadata) {
+                                 bool ShouldLazyLoadMetadata,
+                                 DataLayoutCallbackTy DataLayoutCallback) {
   if (ResumeBit) {
     if (Error JumpFailed = Stream.JumpToBit(ResumeBit))
       return JumpFailed;
@@ -3427,6 +3449,26 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
     return Err;
 
   SmallVector<uint64_t, 64> Record;
+
+  // Parts of bitcode parsing depend on the datalayout.  Make sure we
+  // finalize the datalayout before we run any of that code.
+  bool ResolvedDataLayout = false;
+  auto ResolveDataLayout = [&] {
+    if (ResolvedDataLayout)
+      return;
+
+    // datalayout and triple can't be parsed after this point.
+    ResolvedDataLayout = true;
+
+    // Upgrade data layout string.
+    std::string DL = llvm::UpgradeDataLayoutString(
+        TheModule->getDataLayoutStr(), TheModule->getTargetTriple());
+    TheModule->setDataLayout(DL);
+
+    if (auto LayoutOverride =
+            DataLayoutCallback(TheModule->getTargetTriple()))
+      TheModule->setDataLayout(*LayoutOverride);
+  };
 
   // Read all the records for this module.
   while (true) {
@@ -3439,6 +3481,7 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
     case BitstreamEntry::Error:
       return error("Malformed block");
     case BitstreamEntry::EndBlock:
+      ResolveDataLayout();
       return globalCleanup();
 
     case BitstreamEntry::SubBlock:
@@ -3503,6 +3546,8 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
           return Err;
         break;
       case bitc::FUNCTION_BLOCK_ID:
+        ResolveDataLayout();
+
         // If this is the first function body we've seen, reverse the
         // FunctionsWithBodies list.
         if (!SeenFirstFunctionBody) {
@@ -3589,6 +3634,8 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
       break;
     }
     case bitc::MODULE_CODE_TRIPLE: {  // TRIPLE: [strchr x N]
+      if (ResolvedDataLayout)
+        return error("target triple too late in module");
       std::string S;
       if (convertToString(Record, 0, S))
         return error("Invalid record");
@@ -3596,6 +3643,8 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
       break;
     }
     case bitc::MODULE_CODE_DATALAYOUT: {  // DATALAYOUT: [strchr x N]
+      if (ResolvedDataLayout)
+        return error("datalayout too late in module");
       std::string S;
       if (convertToString(Record, 0, S))
         return error("Invalid record");
@@ -3640,6 +3689,7 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
         return Err;
       break;
     case bitc::MODULE_CODE_FUNCTION:
+      ResolveDataLayout();
       if (Error Err = parseFunctionRecord(Record))
         return Err;
       break;
@@ -3667,20 +3717,16 @@ Error BitcodeReader::parseModule(uint64_t ResumeBit,
       break;
     }
     Record.clear();
-
-    // Upgrade data layout string.
-    std::string DL = llvm::UpgradeDataLayoutString(
-        TheModule->getDataLayoutStr(), TheModule->getTargetTriple());
-    TheModule->setDataLayout(DL);
   }
 }
 
 Error BitcodeReader::parseBitcodeInto(Module *M, bool ShouldLazyLoadMetadata,
-                                      bool IsImporting) {
+                                      bool IsImporting,
+                                      DataLayoutCallbackTy DataLayoutCallback) {
   TheModule = M;
   MDLoader = MetadataLoader(Stream, *M, ValueList, IsImporting,
                             [&](unsigned ID) { return getTypeByID(ID); });
-  return parseModule(0, ShouldLazyLoadMetadata);
+  return parseModule(0, ShouldLazyLoadMetadata, DataLayoutCallback);
 }
 
 Error BitcodeReader::typeCheckLoadStoreInst(Type *ValType, Type *PtrType) {
@@ -4782,7 +4828,13 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       const DataLayout &DL = TheModule->getDataLayout();
       unsigned AS = DL.getAllocaAddrSpace();
 
-      AllocaInst *AI = new AllocaInst(Ty, AS, Size, Align);
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Ty->isSized(&Visited))
+        return error("alloca of unsized type");
+      if (!Align)
+        Align = DL.getPrefTypeAlign(Ty);
+
+      AllocaInst *AI = new AllocaInst(Ty, AS, Size, *Align);
       AI->setUsedWithInAlloca(InAlloca);
       AI->setSwiftError(SwiftError);
       I = AI;
@@ -4813,7 +4865,12 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new LoadInst(Ty, Op, "", Record[OpNum + 1], Align);
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Ty->isSized(&Visited))
+        return error("load of unsized type");
+      if (!Align)
+        Align = TheModule->getDataLayout().getABITypeAlign(Ty);
+      I = new LoadInst(Ty, Op, "", Record[OpNum + 1], *Align);
       InstructionList.push_back(I);
       break;
     }
@@ -4850,7 +4907,9 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new LoadInst(Ty, Op, "", Record[OpNum + 1], Align, Ordering, SSID);
+      if (!Align)
+        return error("Alignment missing from atomic load");
+      I = new LoadInst(Ty, Op, "", Record[OpNum + 1], *Align, Ordering, SSID);
       InstructionList.push_back(I);
       break;
     }
@@ -4872,7 +4931,12 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new StoreInst(Val, Ptr, Record[OpNum + 1], Align);
+      SmallPtrSet<Type *, 4> Visited;
+      if (!Align && !Val->getType()->isSized(&Visited))
+        return error("store of unsized type");
+      if (!Align)
+        Align = TheModule->getDataLayout().getABITypeAlign(Val->getType());
+      I = new StoreInst(Val, Ptr, Record[OpNum + 1], *Align);
       InstructionList.push_back(I);
       break;
     }
@@ -4905,7 +4969,9 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       MaybeAlign Align;
       if (Error Err = parseAlignmentValue(Record[OpNum], Align))
         return Err;
-      I = new StoreInst(Val, Ptr, Record[OpNum + 1], Align, Ordering, SSID);
+      if (!Align)
+        return error("Alignment missing from atomic store");
+      I = new StoreInst(Val, Ptr, Record[OpNum + 1], *Align, Ordering, SSID);
       InstructionList.push_back(I);
       break;
     }
@@ -5312,6 +5378,9 @@ Error BitcodeReader::materialize(GlobalValue *GV) {
       stripTBAA(F->getParent());
     }
   }
+
+  // Look for functions that rely on old function attribute behavior.
+  UpgradeFunctionAttributes(*F);
 
   // Bring in any functions that this function forward-referenced via
   // blockaddresses.
@@ -5741,6 +5810,41 @@ static void parseTypeIdSummaryRecord(ArrayRef<uint64_t> Record,
     parseWholeProgramDevirtResolution(Record, Strtab, Slot, TypeId);
 }
 
+static std::vector<FunctionSummary::ParamAccess>
+parseParamAccesses(ArrayRef<uint64_t> Record) {
+  auto ReadRange = [&]() {
+    APInt Lower(FunctionSummary::ParamAccess::RangeWidth,
+                BitcodeReader::decodeSignRotatedValue(Record.front()));
+    Record = Record.drop_front();
+    APInt Upper(FunctionSummary::ParamAccess::RangeWidth,
+                BitcodeReader::decodeSignRotatedValue(Record.front()));
+    Record = Record.drop_front();
+    ConstantRange Range{Lower, Upper};
+    assert(!Range.isFullSet());
+    assert(!Range.isUpperSignWrapped());
+    return Range;
+  };
+
+  std::vector<FunctionSummary::ParamAccess> PendingParamAccesses;
+  while (!Record.empty()) {
+    PendingParamAccesses.emplace_back();
+    FunctionSummary::ParamAccess &ParamAccess = PendingParamAccesses.back();
+    ParamAccess.ParamNo = Record.front();
+    Record = Record.drop_front();
+    ParamAccess.Use = ReadRange();
+    ParamAccess.Calls.resize(Record.front());
+    Record = Record.drop_front();
+    for (auto &Call : ParamAccess.Calls) {
+      Call.ParamNo = Record.front();
+      Record = Record.drop_front();
+      Call.Callee = Record.front();
+      Record = Record.drop_front();
+      Call.Offsets = ReadRange();
+    }
+  }
+  return PendingParamAccesses;
+}
+
 void ModuleSummaryIndexBitcodeReader::parseTypeIdCompatibleVtableInfo(
     ArrayRef<uint64_t> Record, size_t &Slot,
     TypeIdCompatibleVtableInfo &TypeId) {
@@ -5818,6 +5922,7 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       PendingTypeCheckedLoadVCalls;
   std::vector<FunctionSummary::ConstVCall> PendingTypeTestAssumeConstVCalls,
       PendingTypeCheckedLoadConstVCalls;
+  std::vector<FunctionSummary::ParamAccess> PendingParamAccesses;
 
   while (true) {
     Expected<BitstreamEntry> MaybeEntry = Stream.advanceSkippingSubblocks();
@@ -5916,7 +6021,8 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           std::move(PendingTypeTestAssumeVCalls),
           std::move(PendingTypeCheckedLoadVCalls),
           std::move(PendingTypeTestAssumeConstVCalls),
-          std::move(PendingTypeCheckedLoadConstVCalls));
+          std::move(PendingTypeCheckedLoadConstVCalls),
+          std::move(PendingParamAccesses));
       auto VIAndOriginalGUID = getValueInfoFromValueId(ValueID);
       FS->setModulePath(getThisModule()->first());
       FS->setOriginalName(VIAndOriginalGUID.second);
@@ -6058,7 +6164,8 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
           std::move(PendingTypeTestAssumeVCalls),
           std::move(PendingTypeCheckedLoadVCalls),
           std::move(PendingTypeTestAssumeConstVCalls),
-          std::move(PendingTypeCheckedLoadConstVCalls));
+          std::move(PendingTypeCheckedLoadConstVCalls),
+          std::move(PendingParamAccesses));
       LastSeenSummary = FS.get();
       LastSeenGUID = VI.getGUID();
       FS->setModulePath(ModuleIdMap[ModuleId]);
@@ -6176,6 +6283,15 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
     case bitc::FS_TYPE_ID_METADATA:
       parseTypeIdCompatibleVtableSummaryRecord(Record);
       break;
+
+    case bitc::FS_BLOCK_COUNT:
+      TheIndex.addBlockCount(Record[0]);
+      break;
+
+    case bitc::FS_PARAM_ACCESS: {
+      PendingParamAccesses = parseParamAccesses(Record);
+      break;
+    }
     }
   }
   llvm_unreachable("Exit infinite loop");
@@ -6447,7 +6563,8 @@ llvm::getBitcodeFileContents(MemoryBufferRef Buffer) {
 /// everything.
 Expected<std::unique_ptr<Module>>
 BitcodeModule::getModuleImpl(LLVMContext &Context, bool MaterializeAll,
-                             bool ShouldLazyLoadMetadata, bool IsImporting) {
+                             bool ShouldLazyLoadMetadata, bool IsImporting,
+                             DataLayoutCallbackTy DataLayoutCallback) {
   BitstreamCursor Stream(Buffer);
 
   std::string ProducerIdentification;
@@ -6472,8 +6589,8 @@ BitcodeModule::getModuleImpl(LLVMContext &Context, bool MaterializeAll,
   M->setMaterializer(R);
 
   // Delay parsing Metadata if ShouldLazyLoadMetadata is true.
-  if (Error Err =
-          R->parseBitcodeInto(M.get(), ShouldLazyLoadMetadata, IsImporting))
+  if (Error Err = R->parseBitcodeInto(M.get(), ShouldLazyLoadMetadata,
+                                      IsImporting, DataLayoutCallback))
     return std::move(Err);
 
   if (MaterializeAll) {
@@ -6491,7 +6608,8 @@ BitcodeModule::getModuleImpl(LLVMContext &Context, bool MaterializeAll,
 Expected<std::unique_ptr<Module>>
 BitcodeModule::getLazyModule(LLVMContext &Context, bool ShouldLazyLoadMetadata,
                              bool IsImporting) {
-  return getModuleImpl(Context, false, ShouldLazyLoadMetadata, IsImporting);
+  return getModuleImpl(Context, false, ShouldLazyLoadMetadata, IsImporting,
+                       [](StringRef) { return None; });
 }
 
 // Parse the specified bitcode buffer and merge the index into CombinedIndex.
@@ -6657,19 +6775,21 @@ Expected<std::unique_ptr<Module>> llvm::getOwningLazyBitcodeModule(
 }
 
 Expected<std::unique_ptr<Module>>
-BitcodeModule::parseModule(LLVMContext &Context) {
-  return getModuleImpl(Context, true, false, false);
+BitcodeModule::parseModule(LLVMContext &Context,
+                           DataLayoutCallbackTy DataLayoutCallback) {
+  return getModuleImpl(Context, true, false, false, DataLayoutCallback);
   // TODO: Restore the use-lists to the in-memory state when the bitcode was
   // written.  We must defer until the Module has been fully materialized.
 }
 
-Expected<std::unique_ptr<Module>> llvm::parseBitcodeFile(MemoryBufferRef Buffer,
-                                                         LLVMContext &Context) {
+Expected<std::unique_ptr<Module>>
+llvm::parseBitcodeFile(MemoryBufferRef Buffer, LLVMContext &Context,
+                       DataLayoutCallbackTy DataLayoutCallback) {
   Expected<BitcodeModule> BM = getSingleModule(Buffer);
   if (!BM)
     return BM.takeError();
 
-  return BM->parseModule(Context);
+  return BM->parseModule(Context, DataLayoutCallback);
 }
 
 Expected<std::string> llvm::getBitcodeTargetTriple(MemoryBufferRef Buffer) {

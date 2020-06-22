@@ -606,6 +606,12 @@ TEST_F(FormatTest, FormatShortBracedStatements) {
   verifyFormat("if CONSTEXPR (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("while (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("for (;;) { f(); }", AllowSimpleBracedStatements);
+  verifyFormat("if (true) { fffffffffffffffffffffff(); }",
+               AllowSimpleBracedStatements);
+  verifyFormat("if (true) {\n"
+               "  ffffffffffffffffffffffff();\n"
+               "}",
+               AllowSimpleBracedStatements);
   verifyFormat("if (true) {\n"
                "  ffffffffffffffffffffffffffffffffffffffffffffffffffffff();\n"
                "}",
@@ -681,6 +687,13 @@ TEST_F(FormatTest, FormatShortBracedStatements) {
   verifyFormat("if CONSTEXPR (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("while (true) { f(); }", AllowSimpleBracedStatements);
   verifyFormat("for (;;) { f(); }", AllowSimpleBracedStatements);
+  verifyFormat("if (true) { fffffffffffffffffffffff(); }",
+               AllowSimpleBracedStatements);
+  verifyFormat("if (true)\n"
+               "{\n"
+               "  ffffffffffffffffffffffff();\n"
+               "}",
+               AllowSimpleBracedStatements);
   verifyFormat("if (true)\n"
                "{\n"
                "  ffffffffffffffffffffffffffffffffffffffffffffffffffffff();\n"
@@ -745,7 +758,9 @@ TEST_F(FormatTest, ShortBlocksInMacrosDontMergeWithCodeAfterMacro) {
   Style.BreakBeforeBraces = FormatStyle::BS_Allman;
   EXPECT_EQ("#define A                                                  \\\n"
             "  if (HANDLEwernufrnuLwrmviferuvnierv)                     \\\n"
-            "  { RET_ERR1_ANUIREUINERUIFNIOAerwfwrvnuier; }\n"
+            "  {                                                        \\\n"
+            "    RET_ERR1_ANUIREUINERUIFNIOAerwfwrvnuier;               \\\n"
+            "  }\n"
             "X;",
             format("#define A \\\n"
                    "   if (HANDLEwernufrnuLwrmviferuvnierv) { \\\n"
@@ -994,6 +1009,9 @@ TEST_F(FormatTest, ForEachLoops) {
                "#define Q_FOREACH (x, y)\n"
                "#define BOOST_FOREACH (x, y)\n"
                "#define UNKNOWN_FOREACH (x, y)\n");
+
+  // handle microsoft non standard extension
+  verifyFormat("for each (char c in x->MyStringProperty)");
 }
 
 TEST_F(FormatTest, FormatsWhileLoop) {
@@ -1701,6 +1719,22 @@ TEST_F(FormatTest, MultiLineControlStatements) {
             "  baz();\n"
             "}",
             format("try{foo();}catch(...){baz();}", Style));
+}
+
+TEST_F(FormatTest, BeforeWhile) {
+  FormatStyle Style = getLLVMStyle();
+  Style.BreakBeforeBraces = FormatStyle::BraceBreakingStyle::BS_Custom;
+
+  verifyFormat("do {\n"
+               "  foo();\n"
+               "} while (1);",
+               Style);
+  Style.BraceWrapping.BeforeWhile = true;
+  verifyFormat("do {\n"
+               "  foo();\n"
+               "}\n"
+               "while (1);",
+               Style);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2539,6 +2573,43 @@ TEST_F(FormatTest, FormatsExternC) {
                Style);
 }
 
+TEST_F(FormatTest, IndentExternBlockStyle) {
+  FormatStyle Style = getLLVMStyle();
+  Style.IndentWidth = 2;
+
+  Style.IndentExternBlock = FormatStyle::IEBS_Indent;
+  verifyFormat("extern \"C\" { /*9*/\n}", Style);
+  verifyFormat("extern \"C\" {\n"
+               "  int foo10();\n"
+               "}",
+               Style);
+
+  Style.IndentExternBlock = FormatStyle::IEBS_NoIndent;
+  verifyFormat("extern \"C\" { /*11*/\n}", Style);
+  verifyFormat("extern \"C\" {\n"
+               "int foo12();\n"
+               "}",
+               Style);
+
+  Style.IndentExternBlock = FormatStyle::IEBS_AfterExternBlock;
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterExternBlock = true;
+  verifyFormat("extern \"C\"\n{ /*13*/\n}", Style);
+  verifyFormat("extern \"C\"\n{\n"
+               "  int foo14();\n"
+               "}",
+               Style);
+
+  Style.IndentExternBlock = FormatStyle::IEBS_AfterExternBlock;
+  Style.BreakBeforeBraces = FormatStyle::BS_Custom;
+  Style.BraceWrapping.AfterExternBlock = false;
+  verifyFormat("extern \"C\" { /*15*/\n}", Style);
+  verifyFormat("extern \"C\" {\n"
+               "int foo16();\n"
+               "}",
+               Style);
+}
+
 TEST_F(FormatTest, FormatsInlineASM) {
   verifyFormat("asm(\"xyz\" : \"=a\"(a), \"=d\"(b) : \"a\"(data));");
   verifyFormat("asm(\"nop\" ::: \"memory\");");
@@ -2606,6 +2677,18 @@ TEST_F(FormatTest, FormatTryCatch) {
 
   // Incomplete try-catch blocks.
   verifyIncompleteFormat("try {} catch (");
+}
+
+TEST_F(FormatTest, FormatTryAsAVariable) {
+  verifyFormat("int try;");
+  verifyFormat("int try, size;");
+  verifyFormat("try = foo();");
+  verifyFormat("if (try < size) {\n  return true;\n}");
+
+  verifyFormat("int catch;");
+  verifyFormat("int catch, size;");
+  verifyFormat("catch = foo();");
+  verifyFormat("if (catch < size) {\n  return true;\n}");
 }
 
 TEST_F(FormatTest, FormatSEHTryCatch) {
@@ -4265,6 +4348,9 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
                "                  > ccccc) {\n"
                "}",
                Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "       && bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;",
+               Style);
   verifyFormat("return (a)\n"
                "       // comment\n"
                "       + b;",
@@ -4293,7 +4379,7 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
 
   Style.ColumnLimit = 60;
   verifyFormat("zzzzzzzzzz\n"
-               "    = bbbbbbbbbbbbbbbbb\n"
+               "    = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
                "      >> aaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaaaaaaaaaaaaa);",
                Style);
 
@@ -4302,7 +4388,7 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
   Style.TabWidth = 4;
   Style.UseTab = FormatStyle::UT_Always;
   Style.AlignAfterOpenBracket = FormatStyle::BAS_DontAlign;
-  Style.AlignOperands = false;
+  Style.AlignOperands = FormatStyle::OAS_DontAlign;
   EXPECT_EQ("return someVeryVeryLongConditionThatBarelyFitsOnALine\n"
             "\t&& (someOtherLongishConditionPart1\n"
             "\t\t|| someOtherEvenLongerNestedConditionPart2);",
@@ -4310,6 +4396,108 @@ TEST_F(FormatTest, ExpressionIndentationBreakingBeforeOperators) {
                    "(someOtherLongishConditionPart1 || "
                    "someOtherEvenLongerNestedConditionPart2);",
                    Style));
+}
+
+TEST_F(FormatTest, ExpressionIndentationStrictAlign) {
+  FormatStyle Style = getLLVMStyle();
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_All;
+  Style.AlignOperands = FormatStyle::OAS_AlignAfterOperator;
+
+  verifyFormat("bool value = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                   + aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                   + aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "              == aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                         * bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+               "                     + bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+               "          && aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                     * aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "                 > ccccccccccccccccccccccccccccccccccccccccc;",
+               Style);
+  verifyFormat("if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "            * aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "        + aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    == bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) {\n}",
+               Style);
+  verifyFormat("if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "        + aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "              * aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    == bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) {\n}",
+               Style);
+  verifyFormat("if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    == aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "               * aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "           + bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) {\n}",
+               Style);
+  verifyFormat("if () {\n"
+               "} else if (aaaaa\n"
+               "           && bbbbb // break\n"
+               "                  > ccccc) {\n"
+               "}",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    && bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;",
+               Style);
+  verifyFormat("return (a)\n"
+               "     // comment\n"
+               "     + b;",
+               Style);
+  verifyFormat(
+      "int aaaaaa = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+      "               * bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+      "           + cc;",
+      Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "     : bbbbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                        : 3333333333333333;",
+               Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaa    ? bbbbbbbbbbbbbbbbbb\n"
+      "                           : ccccccccccccccc ? dddddddddddddddddd\n"
+      "                                             : eeeeeeeeeeeeeeeeee)\n"
+      "     : bbbbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat("aaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "    = aaaaaaaaaaaaaaaaaaaa + aaaaaaaaaaaaaaaaaaaaaaaaaaaa;",
+               Style);
+
+  verifyFormat("return boost::fusion::at_c<0>(iiii).second\n"
+               "    == boost::fusion::at_c<1>(iiii).second;",
+               Style);
+
+  Style.ColumnLimit = 60;
+  verifyFormat("zzzzzzzzzzzzz\n"
+               "    = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+               "   >> aaaaaaaaaaaaaaaa(aaaaaaaaaaaaaaaaaaaaaaaaaa);",
+               Style);
+
+  // Forced by comments.
+  Style.ColumnLimit = 80;
+  verifyFormat(
+      "unsigned ContentSize\n"
+      "    = sizeof(int16_t) // DWARF ARange version number\n"
+      "    + sizeof(int32_t) // Offset of CU in the .debug_info section\n"
+      "    + sizeof(int8_t)  // Pointer Size (in bytes)\n"
+      "    + sizeof(int8_t); // Segment Size (in bytes)",
+      Style);
+
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_NonAssignment;
+  verifyFormat(
+      "unsigned ContentSize =\n"
+      "    sizeof(int16_t)   // DWARF ARange version number\n"
+      "    + sizeof(int32_t) // Offset of CU in the .debug_info section\n"
+      "    + sizeof(int8_t)  // Pointer Size (in bytes)\n"
+      "    + sizeof(int8_t); // Segment Size (in bytes)",
+      Style);
+
+  Style.BreakBeforeBinaryOperators = FormatStyle::BOS_None;
+  verifyFormat(
+      "unsigned ContentSize =\n"
+      "    sizeof(int16_t)   // DWARF ARange version number\n"
+      "    + sizeof(int32_t) // Offset of CU in the .debug_info section\n"
+      "    + sizeof(int8_t)  // Pointer Size (in bytes)\n"
+      "    + sizeof(int8_t); // Segment Size (in bytes)",
+      Style);
 }
 
 TEST_F(FormatTest, EnforcedOperatorWraps) {
@@ -4323,7 +4511,7 @@ TEST_F(FormatTest, EnforcedOperatorWraps) {
 
 TEST_F(FormatTest, NoOperandAlignment) {
   FormatStyle Style = getLLVMStyle();
-  Style.AlignOperands = false;
+  Style.AlignOperands = FormatStyle::OAS_DontAlign;
   verifyFormat("aaaaaaaaaaaaaa(aaaaaaaaaaaa,\n"
                "               aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa +\n"
                "                   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);",
@@ -5823,17 +6011,17 @@ TEST_F(FormatTest, ParenthesesAndOperandAlignment) {
                "          bbbbbbbbbbbbbbbbbbbbbb);",
                Style);
   Style.AlignAfterOpenBracket = FormatStyle::BAS_Align;
-  Style.AlignOperands = false;
+  Style.AlignOperands = FormatStyle::OAS_DontAlign;
   verifyFormat("int a = f(aaaaaaaaaaaaaaaaaaaaaa &&\n"
                "          bbbbbbbbbbbbbbbbbbbbbb);",
                Style);
   Style.AlignAfterOpenBracket = FormatStyle::BAS_DontAlign;
-  Style.AlignOperands = true;
+  Style.AlignOperands = FormatStyle::OAS_Align;
   verifyFormat("int a = f(aaaaaaaaaaaaaaaaaaaaaa &&\n"
                "          bbbbbbbbbbbbbbbbbbbbbb);",
                Style);
   Style.AlignAfterOpenBracket = FormatStyle::BAS_DontAlign;
-  Style.AlignOperands = false;
+  Style.AlignOperands = FormatStyle::OAS_DontAlign;
   verifyFormat("int a = f(aaaaaaaaaaaaaaaaaaaaaa &&\n"
                "    bbbbbbbbbbbbbbbbbbbbbb);",
                Style);
@@ -5975,6 +6163,124 @@ TEST_F(FormatTest, BreaksConditionalExpressions) {
                "                     // comment\n"
                "                     ? a = b\n"
                "                     : a;");
+
+  // Chained conditionals
+  FormatStyle Style = getLLVMStyle();
+  Style.ColumnLimit = 70;
+  Style.AlignOperands = FormatStyle::OAS_Align;
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                        : 3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "       : bbbbbbbbbb     ? 2222222222222222\n"
+               "                        : 3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaa         ? 1111111111111111\n"
+               "       : bbbbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                          : 3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "       : bbbbbbbbbbbbbb ? 222222\n"
+               "                        : 333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+               "       : cccccccccccccc ? 3333333333333333\n"
+               "                        : 4444444444444444;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? (aaa ? bbb : ccc)\n"
+               "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                        : 3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+               "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                        : (aaa ? bbb : ccc);",
+               Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : cccccccccccccccccc)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : cccccccccccccccccc)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? a = (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : dddddddddddddddddd)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? a + (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : dddddddddddddddddd)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? 1111111111111111\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : a + (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : dddddddddddddddddd)\n",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? 1111111111111111\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : cccccccccccccccccc);",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                           : ccccccccccccccc ? dddddddddddddddddd\n"
+      "                                             : eeeeeeeeeeeeeeeeee)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaa    ? bbbbbbbbbbbbbbbbbb\n"
+      "                           : ccccccccccccccc ? dddddddddddddddddd\n"
+      "                                             : eeeeeeeeeeeeeeeeee)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                           : cccccccccccc    ? dddddddddddddddddd\n"
+      "                                             : eeeeeeeeeeeeeeeeee)\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                                             : cccccccccccccccccc\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+      "                          : cccccccccccccccc ? dddddddddddddddddd\n"
+      "                                             : eeeeeeeeeeeeeeeeee\n"
+      "       : bbbbbbbbbbbbbb ? 2222222222222222\n"
+      "                        : 3333333333333333;",
+      Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaa\n"
+               "           ? (aaaaaaaaaaaaaaaaaa   ? bbbbbbbbbbbbbbbbbb\n"
+               "              : cccccccccccccccccc ? dddddddddddddddddd\n"
+               "                                   : eeeeeeeeeeeeeeeeee)\n"
+               "       : bbbbbbbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                             : 3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaa\n"
+               "           ? aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb\n"
+               "             : cccccccccccccccc ? dddddddddddddddddd\n"
+               "                                : eeeeeeeeeeeeeeeeee\n"
+               "       : bbbbbbbbbbbbbbbbbbbbbbb ? 2222222222222222\n"
+               "                                 : 3333333333333333;",
+               Style);
 }
 
 TEST_F(FormatTest, BreaksConditionalExpressionsAfterOperator) {
@@ -6079,6 +6385,121 @@ TEST_F(FormatTest, BreaksConditionalExpressionsAfterOperator) {
   verifyFormat("return aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ?\n"
                "           aaaaa :\n"
                "           bbbbbbbbbbbbbbb + cccccccccccccccc;",
+               Style);
+
+  // Chained conditionals
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+               "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                          3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+               "       bbbbbbbbbb       ? 2222222222222222 :\n"
+               "                          3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaa       ? 1111111111111111 :\n"
+               "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                          3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+               "       bbbbbbbbbbbbbbbb ? 222222 :\n"
+               "                          333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+               "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "       cccccccccccccccc ? 3333333333333333 :\n"
+               "                          4444444444444444;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? (aaa ? bbb : ccc) :\n"
+               "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                          3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+               "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                          (aaa ? bbb : ccc);",
+               Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               cccccccccccccccccc) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               cccccccccccccccccc) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? a = (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               dddddddddddddddddd) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? a + (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               dddddddddddddddddd) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaa        ? 1111111111111111 :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          a + (aaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               dddddddddddddddddd)\n",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? 1111111111111111 :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               cccccccccccccccccc);",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                           ccccccccccccccccc ? dddddddddddddddddd :\n"
+      "                                               eeeeeeeeeeeeeeeeee) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                           ccccccccccccc     ? dddddddddddddddddd :\n"
+      "                                               eeeeeeeeeeeeeeeeee) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? (aaaaaaaaaaaaa     ? bbbbbbbbbbbbbbbbbb :\n"
+      "                           ccccccccccccccccc ? dddddddddddddddddd :\n"
+      "                                               eeeeeeeeeeeeeeeeee) :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                                               cccccccccccccccccc :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat(
+      "return aaaaaaaaaaaaaaaa ? aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+      "                          cccccccccccccccccc ? dddddddddddddddddd :\n"
+      "                                               eeeeeeeeeeeeeeeeee :\n"
+      "       bbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+      "                          3333333333333333;",
+      Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaa ?\n"
+               "           (aaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+               "            cccccccccccccccccc ? dddddddddddddddddd :\n"
+               "                                 eeeeeeeeeeeeeeeeee) :\n"
+               "       bbbbbbbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                               3333333333333333;",
+               Style);
+  verifyFormat("return aaaaaaaaaaaaaaaaaaaaa ?\n"
+               "           aaaaaaaaaaaaaaaaaaaa ? bbbbbbbbbbbbbbbbbb :\n"
+               "           cccccccccccccccccccc ? dddddddddddddddddd :\n"
+               "                                  eeeeeeeeeeeeeeeeee :\n"
+               "       bbbbbbbbbbbbbbbbbbbbb ? 2222222222222222 :\n"
+               "                               3333333333333333;",
                Style);
 }
 
@@ -7667,6 +8088,8 @@ TEST_F(FormatTest, UnderstandsSquareAttributes) {
   verifyFormat("@[ [NSArray class] ];");
   verifyFormat("@[ [foo enum] ];");
 
+  verifyFormat("template <typename T> [[nodiscard]] int a() { return 1; }");
+
   // Make sure we do not parse attributes as lambda introducers.
   FormatStyle MultiLineFunctions = getLLVMStyle();
   MultiLineFunctions.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
@@ -7674,6 +8097,61 @@ TEST_F(FormatTest, UnderstandsSquareAttributes) {
                "  return 42;\n"
                "}\n",
                MultiLineFunctions);
+}
+
+TEST_F(FormatTest, AttributeClass) {
+  FormatStyle Style = getChromiumStyle(FormatStyle::LK_Cpp);
+  verifyFormat("class S {\n"
+               "  S(S&&) = default;\n"
+               "};",
+               Style);
+  verifyFormat("class [[nodiscard]] S {\n"
+               "  S(S&&) = default;\n"
+               "};",
+               Style);
+  verifyFormat("class __attribute((maybeunused)) S {\n"
+               "  S(S&&) = default;\n"
+               "};",
+               Style);
+  verifyFormat("struct S {\n"
+               "  S(S&&) = default;\n"
+               "};",
+               Style);
+  verifyFormat("struct [[nodiscard]] S {\n"
+               "  S(S&&) = default;\n"
+               "};",
+               Style);
+}
+
+TEST_F(FormatTest, AttributesAfterMacro) {
+  FormatStyle Style = getLLVMStyle();
+  verifyFormat("MACRO;\n"
+               "__attribute__((maybe_unused)) int foo() {\n"
+               "  //...\n"
+               "}");
+
+  verifyFormat("MACRO;\n"
+               "[[nodiscard]] int foo() {\n"
+               "  //...\n"
+               "}");
+
+  EXPECT_EQ("MACRO\n\n"
+            "__attribute__((maybe_unused)) int foo() {\n"
+            "  //...\n"
+            "}",
+            format("MACRO\n\n"
+                   "__attribute__((maybe_unused)) int foo() {\n"
+                   "  //...\n"
+                   "}"));
+
+  EXPECT_EQ("MACRO\n\n"
+            "[[nodiscard]] int foo() {\n"
+            "  //...\n"
+            "}",
+            format("MACRO\n\n"
+                   "[[nodiscard]] int foo() {\n"
+                   "  //...\n"
+                   "}"));
 }
 
 TEST_F(FormatTest, AttributePenaltyBreaking) {
@@ -11615,6 +12093,58 @@ TEST_F(FormatTest, AlignConsecutiveAssignments) {
                "  x = 1;\n"
                "y = 1;\n",
                Alignment);
+
+  Alignment.ReflowComments = true;
+  Alignment.ColumnLimit = 50;
+  EXPECT_EQ("int x   = 0;\n"
+            "int yy  = 1; /// specificlennospace\n"
+            "int zzz = 2;\n",
+            format("int x   = 0;\n"
+                   "int yy  = 1; ///specificlennospace\n"
+                   "int zzz = 2;\n",
+                   Alignment));
+}
+
+TEST_F(FormatTest, AlignConsecutiveBitFields) {
+  FormatStyle Alignment = getLLVMStyle();
+  Alignment.AlignConsecutiveBitFields = true;
+  verifyFormat("int const a     : 5;\n"
+               "int oneTwoThree : 23;",
+               Alignment);
+
+  // Initializers are allowed starting with c++2a
+  verifyFormat("int const a     : 5 = 1;\n"
+               "int oneTwoThree : 23 = 0;",
+               Alignment);
+
+  Alignment.AlignConsecutiveDeclarations = true;
+  verifyFormat("int const a           : 5;\n"
+               "int       oneTwoThree : 23;",
+               Alignment);
+
+  verifyFormat("int const a           : 5;  // comment\n"
+               "int       oneTwoThree : 23; // comment",
+               Alignment);
+
+  verifyFormat("int const a           : 5 = 1;\n"
+               "int       oneTwoThree : 23 = 0;",
+               Alignment);
+
+  Alignment.AlignConsecutiveAssignments = true;
+  verifyFormat("int const a           : 5  = 1;\n"
+               "int       oneTwoThree : 23 = 0;",
+               Alignment);
+  verifyFormat("int const a           : 5  = {1};\n"
+               "int       oneTwoThree : 23 = 0;",
+               Alignment);
+
+  // Known limitations: ':' is only recognized as a bitfield colon when
+  // followed by a number.
+  /*
+  verifyFormat("int oneTwoThree : SOME_CONSTANT;\n"
+               "int a           : 5;",
+               Alignment);
+  */
 }
 
 TEST_F(FormatTest, AlignConsecutiveDeclarations) {
@@ -13029,9 +13559,9 @@ TEST_F(FormatTest, GetsCorrectBasedOnStyle) {
 TEST_F(FormatTest, ParsesConfigurationBools) {
   FormatStyle Style = {};
   Style.Language = FormatStyle::LK_Cpp;
-  CHECK_PARSE_BOOL(AlignOperands);
   CHECK_PARSE_BOOL(AlignTrailingComments);
   CHECK_PARSE_BOOL(AlignConsecutiveAssignments);
+  CHECK_PARSE_BOOL(AlignConsecutiveBitFields);
   CHECK_PARSE_BOOL(AlignConsecutiveDeclarations);
   CHECK_PARSE_BOOL(AlignConsecutiveMacros);
   CHECK_PARSE_BOOL(AllowAllArgumentsOnNextLine);
@@ -13093,6 +13623,7 @@ TEST_F(FormatTest, ParsesConfigurationBools) {
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, BeforeCatch);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, BeforeElse);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, BeforeLambdaBody);
+  CHECK_PARSE_NESTED_BOOL(BraceWrapping, BeforeWhile);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, IndentBraces);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, SplitEmptyFunction);
   CHECK_PARSE_NESTED_BOOL(BraceWrapping, SplitEmptyRecord);
@@ -13213,6 +13744,17 @@ TEST_F(FormatTest, ParsesConfiguration) {
               FormatStyle::ENAS_Left);
   CHECK_PARSE("AlignEscapedNewlinesLeft: false", AlignEscapedNewlines,
               FormatStyle::ENAS_Right);
+
+  Style.AlignOperands = FormatStyle::OAS_Align;
+  CHECK_PARSE("AlignOperands: DontAlign", AlignOperands,
+              FormatStyle::OAS_DontAlign);
+  CHECK_PARSE("AlignOperands: Align", AlignOperands, FormatStyle::OAS_Align);
+  CHECK_PARSE("AlignOperands: AlignAfterOperator", AlignOperands,
+              FormatStyle::OAS_AlignAfterOperator);
+  // For backward compatibility:
+  CHECK_PARSE("AlignOperands: false", AlignOperands,
+              FormatStyle::OAS_DontAlign);
+  CHECK_PARSE("AlignOperands: true", AlignOperands, FormatStyle::OAS_Align);
 
   Style.UseTab = FormatStyle::UT_ForIndentation;
   CHECK_PARSE("UseTab: Never", UseTab, FormatStyle::UT_Never);
@@ -13367,6 +13909,18 @@ TEST_F(FormatTest, ParsesConfiguration) {
   CHECK_PARSE("AllowShortIfStatementsOnASingleLine: true",
               AllowShortIfStatementsOnASingleLine,
               FormatStyle::SIS_WithoutElse);
+
+  Style.IndentExternBlock = FormatStyle::IEBS_NoIndent;
+  CHECK_PARSE("IndentExternBlock: AfterExternBlock", IndentExternBlock,
+              FormatStyle::IEBS_AfterExternBlock);
+  CHECK_PARSE("IndentExternBlock: Indent", IndentExternBlock,
+              FormatStyle::IEBS_Indent);
+  CHECK_PARSE("IndentExternBlock: NoIndent", IndentExternBlock,
+              FormatStyle::IEBS_NoIndent);
+  CHECK_PARSE("IndentExternBlock: true", IndentExternBlock,
+              FormatStyle::IEBS_Indent);
+  CHECK_PARSE("IndentExternBlock: false", IndentExternBlock,
+              FormatStyle::IEBS_NoIndent);
 
   // FIXME: This is required because parsing a configuration simply overwrites
   // the first N elements of the list instead of resetting it.
@@ -15890,6 +16444,172 @@ TEST_F(FormatTest, OperatorSpacing) {
   verifyFormat("operator&&(int(&&)(), class Foo);", Style);
 }
 
+TEST_F(FormatTest, OperatorPassedAsAFunctionPtr) {
+  FormatStyle Style = getLLVMStyle();
+  // PR46157
+  verifyFormat("foo(operator+, -42);", Style);
+  verifyFormat("foo(operator++, -42);", Style);
+  verifyFormat("foo(operator--, -42);", Style);
+  verifyFormat("foo(-42, operator--);", Style);
+  verifyFormat("foo(-42, operator, );", Style);
+  verifyFormat("foo(operator, , -42);", Style);
+}
+
+TEST_F(FormatTest, VeryLongNamespaceCommentSplit) {
+  // These tests are not in NamespaceFixer because that doesn't
+  // test its interaction with line wrapping
+  FormatStyle Style = getLLVMStyle();
+  Style.ColumnLimit = 80;
+  verifyFormat("namespace {\n"
+               "int i;\n"
+               "int j;\n"
+               "} // namespace",
+               Style);
+
+  verifyFormat("namespace AAA {\n"
+               "int i;\n"
+               "int j;\n"
+               "} // namespace AAA",
+               Style);
+
+  EXPECT_EQ("namespace Averyveryveryverylongnamespace {\n"
+            "int i;\n"
+            "int j;\n"
+            "} // namespace Averyveryveryverylongnamespace",
+            format("namespace Averyveryveryverylongnamespace {\n"
+                   "int i;\n"
+                   "int j;\n"
+                   "}",
+                   Style));
+
+  EXPECT_EQ(
+      "namespace "
+      "would::it::save::you::a::lot::of::time::if_::i::just::gave::up::and_::\n"
+      "    went::mad::now {\n"
+      "int i;\n"
+      "int j;\n"
+      "} // namespace\n"
+      "  // "
+      "would::it::save::you::a::lot::of::time::if_::i::just::gave::up::and_::"
+      "went::mad::now",
+      format("namespace "
+             "would::it::save::you::a::lot::of::time::if_::i::"
+             "just::gave::up::and_::went::mad::now {\n"
+             "int i;\n"
+             "int j;\n"
+             "}",
+             Style));
+
+  // This used to duplicate the comment again and again on subsequent runs
+  EXPECT_EQ(
+      "namespace "
+      "would::it::save::you::a::lot::of::time::if_::i::just::gave::up::and_::\n"
+      "    went::mad::now {\n"
+      "int i;\n"
+      "int j;\n"
+      "} // namespace\n"
+      "  // "
+      "would::it::save::you::a::lot::of::time::if_::i::just::gave::up::and_::"
+      "went::mad::now",
+      format("namespace "
+             "would::it::save::you::a::lot::of::time::if_::i::"
+             "just::gave::up::and_::went::mad::now {\n"
+             "int i;\n"
+             "int j;\n"
+             "} // namespace\n"
+             "  // "
+             "would::it::save::you::a::lot::of::time::if_::i::just::gave::up::"
+             "and_::went::mad::now",
+             Style));
+}
+
+TEST_F(FormatTest, LikelyUnlikely) {
+  FormatStyle Style = getLLVMStyle();
+
+  verifyFormat("if (argc > 5) [[unlikely]] {\n"
+               "  return 29;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (argc > 5) [[likely]] {\n"
+               "  return 29;\n"
+               "}",
+               Style);
+
+  verifyFormat("if (argc > 5) [[unlikely]] {\n"
+               "  return 29;\n"
+               "} else [[likely]] {\n"
+               "  return 42;\n"
+               "}\n",
+               Style);
+
+  verifyFormat("if (argc > 5) [[unlikely]] {\n"
+               "  return 29;\n"
+               "} else if (argc > 10) [[likely]] {\n"
+               "  return 99;\n"
+               "} else {\n"
+               "  return 42;\n"
+               "}\n",
+               Style);
+
+  verifyFormat("if (argc > 5) [[gnu::unused]] {\n"
+               "  return 29;\n"
+               "}",
+               Style);
+}
+
+TEST_F(FormatTest, LLVMDefaultStyle) {
+  FormatStyle Style = getLLVMStyle();
+  verifyFormat("extern \"C\" {\n"
+               "int foo();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, GNUDefaultStyle) {
+  FormatStyle Style = getGNUStyle();
+  verifyFormat("extern \"C\"\n"
+               "{\n"
+               "  int foo ();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, MozillaDefaultStyle) {
+  FormatStyle Style = getMozillaStyle();
+  verifyFormat("extern \"C\"\n"
+               "{\n"
+               "  int foo();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, GoogleDefaultStyle) {
+  FormatStyle Style = getGoogleStyle();
+  verifyFormat("extern \"C\" {\n"
+               "int foo();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, ChromiumDefaultStyle) {
+  FormatStyle Style = getChromiumStyle(FormatStyle::LanguageKind::LK_Cpp);
+  verifyFormat("extern \"C\" {\n"
+               "int foo();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, MicrosoftDefaultStyle) {
+  FormatStyle Style = getMicrosoftStyle(FormatStyle::LanguageKind::LK_Cpp);
+  verifyFormat("extern \"C\"\n"
+               "{\n"
+               "    int foo();\n"
+               "}",
+               Style);
+}
+TEST_F(FormatTest, WebKitDefaultStyle) {
+  FormatStyle Style = getWebKitStyle();
+  verifyFormat("extern \"C\" {\n"
+               "int foo();\n"
+               "}",
+               Style);
+}
 } // namespace
 } // namespace format
 } // namespace clang

@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -139,7 +140,7 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
         // or the preferred alignment of the type if none is specified.
         //
         // (Unspecified alignment on allocas will be going away soon.)
-        Align SpecifiedAlign = AI->getAlign() ? *AI->getAlign() : TyPrefAlign;
+        Align SpecifiedAlign = AI->getAlign();
 
         // If the preferred alignment of the type is higher than the specified
         // alignment of the alloca, promote the alignment, as long as it doesn't

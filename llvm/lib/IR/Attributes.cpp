@@ -385,6 +385,8 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "noreturn";
   if (hasAttribute(Attribute::NoSync))
     return "nosync";
+  if (hasAttribute(Attribute::NullPointerIsValid))
+    return "null_pointer_is_valid";
   if (hasAttribute(Attribute::WillReturn))
     return "willreturn";
   if (hasAttribute(Attribute::NoCfCheck))
@@ -778,17 +780,11 @@ AttributeSetNode::AttributeSetNode(ArrayRef<Attribute> Attrs)
   // There's memory after the node where we can store the entries in.
   llvm::copy(Attrs, getTrailingObjects<Attribute>());
 
-  static_assert(Attribute::EndAttrKinds <=
-                    sizeof(AvailableAttrs) * CHAR_BIT,
-                "Too many attributes");
-
   for (const auto &I : *this) {
-    if (I.isStringAttribute()) {
+    if (I.isStringAttribute())
       StringAttrs.insert({ I.getKindAsString(), I });
-    } else {
-      Attribute::AttrKind Kind = I.getKindAsEnum();
-      AvailableAttrs[Kind / 8] |= 1ULL << (Kind % 8);
-    }
+    else
+      AvailableAttrs.addAttribute(I.getKindAsEnum());
   }
 }
 
@@ -984,16 +980,11 @@ AttributeListImpl::AttributeListImpl(ArrayRef<AttributeSet> Sets)
   llvm::copy(Sets, getTrailingObjects<AttributeSet>());
 
   // Initialize AvailableFunctionAttrs summary bitset.
-  static_assert(Attribute::EndAttrKinds <=
-                    sizeof(AvailableFunctionAttrs) * CHAR_BIT,
-                "Too many attributes");
   static_assert(attrIdxToArrayIdx(AttributeList::FunctionIndex) == 0U,
                 "function should be stored in slot 0");
   for (const auto &I : Sets[0]) {
-    if (!I.isStringAttribute()) {
-      Attribute::AttrKind Kind = I.getKindAsEnum();
-      AvailableFunctionAttrs[Kind / 8] |= 1ULL << (Kind % 8);
-    }
+    if (!I.isStringAttribute())
+      AvailableFunctionAttrs.addAttribute(I.getKindAsEnum());
   }
 }
 
@@ -1169,6 +1160,17 @@ AttributeList AttributeList::get(LLVMContext &C, unsigned Index,
   SmallVector<std::pair<unsigned, Attribute>, 8> Attrs;
   for (const auto K : Kinds)
     Attrs.emplace_back(Index, Attribute::get(C, K));
+  return get(C, Attrs);
+}
+
+AttributeList AttributeList::get(LLVMContext &C, unsigned Index,
+                                 ArrayRef<Attribute::AttrKind> Kinds,
+                                 ArrayRef<uint64_t> Values) {
+  assert(Kinds.size() == Values.size() && "Mismatched attribute values.");
+  SmallVector<std::pair<unsigned, Attribute>, 8> Attrs;
+  auto VI = Values.begin();
+  for (const auto K : Kinds)
+    Attrs.emplace_back(Index, Attribute::get(C, K, *VI++));
   return get(C, Attrs);
 }
 
@@ -1433,6 +1435,10 @@ MaybeAlign AttributeList::getParamAlignment(unsigned ArgNo) const {
 
 Type *AttributeList::getParamByValType(unsigned Index) const {
   return getAttributes(Index+FirstArgIndex).getByValType();
+}
+
+Type *AttributeList::getParamPreallocatedType(unsigned Index) const {
+  return getAttributes(Index + FirstArgIndex).getPreallocatedType();
 }
 
 MaybeAlign AttributeList::getStackAlignment(unsigned Index) const {
@@ -1930,12 +1936,12 @@ adjustMinLegalVectorWidth(Function &Caller, const Function &Callee) {
   }
 }
 
-/// If the inlined function has "null-pointer-is-valid=true" attribute,
+/// If the inlined function has null_pointer_is_valid attribute,
 /// set this attribute in the caller post inlining.
 static void
 adjustNullPointerValidAttr(Function &Caller, const Function &Callee) {
   if (Callee.nullPointerIsDefined() && !Caller.nullPointerIsDefined()) {
-    Caller.addFnAttr(Callee.getFnAttribute("null-pointer-is-valid"));
+    Caller.addFnAttr(Attribute::NullPointerIsValid);
   }
 }
 

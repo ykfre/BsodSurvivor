@@ -89,6 +89,8 @@ bool link(ArrayRef<const char *> args, bool canExitEarly, raw_ostream &stdoutOS,
   ImportFile::instances.clear();
   BitcodeFile::instances.clear();
   memset(MergeChunk::instances, 0, sizeof(MergeChunk::instances));
+  TpiSource::clear();
+
   return !errorCount();
 }
 
@@ -218,7 +220,7 @@ void LinkerDriver::addBuffer(std::unique_ptr<MemoryBuffer> mb,
       symtab->addFile(make<ObjFile>(mbref));
     break;
   case file_magic::pdb:
-    loadTypeServerSource(mbref);
+    symtab->addFile(make<PDBInputFile>(mbref));
     break;
   case file_magic::coff_cl_gl_object:
     error(filename + ": is not a native COFF file. Recompile without /GL");
@@ -1106,6 +1108,8 @@ Optional<std::string> getReproduceFile(const opt::InputArgList &args) {
 }
 
 void LinkerDriver::link(ArrayRef<const char *> argsArr) {
+  ScopedTimer rootTimer(Timer::root());
+
   // Needed for LTO.
   InitializeAllTargetInfos();
   InitializeAllTargets();
@@ -1164,7 +1168,6 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
 
   config->showSummary = args.hasArg(OPT_summary);
 
-  ScopedTimer t(Timer::root());
   // Handle --version, which is an lld extension. This option is a bit odd
   // because it doesn't start with "/", but we deliberately chose "--" to
   // avoid conflict with /version and for compatibility with clang-cl.
@@ -1580,6 +1583,10 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   config->debugDwarf = debug == DebugKind::Dwarf;
   config->debugGHashes = debug == DebugKind::GHash;
   config->debugSymtab = debug == DebugKind::Symtab;
+  config->autoImport =
+      args.hasFlag(OPT_auto_import, OPT_auto_import_no, config->mingw);
+  config->pseudoRelocs = args.hasFlag(
+      OPT_runtime_pseudo_reloc, OPT_runtime_pseudo_reloc_no, config->mingw);
 
   // Don't warn about long section names, such as .debug_info, for mingw or when
   // -debug:dwarf is requested.
@@ -1841,9 +1848,11 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   // Needed for MSVC 2017 15.5 CRT.
   symtab->addAbsolute(mangle("__enclave_config"), 0);
 
-  if (config->mingw) {
+  if (config->pseudoRelocs) {
     symtab->addAbsolute(mangle("__RUNTIME_PSEUDO_RELOC_LIST__"), 0);
     symtab->addAbsolute(mangle("__RUNTIME_PSEUDO_RELOC_LIST_END__"), 0);
+  }
+  if (config->mingw) {
     symtab->addAbsolute(mangle("__CTOR_LIST__"), 0);
     symtab->addAbsolute(mangle("__DTOR_LIST__"), 0);
   }
@@ -1901,7 +1910,8 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
     while (run());
   }
 
-  if (config->mingw) {
+  if (config->autoImport) {
+    // MinGW specific.
     // Load any further object files that might be needed for doing automatic
     // imports.
     //
@@ -2033,7 +2043,7 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   writeResult();
 
   // Stop early so we can print the results.
-  Timer::root().stop();
+  rootTimer.stop();
   if (config->showTiming)
     Timer::root().print();
 }

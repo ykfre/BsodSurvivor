@@ -14,6 +14,7 @@
 #define AFFINE_OPS
 
 include "mlir/Dialect/Affine/IR/AffineOpsBase.td"
+include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -178,11 +179,15 @@ def AffineForOp : Affine_Op<"for",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "int64_t lowerBound, int64_t upperBound, int64_t step = 1">,
+              "int64_t lowerBound, int64_t upperBound, int64_t step = 1, "
+              "function_ref<void(OpBuilder &, Location, Value)> bodyBuilder "
+              "    = nullptr">,
     OpBuilder<"OpBuilder &builder, OperationState &result, "
               "ValueRange lbOperands, AffineMap lbMap, "
               "ValueRange ubOperands, AffineMap ubMap, "
-              "int64_t step = 1">
+              "int64_t step = 1, "
+              "function_ref<void(OpBuilder &, Location, Value)> bodyBuilder "
+              "    = nullptr">
   ];
 
   let extraClassDeclaration = [{
@@ -370,7 +375,29 @@ def AffineIfOp : Affine_Op<"if",
   let hasFolder = 1;
 }
 
-def AffineLoadOp : Affine_Op<"load", []> {
+class AffineLoadOpBase<string mnemonic, list<OpTrait> traits = []> :
+    Affine_Op<mnemonic, !listconcat(traits,
+        [DeclareOpInterfaceMethods<AffineReadOpInterface>])> {
+  let arguments = (ins Arg<AnyMemRef, "the reference to load from",
+      [MemRead]>:$memref,
+      Variadic<Index>:$indices);
+
+  code extraClassDeclarationBase = [{
+    /// Returns the operand index of the memref.
+    unsigned getMemRefOperandIndex() { return 0; }
+
+    void setMemRef(Value value) { setOperand(getMemRefOperandIndex(), value); }
+
+    /// Returns the affine map used to index the memref for this operation.
+    AffineMapAttr getAffineMapAttr() {
+      return getAttr(getMapAttrName()).cast<AffineMapAttr>();
+    }
+
+    static StringRef getMapAttrName() { return "map"; }
+  }];
+}
+
+def AffineLoadOp : AffineLoadOpBase<"load"> {
   let summary = "affine load operation";
   let description = [{
     The "affine.load" op reads an element from a memref, where the index
@@ -393,9 +420,6 @@ def AffineLoadOp : Affine_Op<"load", []> {
     ```
   }];
 
-  let arguments = (ins Arg<AnyMemRef, "the reference to load from",
-      [MemRead]>:$memref,
-      Variadic<Index>:$indices);
   let results = (outs AnyType:$result);
 
   let builders = [
@@ -410,35 +434,7 @@ def AffineLoadOp : Affine_Op<"load", []> {
                       "AffineMap map, ValueRange mapOperands">
   ];
 
-  let extraClassDeclaration = [{
-    /// Returns the operand index of the memref.
-    unsigned getMemRefOperandIndex() { return 0; }
-
-    /// Get memref operand.
-    Value getMemRef() { return getOperand(getMemRefOperandIndex()); }
-    void setMemRef(Value value) { setOperand(getMemRefOperandIndex(), value); }
-    MemRefType getMemRefType() {
-      return getMemRef().getType().cast<MemRefType>();
-    }
-
-    /// Get affine map operands.
-    operand_range getMapOperands() { return llvm::drop_begin(getOperands(), 1); }
-
-    /// Returns the affine map used to index the memref for this operation.
-    AffineMap getAffineMap() { return getAffineMapAttr().getValue(); }
-    AffineMapAttr getAffineMapAttr() {
-      return getAttr(getMapAttrName()).cast<AffineMapAttr>();
-    }
-
-    /// Returns the AffineMapAttr associated with 'memref'.
-    NamedAttribute getAffineMapAttrForMemRef(Value memref) {
-      assert(memref == getMemRef());
-      return {Identifier::get(getMapAttrName(), getContext()),
-              getAffineMapAttr()};
-    }
-
-    static StringRef getMapAttrName() { return "map"; }
-  }];
+  let extraClassDeclaration = extraClassDeclarationBase;
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;
@@ -461,6 +457,14 @@ class AffineMinMaxOpBase<string mnemonic, list<OpTrait> traits = []> :
     static StringRef getMapAttrName() { return "map"; }
     AffineMap getAffineMap() { return map(); }
     ValueRange getMapOperands() { return operands(); }
+    ValueRange getDimOperands() {
+      return OperandRange{operands().begin(),
+                        operands().begin() + map().getNumDims()};
+    }
+    ValueRange getSymbolOperands() {
+      return OperandRange{operands().begin() + map().getNumDims(),
+                        operands().end()};
+    }
   }];
   let verifier = [{ return ::verifyAffineMinMaxOp(*this); }];
   let printer = [{ return ::printAffineMinMaxOp(p, *this); }];
@@ -659,7 +663,35 @@ def AffinePrefetchOp : Affine_Op<"prefetch"> {
   let hasFolder = 1;
 }
 
-def AffineStoreOp : Affine_Op<"store", []> {
+class AffineStoreOpBase<string mnemonic, list<OpTrait> traits = []> :
+    Affine_Op<mnemonic, !listconcat(traits,
+        [DeclareOpInterfaceMethods<AffineWriteOpInterface>])> {
+  code extraClassDeclarationBase = [{
+    /// Get value to be stored by store operation.
+    Value getValueToStore() { return getOperand(0); }
+
+    /// Returns the operand index of the memref.
+    unsigned getMemRefOperandIndex() { return 1; }
+
+    void setMemRef(Value value) { setOperand(getMemRefOperandIndex(), value); }
+
+    /// Returns the affine map used to index the memref for this operation.
+    AffineMapAttr getAffineMapAttr() {
+      return getAttr(getMapAttrName()).cast<AffineMapAttr>();
+    }
+
+    /// Returns the AffineMapAttr associated with 'memref'.
+    NamedAttribute getAffineMapAttrForMemRef(Value memref) {
+      assert(memref == getMemRef());
+      return {Identifier::get(getMapAttrName(), getContext()),
+              getAffineMapAttr()};
+    }
+
+    static StringRef getMapAttrName() { return "map"; }
+  }];
+}
+
+def AffineStoreOp : AffineStoreOpBase<"store"> {
   let summary = "affine store operation";
   let description = [{
     The "affine.store" op writes an element to a memref, where the index
@@ -686,7 +718,6 @@ def AffineStoreOp : Affine_Op<"store", []> {
       [MemWrite]>:$memref,
       Variadic<Index>:$indices);
 
-
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<"OpBuilder &builder, OperationState &result, "
@@ -696,39 +727,7 @@ def AffineStoreOp : Affine_Op<"store", []> {
                       "ValueRange mapOperands">
   ];
 
-  let extraClassDeclaration = [{
-    /// Get value to be stored by store operation.
-    Value getValueToStore() { return getOperand(0); }
-
-    /// Returns the operand index of the memref.
-    unsigned getMemRefOperandIndex() { return 1; }
-
-    /// Get memref operand.
-    Value getMemRef() { return getOperand(getMemRefOperandIndex()); }
-    void setMemRef(Value value) { setOperand(getMemRefOperandIndex(), value); }
-
-    MemRefType getMemRefType() {
-      return getMemRef().getType().cast<MemRefType>();
-    }
-
-    /// Get affine map operands.
-    operand_range getMapOperands() { return llvm::drop_begin(getOperands(), 2); }
-
-    /// Returns the affine map used to index the memref for this operation.
-    AffineMap getAffineMap() { return getAffineMapAttr().getValue(); }
-    AffineMapAttr getAffineMapAttr() {
-      return getAttr(getMapAttrName()).cast<AffineMapAttr>();
-    }
-
-    /// Returns the AffineMapAttr associated with 'memref'.
-    NamedAttribute getAffineMapAttrForMemRef(Value memref) {
-      assert(memref == getMemRef());
-      return {Identifier::get(getMapAttrName(), getContext()),
-              getAffineMapAttr()};
-    }
-
-    static StringRef getMapAttrName() { return "map"; }
-  }];
+  let extraClassDeclaration = extraClassDeclarationBase;
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;
@@ -763,6 +762,109 @@ def AffineTerminatorOp :
 
   // Fully specified by traits.
   let verifier = ?;
+}
+
+def AffineVectorLoadOp : AffineLoadOpBase<"vector_load"> {
+  let summary = "affine vector load operation";
+  let description = [{
+    The "affine.vector_load" is the vector counterpart of
+    [affine.load](#affineload-operation). It reads a slice from a
+    [MemRef](../LangRef.md#memref-type), supplied as its first operand,
+    into a [vector](../LangRef.md#vector-type) of the same base elemental type.
+    The index for each memref dimension is an affine expression of loop induction
+    variables and symbols. These indices determine the start position of the read
+    within the memref. The shape of the return vector type determines the shape of
+    the slice read from the memref. This slice is contiguous along the respective
+    dimensions of the shape. Strided vector loads will be supported in the future.
+    An affine expression of loop IVs and symbols must be specified for each
+    dimension of the memref. The keyword 'symbol' can be used to indicate SSA
+    identifiers which are symbolic.
+
+    Example 1: 8-wide f32 vector load.
+
+    ```mlir
+    %1 = affine.vector_load %0[%i0 + 3, %i1 + 7] : memref<100x100xf32>, vector<8xf32>
+    ```
+
+    Example 2: 4-wide f32 vector load. Uses 'symbol' keyword for symbols '%n' and '%m'.
+
+    ```mlir
+    %1 = affine.vector_load %0[%i0 + symbol(%n), %i1 + symbol(%m)] : memref<100x100xf32>, vector<4xf32>
+    ```
+
+    Example 3: 2-dim f32 vector load.
+
+    ```mlir
+    %1 = affine.vector_load %0[%i0, %i1] : memref<100x100xf32>, vector<2x8xf32>
+    ```
+
+    TODOs:
+    * Add support for strided vector loads.
+    * Consider adding a permutation map to permute the slice that is read from memory
+    (see [vector.transfer_read](../Vector/#vectortransfer_read-vectortransferreadop)).
+  }];
+
+  let results = (outs AnyVector:$result);
+
+  let extraClassDeclaration = extraClassDeclarationBase # [{
+    VectorType getVectorType() {
+      return result().getType().cast<VectorType>();
+    }
+  }];
+}
+
+def AffineVectorStoreOp : AffineStoreOpBase<"vector_store"> {
+  let summary = "affine vector store operation";
+  let description = [{
+    The "affine.vector_store" is the vector counterpart of
+    [affine.store](#affinestore-affinestoreop). It writes a
+    [vector](../LangRef.md#vector-type), supplied as its first operand,
+    into a slice within a [MemRef](../LangRef.md#memref-type) of the same base
+    elemental type, supplied as its second operand.
+    The index for each memref dimension is an affine expression of loop
+    induction variables and symbols. These indices determine the start position
+    of the write within the memref. The shape of th input vector determines the
+    shape of the slice written to the memref. This slice is contiguous along the
+    respective dimensions of the shape. Strided vector stores will be supported
+    in the future.
+    An affine expression of loop IVs and symbols must be specified for each
+    dimension of the memref. The keyword 'symbol' can be used to indicate SSA
+    identifiers which are symbolic.
+
+    Example 1: 8-wide f32 vector store.
+
+    ```mlir
+    affine.vector_store %v0, %0[%i0 + 3, %i1 + 7] : memref<100x100xf32>, vector<8xf32>
+    ```
+
+    Example 2: 4-wide f32 vector store. Uses 'symbol' keyword for symbols '%n' and '%m'.
+
+    ```mlir
+    affine.vector_store %v0, %0[%i0 + symbol(%n), %i1 + symbol(%m)] : memref<100x100xf32>, vector<4xf32>
+    ```
+
+    Example 3: 2-dim f32 vector store.
+
+    ```mlir
+    affine.vector_store %v0, %0[%i0, %i1] : memref<100x100xf32>, vector<2x8xf32>
+    ```
+
+    TODOs:
+    * Add support for strided vector stores.
+    * Consider adding a permutation map to permute the slice that is written to memory
+    (see [vector.transfer_write](../Vector/#vectortransfer_write-vectortransferwriteop)).
+  }];
+
+  let arguments = (ins AnyVector:$value,
+      Arg<AnyMemRef, "the reference to store to",
+      [MemWrite]>:$memref,
+      Variadic<Index>:$indices);
+
+  let extraClassDeclaration = extraClassDeclarationBase # [{
+    VectorType getVectorType() {
+      return value().getType().cast<VectorType>();
+    }
+  }];
 }
 
 #endif // AFFINE_OPS

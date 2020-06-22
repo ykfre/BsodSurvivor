@@ -7,7 +7,6 @@
 #===----------------------------------------------------------------------===##
 
 import copy
-import locale
 import os
 import platform
 import pkgutil
@@ -23,6 +22,7 @@ from libcxx.test.executor import *
 from libcxx.test.tracing import *
 import libcxx.util
 import libcxx.test.features
+import libcxx.test.params
 
 def loadSiteConfig(lit_config, config, param_name, env_name):
     # We haven't loaded the site specific configuration (the user is
@@ -74,7 +74,7 @@ class Configuration(object):
         self.debug_build = self.get_lit_bool('debug_build',   default=False)
         self.exec_env = dict()
         self.use_target = False
-        self.use_system_cxx_lib = False
+        self.use_system_cxx_lib = self.get_lit_bool('use_system_cxx_lib', False)
         self.use_clang_verify = False
         self.long_tests = None
 
@@ -123,14 +123,15 @@ class Configuration(object):
     def configure(self):
         self.configure_target_info()
         self.configure_executor()
-        self.configure_use_system_cxx_lib()
         self.configure_cxx()
         self.configure_triple()
         self.configure_deployment()
         self.configure_src_root()
         self.configure_obj_root()
         self.configure_cxx_stdlib_under_test()
-        self.configure_cxx_library_root()
+        self.cxx_library_root = self.get_lit_conf('cxx_library_root', self.libcxx_obj_root)
+        self.abi_library_root = self.get_lit_conf('abi_library_path', None)
+        self.cxx_runtime_root = self.get_lit_conf('cxx_runtime_root', self.cxx_library_root)
         self.configure_compile_flags()
         self.configure_link_flags()
         self.configure_env()
@@ -141,12 +142,19 @@ class Configuration(object):
         self.configure_modules()
         self.configure_substitutions()
         self.configure_features()
+        self.configure_new_params()
         self.configure_new_features()
 
     def configure_new_features(self):
         supportedFeatures = [f for f in libcxx.test.features.features if f.isSupported(self.config)]
         for feature in supportedFeatures:
             feature.enableIn(self.config)
+
+    def configure_new_params(self):
+        for param in libcxx.test.params.parameters:
+            feature = param.getFeature(self.config, self.lit_config.params)
+            if feature:
+                feature.enableIn(self.config)
 
     def print_config_info(self):
         # Print the final compile and link flags.
@@ -168,6 +176,8 @@ class Configuration(object):
             if k not in os.environ or os.environ[k] != v:
                 show_env_vars[k] = v
         self.lit_config.note('Adding environment variables: %r' % show_env_vars)
+        self.lit_config.note("Linking against the C++ Library at {}".format(self.cxx_library_root))
+        self.lit_config.note("Running against the C++ Library at {}".format(self.cxx_runtime_root))
         sys.stderr.flush()  # Force flushing to avoid broken output on Windows
 
     def get_test_format(self):
@@ -179,18 +189,22 @@ class Configuration(object):
             exec_env=self.exec_env)
 
     def configure_executor(self):
-        exec_str = self.get_lit_conf('executor', "None")
-        te = eval(exec_str)
-        if te:
-            self.lit_config.note("Using executor: %r" % exec_str)
-            if self.lit_config.useValgrind:
-                self.lit_config.fatal("The libc++ test suite can't run under Valgrind with a custom executor")
-        else:
-            te = LocalExecutor()
+        if self.get_lit_conf('use_old_format'):
+            exec_str = self.get_lit_conf('executor', "None")
+            te = eval(exec_str)
+            if te:
+                self.lit_config.note("Using executor: %r" % exec_str)
+                if self.lit_config.useValgrind:
+                    self.lit_config.fatal("The libc++ test suite can't run under Valgrind with a custom executor")
+            else:
+                te = LocalExecutor()
 
-        te.target_info = self.target_info
-        self.target_info.executor = te
-        self.executor = te
+            te.target_info = self.target_info
+            self.target_info.executor = te
+            self.executor = te
+        else:
+            self.executor = self.get_lit_conf('executor')
+            self.lit_config.note("Using executor: {}".format(self.executor))
 
     def configure_target_info(self):
         self.target_info = make_target_info(self)
@@ -259,29 +273,6 @@ class Configuration(object):
             else:
                 self.libcxx_obj_root = self.project_obj_root
 
-    def configure_cxx_library_root(self):
-        self.cxx_library_root = self.get_lit_conf('cxx_library_root',
-                                                  self.libcxx_obj_root)
-        self.cxx_runtime_root = self.get_lit_conf('cxx_runtime_root',
-                                                   self.cxx_library_root)
-
-    def configure_use_system_cxx_lib(self):
-        # This test suite supports testing against either the system library or
-        # the locally built one; the former mode is useful for testing ABI
-        # compatibility between the current headers and a shipping dynamic
-        # library.
-        # Default to testing against the locally built libc++ library.
-        self.use_system_cxx_lib = self.get_lit_conf('use_system_cxx_lib')
-        if self.use_system_cxx_lib == 'true':
-            self.use_system_cxx_lib = True
-        elif self.use_system_cxx_lib == 'false':
-            self.use_system_cxx_lib = False
-        elif self.use_system_cxx_lib:
-            assert os.path.isdir(self.use_system_cxx_lib), "the specified use_system_cxx_lib parameter (%s) is not a valid directory" % self.use_system_cxx_lib
-            self.use_system_cxx_lib = os.path.abspath(self.use_system_cxx_lib)
-        self.lit_config.note(
-            "inferred use_system_cxx_lib as: %r" % self.use_system_cxx_lib)
-
     def configure_cxx_stdlib_under_test(self):
         self.cxx_stdlib_under_test = self.get_lit_conf(
             'cxx_stdlib_under_test', 'libc++')
@@ -303,7 +294,6 @@ class Configuration(object):
         if additional_features:
             for f in additional_features.split(','):
                 self.config.available_features.add(f.strip())
-        self.target_info.add_locale_features(self.config.available_features)
 
         # Write an "available feature" that combines the triple when
         # use_system_cxx_lib is enabled. This is so that we can easily write
@@ -327,9 +317,6 @@ class Configuration(object):
             self.config.available_features.add('availability=%s' % name)
             self.config.available_features.add('availability=%s%s' % (name, version))
 
-        # Insert the platform name and version into the available features.
-        self.target_info.add_platform_features(self.config.available_features)
-
         # Simulator testing can take a really long time for some of these tests
         # so add a feature check so we can REQUIRES: long_tests in them
         self.long_tests = self.get_lit_bool('long_tests')
@@ -342,14 +329,7 @@ class Configuration(object):
         if self.long_tests:
             self.config.available_features.add('long_tests')
 
-        if not self.get_lit_bool('enable_filesystem', default=True):
-            self.config.available_features.add('c++filesystem-disabled')
-
-        if self.get_lit_bool('has_libatomic', False):
-            self.config.available_features.add('libatomic')
-
         if self.target_info.is_windows():
-            self.config.available_features.add('windows')
             if self.cxx_stdlib_under_test == 'libc++':
                 # LIBCXX-WINDOWS-FIXME is the feature name used to XFAIL the
                 # initial Windows failures until they can be properly diagnosed
@@ -416,7 +396,6 @@ class Configuration(object):
         self.configure_compile_flags_header_includes()
         self.target_info.add_cxx_compile_flags(self.cxx.compile_flags)
         # Configure feature flags.
-        self.configure_compile_flags_exceptions()
         self.configure_compile_flags_rtti()
         enable_32bit = self.get_lit_bool('enable_32bit', False)
         if enable_32bit:
@@ -457,10 +436,6 @@ class Configuration(object):
             self.cxx.compile_flags += ['-I' + os.path.join(pstl_obj_root, 'generated_headers')]
             self.cxx.compile_flags += ['-I' + os.path.join(pstl_src_root, 'test')]
             self.config.available_features.add('parallel-algorithms')
-
-        # FIXME(EricWF): variant_size.pass.cpp requires a slightly larger
-        # template depth with older Clang versions.
-        self.cxx.addCompileFlagIfSupported('-ftemplate-depth=270')
 
     def configure_compile_flags_header_includes(self):
         support_path = os.path.join(self.libcxx_src_root, 'test', 'support')
@@ -508,12 +483,6 @@ class Configuration(object):
             return
         self.cxx.compile_flags += ['-include', config_site_header]
 
-    def configure_compile_flags_exceptions(self):
-        enable_exceptions = self.get_lit_bool('enable_exceptions', True)
-        if not enable_exceptions:
-            self.config.available_features.add('no-exceptions')
-            self.cxx.compile_flags += ['-fno-exceptions']
-
     def configure_compile_flags_rtti(self):
         enable_rtti = self.get_lit_bool('enable_rtti', True)
         if not enable_rtti:
@@ -549,31 +518,22 @@ class Configuration(object):
         self.cxx.link_flags += shlex.split(link_flags_str)
 
     def configure_link_flags_cxx_library_path(self):
-        if not self.use_system_cxx_lib:
-            if self.cxx_library_root:
-                self.cxx.link_flags += ['-L' + self.cxx_library_root]
-                if self.target_info.is_windows() and self.link_shared:
-                    self.add_path(self.cxx.compile_env, self.cxx_library_root)
-            if self.cxx_runtime_root:
-                if not self.target_info.is_windows():
-                    self.cxx.link_flags += ['-Wl,-rpath,' +
-                                            self.cxx_runtime_root]
-                elif self.target_info.is_windows() and self.link_shared:
-                    self.add_path(self.exec_env, self.cxx_runtime_root)
-        elif os.path.isdir(str(self.use_system_cxx_lib)):
-            self.cxx.link_flags += ['-L' + self.use_system_cxx_lib]
+        if self.cxx_library_root:
+            self.cxx.link_flags += ['-L' + self.cxx_library_root]
+            if self.target_info.is_windows() and self.link_shared:
+                self.add_path(self.cxx.compile_env, self.cxx_library_root)
+        if self.cxx_runtime_root:
             if not self.target_info.is_windows():
                 self.cxx.link_flags += ['-Wl,-rpath,' +
-                                        self.use_system_cxx_lib]
-            if self.target_info.is_windows() and self.link_shared:
-                self.add_path(self.cxx.compile_env, self.use_system_cxx_lib)
+                                        self.cxx_runtime_root]
+            elif self.target_info.is_windows() and self.link_shared:
+                self.add_path(self.exec_env, self.cxx_runtime_root)
         additional_flags = self.get_lit_conf('test_linker_flags')
         if additional_flags:
             self.cxx.link_flags += shlex.split(additional_flags)
 
     def configure_link_flags_abi_library_path(self):
         # Configure ABI library paths.
-        self.abi_library_root = self.get_lit_conf('abi_library_path')
         if self.abi_library_root:
             self.cxx.link_flags += ['-L' + self.abi_library_root]
             if not self.target_info.is_windows():
@@ -589,10 +549,9 @@ class Configuration(object):
         if self.link_shared:
             self.cxx.link_flags += ['-lc++']
         else:
-            cxx_library_root = self.get_lit_conf('cxx_library_root')
-            if cxx_library_root:
+            if self.cxx_library_root:
                 libname = self.make_static_lib_name('c++')
-                abs_path = os.path.join(cxx_library_root, libname)
+                abs_path = os.path.join(self.cxx_library_root, libname)
                 assert os.path.exists(abs_path) and \
                        "static libc++ library does not exist"
                 self.cxx.link_flags += [abs_path]
@@ -615,10 +574,9 @@ class Configuration(object):
                 if libcxxabi_shared:
                     self.cxx.link_flags += ['-lc++abi']
                 else:
-                    cxxabi_library_root = self.get_lit_conf('abi_library_path')
-                    if cxxabi_library_root:
+                    if self.abi_library_root:
                         libname = self.make_static_lib_name('c++abi')
-                        abs_path = os.path.join(cxxabi_library_root, libname)
+                        abs_path = os.path.join(self.abi_library_root, libname)
                         self.cxx.link_libcxxabi_flag = abs_path
                         self.cxx.link_flags += [abs_path]
                     else:
@@ -671,6 +629,7 @@ class Configuration(object):
         self.cxx.addWarningFlagIfSupported('-Wno-user-defined-literals')
         self.cxx.addWarningFlagIfSupported('-Wno-noexcept-type')
         self.cxx.addWarningFlagIfSupported('-Wno-aligned-allocation-unavailable')
+        self.cxx.addWarningFlagIfSupported('-Wno-atomic-alignment')
         # These warnings should be enabled in order to support the MSVC
         # team using the test suite; They enable the warnings below and
         # expect the test suite to be clean.
@@ -771,15 +730,9 @@ class Configuration(object):
             self.cxx.useModules()
 
     def configure_substitutions(self):
-        tool_env = ''
-        if self.target_info.is_darwin():
-            # Do not pass DYLD_LIBRARY_PATH to the compiler, linker, etc. as
-            # these tools are not meant to exercise the just-built libraries.
-            tool_env += 'env DYLD_LIBRARY_PATH=""'
-
         sub = self.config.substitutions
         # Configure compiler substitutions
-        sub.append(('%{cxx}', '{} {}'.format(tool_env, pipes.quote(self.cxx.path))))
+        sub.append(('%{cxx}', pipes.quote(self.cxx.path)))
         sub.append(('%{libcxx_src_root}', self.libcxx_src_root))
         # Configure flags substitutions
         flags = self.cxx.flags + (self.cxx.modules_flags if self.cxx.use_modules else [])
@@ -794,19 +747,12 @@ class Configuration(object):
         codesign_ident = self.get_lit_conf('llvm_codesign_identity', '')
         env_vars = ' '.join('%s=%s' % (k, pipes.quote(v)) for (k, v) in self.exec_env.items())
         exec_args = [
+            '--execdir %T',
             '--codesign_identity "{}"'.format(codesign_ident),
-            '--dependencies %{file_dependencies}',
             '--env {}'.format(env_vars)
         ]
-        if isinstance(self.executor, SSHExecutor):
-            exec_args.append('--host {}'.format(self.executor.user_prefix + self.executor.host))
-            executor = os.path.join(self.libcxx_src_root, 'utils', 'ssh.py')
-        else:
-            exec_args.append('--execdir %t.execdir')
-            executor = os.path.join(self.libcxx_src_root, 'utils', 'run.py')
-        sub.append(('%{exec}', '{} {} {} -- '.format(pipes.quote(sys.executable),
-                                                     pipes.quote(executor),
-                                                     ' '.join(exec_args))))
+        if not self.get_lit_conf('use_old_format'):
+            sub.append(('%{exec}', '{} {} -- '.format(self.executor, ' '.join(exec_args))))
         if self.get_lit_conf('libcxx_gdb'):
             sub.append(('%{libcxx_gdb}', self.get_lit_conf('libcxx_gdb')))
 
@@ -902,8 +848,8 @@ class Configuration(object):
                 self.config.available_features.add('dylib-has-no-shared_mutex')
                 self.lit_config.note("shared_mutex is not supported by the deployment target")
             # Throwing bad_optional_access, bad_variant_access and bad_any_cast is
-            # supported starting in macosx10.14.
-            if name == 'macosx' and version in ('10.%s' % v for v in range(9, 14)):
+            # supported starting in macosx10.13.
+            if name == 'macosx' and version in ('10.%s' % v for v in range(9, 13)):
                 self.config.available_features.add('dylib-has-no-bad_optional_access')
                 self.lit_config.note("throwing bad_optional_access is not supported by the deployment target")
 
@@ -912,15 +858,10 @@ class Configuration(object):
 
                 self.config.available_features.add('dylib-has-no-bad_any_cast')
                 self.lit_config.note("throwing bad_any_cast is not supported by the deployment target")
-            # Filesystem is support on Apple platforms starting with macosx10.15.
-            if name == 'macosx' and version in ('10.%s' % v for v in range(9, 15)):
-                self.config.available_features.add('c++filesystem-disabled')
-                self.lit_config.note("the deployment target does not support <filesystem>")
         else:
             self.cxx.compile_flags += ['-D_LIBCPP_DISABLE_AVAILABILITY']
 
     def configure_env(self):
-        self.target_info.configure_env(self.exec_env)
         self.config.environment = dict(os.environ)
 
     def add_path(self, dest_env, new_path):

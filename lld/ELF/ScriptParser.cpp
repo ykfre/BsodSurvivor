@@ -38,9 +38,9 @@
 using namespace llvm;
 using namespace llvm::ELF;
 using namespace llvm::support::endian;
+using namespace lld;
+using namespace lld::elf;
 
-namespace lld {
-namespace elf {
 namespace {
 class ScriptParser final : ScriptLexer {
 public:
@@ -175,7 +175,6 @@ static ExprValue bitOr(ExprValue a, ExprValue b) {
 }
 
 void ScriptParser::readDynamicList() {
-  config->hasDynamicList = true;
   expect("{");
   std::vector<SymbolVersion> locals;
   std::vector<SymbolVersion> globals;
@@ -1365,7 +1364,7 @@ Expr ScriptParser::readPrimary() {
     return [=] { return cmd->size; };
   }
   if (tok == "SIZEOF_HEADERS")
-    return [=] { return getHeaderSize(); };
+    return [=] { return elf::getHeaderSize(); };
 
   // Tok is the dot.
   if (tok == ".")
@@ -1475,7 +1474,7 @@ void ScriptParser::readVersionDeclaration(StringRef verStr) {
     expect(";");
 }
 
-static bool hasWildcard(StringRef s) {
+bool elf::hasWildcard(StringRef s) {
   return s.find_first_of("?*[") != StringRef::npos;
 }
 
@@ -1607,19 +1606,18 @@ std::pair<uint32_t, uint32_t> ScriptParser::readMemoryAttributes() {
   return {flags, negFlags};
 }
 
-void readLinkerScript(MemoryBufferRef mb) {
+void elf::readLinkerScript(MemoryBufferRef mb) {
   ScriptParser(mb).readLinkerScript();
 }
 
-void readVersionScript(MemoryBufferRef mb) {
+void elf::readVersionScript(MemoryBufferRef mb) {
   ScriptParser(mb).readVersionScript();
 }
 
-void readDynamicList(MemoryBufferRef mb) { ScriptParser(mb).readDynamicList(); }
-
-void readDefsym(StringRef name, MemoryBufferRef mb) {
-  ScriptParser(mb).readDefsym(name);
+void elf::readDynamicList(MemoryBufferRef mb) {
+  ScriptParser(mb).readDynamicList();
 }
 
-} // namespace elf
-} // namespace lld
+void elf::readDefsym(StringRef name, MemoryBufferRef mb) {
+  ScriptParser(mb).readDefsym(name);
+}

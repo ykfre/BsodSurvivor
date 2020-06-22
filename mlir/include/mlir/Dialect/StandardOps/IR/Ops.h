@@ -20,7 +20,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
-#include "mlir/Interfaces/SideEffects.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
 
 // Pull in all enum type definitions and utility function declarations.
@@ -339,6 +339,16 @@ raw_ostream &operator<<(raw_ostream &os, SubViewOp::Range &range);
 ///   consumer %0 ... : memref<?x16xf32, affine_map<(i, j)->(16 * i + j)>>
 /// ```
 bool canFoldIntoConsumerOp(MemRefCastOp castOp);
+
+/// Compute `lhs` `pred` `rhs`, where `pred` is one of the known integer
+/// comparison predicates.
+bool applyCmpPredicate(CmpIPredicate predicate, const APInt &lhs,
+                       const APInt &rhs);
+
+/// Compute `lhs` `pred` `rhs`, where `pred` is one of the known floating point
+/// comparison predicates.
+bool applyCmpPredicate(CmpFPredicate predicate, const APFloat &lhs,
+                       const APFloat &rhs);
 } // end namespace mlir
 
 #endif // MLIR_DIALECT_IR_STANDARDOPS_IR_OPS_H

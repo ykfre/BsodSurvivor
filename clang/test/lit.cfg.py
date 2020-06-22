@@ -46,6 +46,8 @@ llvm_config.use_clang()
 config.substitutions.append(
     ('%src_include_dir', config.clang_src_dir + '/include'))
 
+config.substitutions.append(
+    ('%target_triple', config.target_triple))
 
 # Propagate path to symbolizer for ASan/MSan.
 llvm_config.with_system_environment(
@@ -198,3 +200,7 @@ if os.path.exists('/etc/gentoo-release'):
 
 if config.enable_shared:
     config.available_features.add("enable_shared")
+
+# Add a vendor-specific feature.
+if config.clang_vendor_uti:
+    config.available_features.add('clang-vendor=' + config.clang_vendor_uti)

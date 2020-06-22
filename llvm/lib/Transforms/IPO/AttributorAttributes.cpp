@@ -54,7 +54,7 @@ STATISTIC(NumAAs, "Number of abstract attributes created");
 //  }
 // If there is a single "increment" side one can use the macro
 // STATS_DECLTRACK with a custom message. If there are multiple increment
-// sides, STATS_DECL and STATS_TRACK can also be used separatly.
+// sides, STATS_DECL and STATS_TRACK can also be used separately.
 //
 #define BUILD_STAT_MSG_IR_ATTR(TYPE, NAME)                                     \
   ("Number of " #TYPE " marked '" #NAME "'")
@@ -3523,17 +3523,6 @@ struct AADereferenceableCallSiteReturned final
 
 // ------------------------ Align Argument Attribute ------------------------
 
-/// \p Ptr is accessed so we can get alignment information if the ABI requires
-/// the element type to be aligned.
-static MaybeAlign getKnownAlignmentFromAccessedPtr(const Value *Ptr,
-                                                   const DataLayout &DL) {
-  MaybeAlign KnownAlignment = Ptr->getPointerAlignment(DL);
-  Type *ElementTy = Ptr->getType()->getPointerElementType();
-  if (ElementTy->isSized())
-    KnownAlignment = max(KnownAlignment, DL.getABITypeAlign(ElementTy));
-  return KnownAlignment;
-}
-
 static unsigned getKnownAlignForUse(Attributor &A,
                                     AbstractAttribute &QueryingAA,
                                     Value &AssociatedValue, const Use *U,
@@ -3569,22 +3558,14 @@ static unsigned getKnownAlignForUse(Attributor &A,
   const DataLayout &DL = A.getDataLayout();
   const Value *UseV = U->get();
   if (auto *SI = dyn_cast<StoreInst>(I)) {
-    if (SI->getPointerOperand() == UseV) {
-      if (unsigned SIAlign = SI->getAlignment())
-        MA = MaybeAlign(SIAlign);
-      else
-        MA = getKnownAlignmentFromAccessedPtr(UseV, DL);
-    }
+    if (SI->getPointerOperand() == UseV)
+      MA = SI->getAlign();
   } else if (auto *LI = dyn_cast<LoadInst>(I)) {
-    if (LI->getPointerOperand() == UseV) {
-      if (unsigned LIAlign = LI->getAlignment())
-        MA = MaybeAlign(LIAlign);
-      else
-        MA = getKnownAlignmentFromAccessedPtr(UseV, DL);
-    }
+    if (LI->getPointerOperand() == UseV)
+      MA = LI->getAlign();
   }
 
-  if (!MA.hasValue() || MA <= 1)
+  if (!MA || *MA <= 1)
     return 0;
 
   unsigned Alignment = MA->value();
@@ -3622,8 +3603,7 @@ struct AAAlignImpl : AAAlign {
     //       their uses and int2ptr is not handled. It is not a correctness
     //       problem though!
     if (!V.getType()->getPointerElementType()->isFunctionTy())
-      takeKnownMaximum(
-          V.getPointerAlignment(A.getDataLayout()).valueOrOne().value());
+      takeKnownMaximum(V.getPointerAlignment(A.getDataLayout()).value());
 
     if (getIRPosition().isFnInterfaceKind() &&
         (!getAnchorScope() ||
@@ -3664,9 +3644,9 @@ struct AAAlignImpl : AAAlign {
 
     ChangeStatus Changed = AAAlign::manifest(A);
 
-    MaybeAlign InheritAlign =
+    Align InheritAlign =
         getAssociatedValue().getPointerAlignment(A.getDataLayout());
-    if (InheritAlign.valueOrOne() >= getAssumedAlign())
+    if (InheritAlign >= getAssumedAlign())
       return LoadStoreChanged;
     return Changed | LoadStoreChanged;
   }
@@ -3717,8 +3697,8 @@ struct AAAlignFloating : AAAlignImpl {
       const auto &AA = A.getAAFor<AAAlign>(*this, IRPosition::value(V));
       if (!Stripped && this == &AA) {
         // Use only IR information if we did not strip anything.
-        const MaybeAlign PA = V.getPointerAlignment(DL);
-        T.takeKnownMaximum(PA ? PA->value() : 0);
+        Align PA = V.getPointerAlignment(DL);
+        T.takeKnownMaximum(PA.value());
         T.indicatePessimisticFixpoint();
       } else {
         // Use abstract attribute information.
@@ -3786,9 +3766,9 @@ struct AAAlignCallSiteArgument final : AAAlignFloating {
       if (A.getInfoCache().isInvolvedInMustTailCall(*Arg))
         return ChangeStatus::UNCHANGED;
     ChangeStatus Changed = AAAlignImpl::manifest(A);
-    MaybeAlign InheritAlign =
+    Align InheritAlign =
         getAssociatedValue().getPointerAlignment(A.getDataLayout());
-    if (InheritAlign.valueOrOne() >= getAssumedAlign())
+    if (InheritAlign >= getAssumedAlign())
       Changed = ChangeStatus::UNCHANGED;
     return Changed;
   }
@@ -4455,7 +4435,8 @@ struct AAValueSimplifyArgument final : AAValueSimplifyImpl {
     AAValueSimplifyImpl::initialize(A);
     if (!getAnchorScope() || getAnchorScope()->isDeclaration())
       indicatePessimisticFixpoint();
-    if (hasAttr({Attribute::InAlloca, Attribute::StructRet, Attribute::Nest},
+    if (hasAttr({Attribute::InAlloca, Attribute::Preallocated,
+                 Attribute::StructRet, Attribute::Nest},
                 /* IgnoreSubsumingPositions */ true))
       indicatePessimisticFixpoint();
 
@@ -4724,7 +4705,7 @@ struct AAHeapToStackImpl : public AAHeapToStack {
       LLVM_DEBUG(dbgs() << "H2S: Removing malloc call: " << *MallocCall
                         << "\n");
 
-      MaybeAlign Alignment;
+      Align Alignment;
       Constant *Size;
       if (isCallocLikeFn(MallocCall, TLI)) {
         auto *Num = cast<ConstantInt>(MallocCall->getOperand(0));
@@ -4736,7 +4717,8 @@ struct AAHeapToStackImpl : public AAHeapToStack {
         Size = cast<ConstantInt>(MallocCall->getOperand(1));
         Alignment = MaybeAlign(cast<ConstantInt>(MallocCall->getOperand(0))
                                    ->getValue()
-                                   .getZExtValue());
+                                   .getZExtValue())
+                        .valueOrOne();
       } else {
         Size = cast<ConstantInt>(MallocCall->getOperand(0));
       }
@@ -5053,6 +5035,11 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
     if (!PrivatizableType.getValue())
       return indicatePessimisticFixpoint();
 
+    // The dependence is optional so we don't give up once we give up on the
+    // alignment.
+    A.getAAFor<AAAlign>(*this, IRPosition::value(getAssociatedValue()),
+                        /* TrackDependence */ true, DepClassTy::OPTIONAL);
+
     // Avoid arguments with padding for now.
     if (!getIRPosition().hasAttr(Attribute::ByVal) &&
         !ArgumentPromotionPass::isDenselyPacked(PrivatizableType.getValue(),
@@ -5267,8 +5254,8 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
 
   /// Extract values from \p Base according to the type \p PrivType at the
   /// call position \p ACS. The values are appended to \p ReplacementValues.
-  void createReplacementValues(Type *PrivType, AbstractCallSite ACS,
-                               Value *Base,
+  void createReplacementValues(Align Alignment, Type *PrivType,
+                               AbstractCallSite ACS, Value *Base,
                                SmallVectorImpl<Value *> &ReplacementValues) {
     assert(Base && "Expected base value!");
     assert(PrivType && "Expected privatizable type!");
@@ -5281,7 +5268,6 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
       Base = BitCastInst::CreateBitOrPointerCast(Base, PrivType->getPointerTo(),
                                                  "", ACS.getInstruction());
 
-    // TODO: Improve the alignment of the loads.
     // Traverse the type, build GEPs and loads.
     if (auto *PrivStructType = dyn_cast<StructType>(PrivType)) {
       const StructLayout *PrivStructLayout = DL.getStructLayout(PrivStructType);
@@ -5291,7 +5277,7 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
             constructPointer(PointeeTy->getPointerTo(), Base,
                              PrivStructLayout->getElementOffset(u), IRB, DL);
         LoadInst *L = new LoadInst(PointeeTy, Ptr, "", IP);
-        L->setAlignment(Align(1));
+        L->setAlignment(Alignment);
         ReplacementValues.push_back(L);
       }
     } else if (auto *PrivArrayType = dyn_cast<ArrayType>(PrivType)) {
@@ -5302,12 +5288,12 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
         Value *Ptr =
             constructPointer(PointeePtrTy, Base, u * PointeeTySize, IRB, DL);
         LoadInst *L = new LoadInst(PointeePtrTy, Ptr, "", IP);
-        L->setAlignment(Align(1));
+        L->setAlignment(Alignment);
         ReplacementValues.push_back(L);
       }
     } else {
       LoadInst *L = new LoadInst(PrivType, Base, "", IP);
-      L->setAlignment(Align(1));
+      L->setAlignment(Alignment);
       ReplacementValues.push_back(L);
     }
   }
@@ -5333,6 +5319,9 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
       return ChangeStatus::UNCHANGED;
 
     Argument *Arg = getAssociatedArgument();
+    // Query AAAlign attribute for alignment of associated argument to
+    // determine the best alignment of loads.
+    const auto &AlignAA = A.getAAFor<AAAlign>(*this, IRPosition::value(*Arg));
 
     // Callback to repair the associated function. A new alloca is placed at the
     // beginning and initialized with the values passed through arguments. The
@@ -5356,9 +5345,13 @@ struct AAPrivatizablePtrArgument final : public AAPrivatizablePtrImpl {
     // of the privatizable type are loaded prior to the call and passed to the
     // new function version.
     Attributor::ArgumentReplacementInfo::ACSRepairCBTy ACSRepairCB =
-        [=](const Attributor::ArgumentReplacementInfo &ARI,
-            AbstractCallSite ACS, SmallVectorImpl<Value *> &NewArgOperands) {
+        [=, &AlignAA](const Attributor::ArgumentReplacementInfo &ARI,
+                      AbstractCallSite ACS,
+                      SmallVectorImpl<Value *> &NewArgOperands) {
+          // When no alignment is specified for the load instruction,
+          // natural alignment is assumed.
           createReplacementValues(
+              assumeAligned(AlignAA.getAssumedAlign()),
               PrivatizableType.getValue(), ACS,
               ACS.getCallArgOperand(ARI.getReplacedArg().getArgNo()),
               NewArgOperands);
@@ -5683,7 +5676,7 @@ struct AAMemoryBehaviorArgument : AAMemoryBehaviorFloating {
 
     // TODO: From readattrs.ll: "inalloca parameters are always
     //                           considered written"
-    if (hasAttr({Attribute::InAlloca})) {
+    if (hasAttr({Attribute::InAlloca, Attribute::Preallocated})) {
       removeKnownBits(NO_WRITES);
       removeAssumedBits(NO_WRITES);
     }

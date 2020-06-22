@@ -67,6 +67,18 @@ public:
                   ConversionPatternRewriter &rewriter) const override;
 };
 
+/// Pattern lowering subgoup size/id to loading SPIR-V invocation
+/// builtin variables.
+template <typename SourceOp, spirv::BuiltIn builtin>
+class SingleDimLaunchConfigConversion : public SPIRVOpLowering<SourceOp> {
+public:
+  using SPIRVOpLowering<SourceOp>::SPIRVOpLowering;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override;
+};
+
 /// This is separate because in Vulkan workgroup size is exposed to shaders via
 /// a constant with WorkgroupSize decoration. So here we cannot generate a
 /// builtin variable; instead the information in the `spv.entry_point_abi`
@@ -128,7 +140,7 @@ ForOpConversion::matchAndRewrite(scf::ForOp forOp, ArrayRef<Value> operands,
   // latch and the merge block the exit block. The resulting spirv::LoopOp has a
   // single back edge from the continue to header block, and a single exit from
   // header to merge.
-  scf::ForOpOperandAdaptor forOperands(operands);
+  scf::ForOpAdaptor forOperands(operands);
   auto loc = forOp.getLoc();
   auto loopControl = rewriter.getI32IntegerAttr(
       static_cast<uint32_t>(spirv::LoopControl::None));
@@ -152,8 +164,11 @@ ForOpConversion::matchAndRewrite(scf::ForOp forOp, ArrayRef<Value> operands,
   TypeConverter::SignatureConversion signatureConverter(
       body->getNumArguments());
   signatureConverter.remapInput(0, newIndVar);
-  body = rewriter.applySignatureConversion(&forOp.getLoopBody(),
-                                           signatureConverter);
+  FailureOr<Block *> newBody = rewriter.convertRegionTypes(
+      &forOp.getLoopBody(), typeConverter, &signatureConverter);
+  if (failed(newBody))
+    return failure();
+  body = *newBody;
 
   // Delete the loop terminator.
   rewriter.eraseOp(body->getTerminator());
@@ -199,7 +214,7 @@ IfOpConversion::matchAndRewrite(scf::IfOp ifOp, ArrayRef<Value> operands,
   // When lowering `scf::IfOp` we explicitly create a selection header block
   // before the control flow diverges and a merge block where control flow
   // subsequently converges.
-  scf::IfOpOperandAdaptor ifOperands(operands);
+  scf::IfOpAdaptor ifOperands(operands);
   auto loc = ifOp.getLoc();
 
   // Create `spv.selection` operation, selection header block and merge block.
@@ -276,6 +291,16 @@ LogicalResult LaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
   return success();
 }
 
+template <typename SourceOp, spirv::BuiltIn builtin>
+LogicalResult
+SingleDimLaunchConfigConversion<SourceOp, builtin>::matchAndRewrite(
+    SourceOp op, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  auto spirvBuiltin = spirv::getBuiltinVariableValue(op, builtin, rewriter);
+  rewriter.replaceOp(op, spirvBuiltin);
+  return success();
+}
+
 LogicalResult WorkGroupSizeConversion::matchAndRewrite(
     gpu::BlockDimOp op, ArrayRef<Value> operands,
     ConversionPatternRewriter &rewriter) const {
@@ -334,13 +359,36 @@ lowerAsEntryFunction(gpu::GPUFuncOp funcOp, SPIRVTypeConverter &typeConverter,
       continue;
     newFuncOp.setAttr(namedAttr.first, namedAttr.second);
   }
+
   rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
                               newFuncOp.end());
-  rewriter.applySignatureConversion(&newFuncOp.getBody(), signatureConverter);
+  if (failed(rewriter.convertRegionTypes(&newFuncOp.getBody(), typeConverter,
+                                         &signatureConverter)))
+    return nullptr;
   rewriter.eraseOp(funcOp);
 
   spirv::setABIAttrs(newFuncOp, entryPointInfo, argABIInfo);
   return newFuncOp;
+}
+
+/// Populates `argABI` with spv.interface_var_abi attributes for lowering
+/// gpu.func to spv.func if no arguments have the attributes set
+/// already. Returns failure if any argument has the ABI attribute set already.
+static LogicalResult
+getDefaultABIAttrs(MLIRContext *context, gpu::GPUFuncOp funcOp,
+                   SmallVectorImpl<spirv::InterfaceVarABIAttr> &argABI) {
+  for (auto argIndex : llvm::seq<unsigned>(0, funcOp.getNumArguments())) {
+    if (funcOp.getArgAttrOfType<spirv::InterfaceVarABIAttr>(
+            argIndex, spirv::getInterfaceVarABIAttrName()))
+      return failure();
+    // Vulkan's interface variable requirements needs scalars to be wrapped in a
+    // struct. The struct held in storage buffer.
+    Optional<spirv::StorageClass> sc;
+    if (funcOp.getArgument(argIndex).getType().isIntOrIndexOrFloat())
+      sc = spirv::StorageClass::StorageBuffer;
+    argABI.push_back(spirv::getInterfaceVarABIAttr(0, argIndex, sc, context));
+  }
+  return success();
 }
 
 LogicalResult GPUFuncOpConversion::matchAndRewrite(
@@ -350,22 +398,21 @@ LogicalResult GPUFuncOpConversion::matchAndRewrite(
     return failure();
 
   SmallVector<spirv::InterfaceVarABIAttr, 4> argABI;
-  for (auto argIndex : llvm::seq<unsigned>(0, funcOp.getNumArguments())) {
-    // If the ABI is already specified, use it.
-    auto abiAttr = funcOp.getArgAttrOfType<spirv::InterfaceVarABIAttr>(
-        argIndex, spirv::getInterfaceVarABIAttrName());
-    if (abiAttr) {
+  if (failed(getDefaultABIAttrs(rewriter.getContext(), funcOp, argABI))) {
+    argABI.clear();
+    for (auto argIndex : llvm::seq<unsigned>(0, funcOp.getNumArguments())) {
+      // If the ABI is already specified, use it.
+      auto abiAttr = funcOp.getArgAttrOfType<spirv::InterfaceVarABIAttr>(
+          argIndex, spirv::getInterfaceVarABIAttrName());
+      if (!abiAttr) {
+        funcOp.emitRemark(
+            "match failure: missing 'spv.interface_var_abi' attribute at "
+            "argument ")
+            << argIndex;
+        return failure();
+      }
       argABI.push_back(abiAttr);
-      continue;
     }
-    // todo(ravishankarm): Use the "default ABI". Remove this in a follow up
-    // CL. Staging this to make this easy to revert in case of breakages out of
-    // tree.
-    Optional<spirv::StorageClass> sc;
-    if (funcOp.getArgument(argIndex).getType().isIntOrIndexOrFloat())
-      sc = spirv::StorageClass::StorageBuffer;
-    argABI.push_back(
-        spirv::getInterfaceVarABIAttr(0, argIndex, sc, rewriter.getContext()));
   }
 
   auto entryPointAttr = spirv::lookupEntryPointABI(funcOp);
@@ -400,7 +447,7 @@ LogicalResult GPUModuleConversion::matchAndRewrite(
   // The spv.module build method adds a block with a terminator. Remove that
   // block. The terminator of the module op in the remaining block will be
   // legalized later.
-  spvModuleRegion.back().erase();
+  rewriter.eraseBlock(&spvModuleRegion.back());
   rewriter.eraseOp(moduleOp);
   return success();
 }
@@ -438,5 +485,11 @@ void mlir::populateGPUToSPIRVPatterns(MLIRContext *context,
       LaunchConfigConversion<gpu::GridDimOp, spirv::BuiltIn::NumWorkgroups>,
       LaunchConfigConversion<gpu::ThreadIdOp,
                              spirv::BuiltIn::LocalInvocationId>,
+      SingleDimLaunchConfigConversion<gpu::SubgroupIdOp,
+                                      spirv::BuiltIn::SubgroupId>,
+      SingleDimLaunchConfigConversion<gpu::NumSubgroupsOp,
+                                      spirv::BuiltIn::NumSubgroups>,
+      SingleDimLaunchConfigConversion<gpu::SubgroupSizeOp,
+                                      spirv::BuiltIn::SubgroupSize>,
       TerminatorOpConversion, WorkGroupSizeConversion>(context, typeConverter);
 }

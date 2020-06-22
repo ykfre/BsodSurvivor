@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangdLSPServer.h"
+#include "CodeComplete.h"
 #include "Diagnostics.h"
 #include "DraftStore.h"
 #include "GlobalCompilationDatabase.h"
@@ -513,7 +514,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   if (ClangdServerOpts.ResourceDir)
     Mangler.ResourceDir = *ClangdServerOpts.ResourceDir;
   CDB.emplace(BaseCDB.get(), Params.initializationOptions.fallbackFlags,
-              tooling::ArgumentsAdjuster(Mangler));
+              tooling::ArgumentsAdjuster(std::move(Mangler)));
   {
     // Switch caller's context with LSPServer's background context. Since we
     // rather want to propagate information from LSPServer's context into the
@@ -523,7 +524,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
     if (NegotiatedOffsetEncoding)
       WithOffsetEncoding.emplace(kCurrentOffsetEncoding,
                                  *NegotiatedOffsetEncoding);
-    Server.emplace(*CDB, FSProvider, ClangdServerOpts,
+    Server.emplace(*CDB, TFS, ClangdServerOpts,
                    static_cast<ClangdServer::Callbacks *>(this));
   }
   applyConfiguration(Params.initializationOptions.ConfigSettings);
@@ -593,9 +594,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
              llvm::json::Object{
                  {"allCommitCharacters", " \t()[]{}<>:;,+-/*%^&#?.=\"'|"},
                  {"resolveProvider", false},
-                 // We do extra checks for '>' and ':' in completion to only
-                 // trigger on '->' and '::'.
-                 {"triggerCharacters", {".", ">", ":"}},
+                 // We do extra checks, e.g. that > is part of ->.
+                 {"triggerCharacters", {".", "<", ">", ":", "\"", "/"}},
              }},
             {"semanticTokensProvider",
              llvm::json::Object{
@@ -1340,16 +1340,15 @@ void ClangdLSPServer::onSemanticTokensEdits(
 }
 
 ClangdLSPServer::ClangdLSPServer(
-    class Transport &Transp, const FileSystemProvider &FSProvider,
+    class Transport &Transp, const ThreadsafeFS &TFS,
     const clangd::CodeCompleteOptions &CCOpts,
     const clangd::RenameOptions &RenameOpts,
     llvm::Optional<Path> CompileCommandsDir, bool UseDirBasedCDB,
     llvm::Optional<OffsetEncoding> ForcedOffsetEncoding,
     const ClangdServer::Options &Opts)
     : BackgroundContext(Context::current().clone()), Transp(Transp),
-      MsgHandler(new MessageHandler(*this)), FSProvider(FSProvider),
-      CCOpts(CCOpts), RenameOpts(RenameOpts),
-      SupportedSymbolKinds(defaultSymbolKinds()),
+      MsgHandler(new MessageHandler(*this)), TFS(TFS), CCOpts(CCOpts),
+      RenameOpts(RenameOpts), SupportedSymbolKinds(defaultSymbolKinds()),
       SupportedCompletionItemKinds(defaultCompletionItemKinds()),
       UseDirBasedCDB(UseDirBasedCDB),
       CompileCommandsDir(std::move(CompileCommandsDir)), ClangdServerOpts(Opts),
@@ -1425,23 +1424,19 @@ std::vector<Fix> ClangdLSPServer::getFixes(llvm::StringRef File,
   return FixItsIter->second;
 }
 
+// A completion request is sent when the user types '>' or ':', but we only
+// want to trigger on '->' and '::'. We check the preceeding text to make
+// sure it matches what we expected.
+// Running the lexer here would be more robust (e.g. we can detect comments
+// and avoid triggering completion there), but we choose to err on the side
+// of simplicity here.
 bool ClangdLSPServer::shouldRunCompletion(
     const CompletionParams &Params) const {
-  llvm::StringRef Trigger = Params.context.triggerCharacter;
-  if (Params.context.triggerKind != CompletionTriggerKind::TriggerCharacter ||
-      (Trigger != ">" && Trigger != ":"))
+  if (Params.context.triggerKind != CompletionTriggerKind::TriggerCharacter)
     return true;
-
   auto Code = DraftMgr.getDraft(Params.textDocument.uri.file());
   if (!Code)
     return true; // completion code will log the error for untracked doc.
-
-  // A completion request is sent when the user types '>' or ':', but we only
-  // want to trigger on '->' and '::'. We check the preceeding character to make
-  // sure it matches what we expected.
-  // Running the lexer here would be more robust (e.g. we can detect comments
-  // and avoid triggering completion there), but we choose to err on the side
-  // of simplicity here.
   auto Offset = positionToOffset(Code->Contents, Params.position,
                                  /*AllowColumnsBeyondLineLength=*/false);
   if (!Offset) {
@@ -1449,15 +1444,7 @@ bool ClangdLSPServer::shouldRunCompletion(
          Params.position, Params.textDocument.uri.file());
     return true;
   }
-  if (*Offset < 2)
-    return false;
-
-  if (Trigger == ">")
-    return Code->Contents[*Offset - 2] == '-'; // trigger only on '->'.
-  if (Trigger == ":")
-    return Code->Contents[*Offset - 2] == ':'; // trigger only on '::'.
-  assert(false && "unhandled trigger character");
-  return true;
+  return allowImplicitCompletion(Code->Contents, *Offset);
 }
 
 void ClangdLSPServer::onHighlightingsReady(

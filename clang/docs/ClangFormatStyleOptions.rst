@@ -151,6 +151,9 @@ the configuration (without a prefix: ``Auto``).
   * ``Microsoft``
     A style complying with `Microsoft's style guide
     <https://docs.microsoft.com/en-us/visualstudio/ide/editorconfig-code-style-settings-reference?view=vs-2017>`_
+  * ``GNU``
+    A style complying with the `GNU coding standards
+    <https://www.gnu.org/prep/standards/standards.html>`_
 
 .. START_FORMAT_STYLE_OPTIONS
 
@@ -203,6 +206,18 @@ the configuration (without a prefix: ``Auto``).
     int aaaa = 12;
     int b    = 23;
     int ccc  = 23;
+
+**AlignConsecutiveBitFields** (``bool``)
+  If ``true``, aligns consecutive bitfield members.
+
+  This will align the bitfield separators of consecutive lines. This
+  will result in formattings like
+
+  .. code-block:: c++
+
+    int aaaa : 1;
+    int b    : 12;
+    int ccc  : 8;
 
 **AlignConsecutiveDeclarations** (``bool``)
   If ``true``, aligns consecutive declarations.
@@ -270,17 +285,49 @@ the configuration (without a prefix: ``Auto``).
 
 
 
-**AlignOperands** (``bool``)
+**AlignOperands** (``OperandAlignmentStyle``)
   If ``true``, horizontally align operands of binary and ternary
   expressions.
 
-  Specifically, this aligns operands of a single expression that needs to be
-  split over multiple lines, e.g.:
+  Possible values:
 
-  .. code-block:: c++
+  * ``OAS_DontAlign`` (in configuration: ``DontAlign``)
+    Do not align operands of binary and ternary expressions.
+    The wrapped lines are indented ``ContinuationIndentWidth`` spaces from
+    the start of the line.
 
-    int aaa = bbbbbbbbbbbbbbb +
-              ccccccccccccccc;
+  * ``OAS_Align`` (in configuration: ``Align``)
+    Horizontally align operands of binary and ternary expressions.
+
+    Specifically, this aligns operands of a single expression that needs
+    to be split over multiple lines, e.g.:
+
+    .. code-block:: c++
+
+      int aaa = bbbbbbbbbbbbbbb +
+                ccccccccccccccc;
+
+    When ``BreakBeforeBinaryOperators`` is set, the wrapped operator is
+    aligned with the operand on the first line.
+
+    .. code-block:: c++
+
+      int aaa = bbbbbbbbbbbbbbb
+                + ccccccccccccccc;
+
+  * ``OAS_AlignAfterOperator`` (in configuration: ``AlignAfterOperator``)
+    Horizontally align operands of binary and ternary expressions.
+
+    This is similar to ``AO_Align``, except when
+    ``BreakBeforeBinaryOperators`` is set, the operator is un-indented so
+    that the wrapped operand is aligned with the operand on the first line.
+
+    .. code-block:: c++
+
+      int aaa = bbbbbbbbbbbbbbb
+              + ccccccccccccccc;
+
+
 
 **AlignTrailingComments** (``bool``)
   If ``true``, aligns trailing comments.
@@ -981,6 +1028,21 @@ the configuration (without a prefix: ``Auto``).
         bar();
       });
 
+  * ``bool BeforeWhile`` Wrap before ``while``.
+
+    .. code-block:: c++
+
+      true:
+      do {
+        foo();
+      }
+      while (1);
+
+      false:
+      do {
+        foo();
+      } while (1);
+
   * ``bool IndentBraces`` Indent the wrapped braces themselves.
 
   * ``bool SplitEmptyFunction`` If ``false``, empty function body can be put on a single line.
@@ -1679,6 +1741,52 @@ the configuration (without a prefix: ``Auto``).
      default:                                 default:
        plop();                                  plop();
      }                                      }
+
+**IndentExternBlock** (``IndentExternBlockStyle``)
+  IndentExternBlockStyle is the type of indenting of extern blocks.
+
+  Possible values:
+
+  * ``IEBS_AfterExternBlock`` (in configuration: ``AfterExternBlock``)
+    Backwards compatible with AfterExternBlock's indenting.
+
+    .. code-block:: c++
+
+       IndentExternBlock: AfterExternBlock
+       BraceWrapping.AfterExternBlock: true
+       extern "C"
+       {
+           void foo();
+       }
+
+
+    .. code-block:: c++
+
+       IndentExternBlock: AfterExternBlock
+       BraceWrapping.AfterExternBlock: false
+       extern "C" {
+       void foo();
+       }
+
+  * ``IEBS_NoIndent`` (in configuration: ``NoIndent``)
+    Does not indent extern blocks.
+
+    .. code-block:: c++
+
+        extern "C" {
+        void foo();
+        }
+
+  * ``IEBS_Indent`` (in configuration: ``Indent``)
+    Indents extern blocks.
+
+    .. code-block:: c++
+
+        extern "C" {
+          void foo();
+        }
+
+
 
 **IndentGotoLabels** (``bool``)
   Indent goto labels.
