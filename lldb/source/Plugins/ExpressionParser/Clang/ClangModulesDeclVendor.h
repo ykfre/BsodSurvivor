@@ -16,7 +16,6 @@
 
 #include <set>
 #include <vector>
-
 namespace lldb_private {
 
 class ClangModulesDeclVendor : public ClangDeclVendor {

@@ -30,7 +30,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Error.h"
 #include <utility>
-
+#include <set>
 namespace clang {
 
 class ASTContext;
@@ -89,6 +89,8 @@ class TypeSourceInfo;
   class ASTImporter {
     friend class ASTNodeImporter;
   public:
+    std::set<Decl *> AlreadyVisitedDecls;
+    bool isMiddle = false;
     using NonEquivalentDeclSet = llvm::DenseSet<std::pair<Decl *, Decl *>>;
     using ImportedCXXBaseSpecifierMap =
         llvm::DenseMap<const CXXBaseSpecifier *, CXXBaseSpecifier *>;

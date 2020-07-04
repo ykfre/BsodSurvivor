@@ -1009,7 +1009,7 @@ lldb_private::Address ObjectFilePECOFF::GetEntryPointAddress() {
   if (m_entry_point_address.IsValid())
     return m_entry_point_address;
 
-  if (!ParseHeader() || !IsExecutable())
+  if (!ParseHeader())
     return m_entry_point_address;
 
   SectionList *section_list = GetSectionList();

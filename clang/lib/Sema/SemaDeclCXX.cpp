@@ -14558,6 +14558,10 @@ CXXConstructorDecl *Sema::DeclareImplicitCopyConstructor(
   Scope *S = getScopeForContext(ClassDecl);
   CheckImplicitSpecialMemberDeclaration(S, CopyConstructor);
 
+  if (ClassDecl->getNameAsString().find("has_destroy") != -1)
+  {
+    __debugbreak();
+  }
   if (ShouldDeleteSpecialMember(CopyConstructor, CXXCopyConstructor)) {
     ClassDecl->setImplicitCopyConstructorIsDeleted();
     SetDeclDeleted(CopyConstructor, ClassLoc);

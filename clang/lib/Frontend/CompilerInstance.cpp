@@ -1722,13 +1722,14 @@ ModuleLoadResult CompilerInstance::findOrCompileModuleAndReadAST(
                           : Source == MS_PrebuiltModulePath
                                 ? 0
                                 : ASTReader::ARR_ConfigurationMismatch;
-  switch (getASTReader()->ReadAST(ModuleFilename,
-                                  Source == MS_PrebuiltModulePath
-                                      ? serialization::MK_PrebuiltModule
-                                      : Source == MS_ModuleBuildPragma
-                                            ? serialization::MK_ExplicitModule
-                                            : serialization::MK_ImplicitModule,
-                                  ImportLoc, ARRFlags)) {
+  auto astResult = getASTReader()->ReadAST(
+      ModuleFilename,
+      Source == MS_PrebuiltModulePath
+          ? serialization::MK_PrebuiltModule
+          : Source == MS_ModuleBuildPragma ? serialization::MK_ExplicitModule
+                                           : serialization::MK_ImplicitModule,
+      ImportLoc, ARRFlags);
+  switch (astResult) {
   case ASTReader::Success: {
     if (M)
       return M;
@@ -1774,6 +1775,7 @@ ModuleLoadResult CompilerInstance::findOrCompileModuleAndReadAST(
     return ModuleLoadResult();
 
   case ASTReader::Failure:
+    __debugbreak();
     // FIXME: Should this set ModuleBuildFailed = true?
     ModuleLoader::HadFatalFailure = true;
     return ModuleLoadResult();

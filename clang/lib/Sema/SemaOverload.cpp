@@ -9314,17 +9314,37 @@ Sema::AddArgumentDependentLookupCandidates(DeclarationName Name,
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(*I)) {
       if (ExplicitTemplateArgs)
         continue;
-
-      AddOverloadCandidate(
-          FD, FoundDecl, Args, CandidateSet, /*SuppressUserConversions=*/false,
-          PartialOverloading, /*AllowExplicit=*/true,
-          /*AllowExplicitConversions=*/false, ADLCallKind::UsesADL);
-      if (CandidateSet.getRewriteInfo().shouldAddReversed(Context, FD)) {
-        AddOverloadCandidate(
-            FD, FoundDecl, {Args[1], Args[0]}, CandidateSet,
+      if (FD->getDescribedFunctionTemplate()) {
+        auto *FTD = FD->getDescribedFunctionTemplate();
+        AddTemplateOverloadCandidate(
+            FTD, FoundDecl, ExplicitTemplateArgs, Args, CandidateSet,
             /*SuppressUserConversions=*/false, PartialOverloading,
-            /*AllowExplicit=*/true, /*AllowExplicitConversions=*/false,
-            ADLCallKind::UsesADL, None, OverloadCandidateParamOrder::Reversed);
+            /*AllowExplicit=*/true, ADLCallKind::UsesADL);
+        if (CandidateSet.getRewriteInfo().shouldAddReversed(
+                Context, FTD->getTemplatedDecl())) {
+          AddTemplateOverloadCandidate(
+              FTD, FoundDecl, ExplicitTemplateArgs, {Args[1], Args[0]},
+              CandidateSet, /*SuppressUserConversions=*/false,
+              PartialOverloading,
+              /*AllowExplicit=*/true, ADLCallKind::UsesADL,
+              OverloadCandidateParamOrder::Reversed);
+        }
+      }
+      else
+      {
+        AddOverloadCandidate(FD, FoundDecl, Args, CandidateSet,
+                             /*SuppressUserConversions=*/false,
+                             PartialOverloading, /*AllowExplicit=*/true,
+                             /*AllowExplicitConversions=*/false,
+                             ADLCallKind::UsesADL);
+        if (CandidateSet.getRewriteInfo().shouldAddReversed(Context, FD)) {
+          AddOverloadCandidate(
+              FD, FoundDecl, {Args[1], Args[0]}, CandidateSet,
+              /*SuppressUserConversions=*/false, PartialOverloading,
+              /*AllowExplicit=*/true, /*AllowExplicitConversions=*/false,
+              ADLCallKind::UsesADL, None,
+              OverloadCandidateParamOrder::Reversed);
+        }
       }
     } else {
       auto *FTD = cast<FunctionTemplateDecl>(*I);

@@ -30,6 +30,7 @@ namespace lldb_private {
 /// that instantiating this template is safe to do, e.g. because the target
 /// decl is a container class from the STL.
 class CxxModuleHandler {
+public:
   /// The ASTImporter that should be used to import any Decls which aren't
   /// directly handled by this class itself.
   clang::ASTImporter *m_importer = nullptr;

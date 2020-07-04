@@ -831,18 +831,22 @@ public:
   /// Set that we attempted to declare an implicit copy
   /// constructor, but overload resolution failed so we deleted it.
   void setImplicitCopyConstructorIsDeleted() {
+    /*
     assert((data().DefaultedCopyConstructorIsDeleted ||
             needsOverloadResolutionForCopyConstructor()) &&
            "Copy constructor should not be deleted");
+           */
     data().DefaultedCopyConstructorIsDeleted = true;
   }
 
   /// Set that we attempted to declare an implicit move
   /// constructor, but overload resolution failed so we deleted it.
   void setImplicitMoveConstructorIsDeleted() {
+    /*
     assert((data().DefaultedMoveConstructorIsDeleted ||
             needsOverloadResolutionForMoveConstructor()) &&
            "move constructor should not be deleted");
+           */
     data().DefaultedMoveConstructorIsDeleted = true;
   }
 
@@ -882,9 +886,11 @@ public:
   /// Set that we attempted to declare an implicit copy assignment
   /// operator, but overload resolution failed so we deleted it.
   void setImplicitCopyAssignmentIsDeleted() {
+    /*
     assert((data().DefaultedCopyAssignmentIsDeleted ||
             needsOverloadResolutionForCopyAssignment()) &&
            "copy assignment should not be deleted");
+           */
     data().DefaultedCopyAssignmentIsDeleted = true;
   }
 

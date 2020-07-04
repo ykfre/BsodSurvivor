@@ -567,6 +567,8 @@ public:
 
   const lldb::ProcessSP &GetProcessSP() const;
 
+  lldb::ProcessSP &GetProcessSP();
+
   bool IsValid() { return m_valid; }
 
   void Destroy();

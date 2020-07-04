@@ -717,6 +717,7 @@ void IRExecutionUnit::CollectCandidateCPlusPlusNames(
       ConstString demangled = mangled.GetDemangledName();
 
       if (demangled) {
+        CPP_specs.push_back(demangled);
         ConstString best_alternate_mangled_name =
             FindBestAlternateMangledName(demangled, sc);
 
@@ -729,6 +730,10 @@ void IRExecutionUnit::CollectCandidateCPlusPlusNames(
     std::set<ConstString> alternates;
     CPlusPlusLanguage::FindAlternateFunctionManglings(name, alternates);
     CPP_specs.insert(CPP_specs.end(), alternates.begin(), alternates.end());
+    auto myNameToSearch =
+        "my_" +
+        std::to_string(std::hash<std::string>{}(C_spec.name.AsCString()));
+    CPP_specs.push_back(ConstString(myNameToSearch));
   }
 }
 

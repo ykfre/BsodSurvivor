@@ -9,7 +9,7 @@
 // This file implements semantic analysis for initializers.
 //
 //===----------------------------------------------------------------------===//
-
+#include <iostream>
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/ExprCXX.h"
@@ -5629,6 +5629,21 @@ void InitializationSequence::InitializeFrom(Sema &S,
   //   parenthesized list of expressions.
   QualType DestType = Entity.getType();
 
+  if (Entity.getDecl())
+  {
+
+    std::cout << S.getASTContext()
+                     .getSourceManager()
+                     .getFilename(Entity.getDecl()->getBeginLoc())
+                     .str()
+              << std::endl;
+    std::cout << S.getASTContext().getSourceManager().getExpansionColumnNumber(
+        Entity.getDecl()->getBeginLoc()) << std::endl;
+    std::cout << S.getASTContext().getSourceManager().getExpansionLineNumber(
+                     Entity.getDecl()->getBeginLoc())
+              << std::endl;
+  }
+
   if (DestType->isDependentType() ||
       Expr::hasAnyTypeDependentArguments(Args)) {
     SequenceKind = DependentSequence;
@@ -5821,7 +5836,6 @@ void InitializationSequence::InitializeFrom(Sema &S,
   }
 
   assert(S.getLangOpts().CPlusPlus);
-
   //     - If the destination type is a (possibly cv-qualified) class type:
   if (DestType->isRecordType()) {
     //     - If the initialization is direct-initialization, or if it is

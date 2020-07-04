@@ -49,6 +49,8 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
+#include <iostream>
+
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
@@ -70,8 +72,41 @@
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include "clang/AST/RecursiveASTVisitor.h"
+#include <iostream>
+#include <set>
 
-namespace clang {
+class ExampleVisitor2 : public clang::RecursiveASTVisitor<ExampleVisitor2> {
+public:
+  ExampleVisitor2(const std::string &wantedDeclName) {
+    m_wantedDeclName = wantedDeclName;
+  }
+  std::vector<clang::NamedDecl *> getWatnedDecls(clang::ASTContext &AST) {
+    if (!s_is_cached_decls) {
+      s_is_cached_decls = true;
+      TraverseAST(AST);
+    }
+    std::vector<clang::NamedDecl *> wanted_decls;
+    for (const auto &decl : s_cached_decls) {
+      wanted_decls.push_back(decl);
+    }
+    return wanted_decls;
+  }
+  bool TraverseDecl(clang::Decl *decl) {
+    if (decl && llvm::dyn_cast<clang::NamedDecl>(decl)) {
+      s_cached_decls.push_back(llvm::dyn_cast<clang::NamedDecl>(decl));
+    }
+    return clang::RecursiveASTVisitor<ExampleVisitor2>::TraverseDecl(decl);
+  }
+  private:
+    std::string m_wantedDeclName;
+    static bool s_is_cached_decls;
+    static std::vector<clang::NamedDecl *> s_cached_decls;
+  };
+
+  bool ExampleVisitor2::s_is_cached_decls = false;
+  std::vector<clang::NamedDecl *> ExampleVisitor2::s_cached_decls{};
+  namespace clang {
 
   using llvm::make_error;
   using llvm::Error;
@@ -491,6 +526,7 @@ namespace clang {
     ExpectedDecl VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D);
     ExpectedDecl VisitLabelDecl(LabelDecl *D);
     ExpectedDecl VisitEnumDecl(EnumDecl *D);
+    void declareNeeded(CXXRecordDecl *from, CXXRecordDecl *to);
     ExpectedDecl VisitRecordDecl(RecordDecl *D);
     ExpectedDecl VisitEnumConstantDecl(EnumConstantDecl *D);
     ExpectedDecl VisitFunctionDecl(FunctionDecl *D);
@@ -2668,7 +2704,86 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
   return D2;
 }
 
+void ASTNodeImporter::declareNeeded(CXXRecordDecl *from, CXXRecordDecl *to) {
+  auto &dataStarts = to->data();
+  auto sizeToCopy = (char *)&dataStarts.Bases - (char *)&dataStarts;
+  memcpy((char *)&to->data(), (char *)&from->data(), sizeToCopy);
+  if (from->ctors().empty())
+  {
+    to->data().DeclaredSpecialMembers = 0;
+  }
+  if (dyn_cast<CXXRecordDecl>(from)->getDestructor()) {
+    to->data().DeclaredSpecialMembers |= CXXRecordDecl::SMF_Destructor;
+    for (const auto &destructor :
+         dyn_cast<CXXRecordDecl>(from)->getDestructor()->redecls()) {
+      if (Importer.GetAlreadyImportedOrNull(destructor)) {
+        continue;
+      }
+      auto foundDef = Visit(destructor);
+      if (foundDef) {
+        Importer.MapImported(destructor, foundDef.get());
+      }
+    }
+  }
+}
+
 ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
+    if (D->getNameAsString().find("vector") != -1)
+    {
+      std::cout << D->getASTContext()
+          .getSourceManager().getFilename(
+            D->getSourceRange().getBegin()).str() << std::endl;
+
+  }
+    
+  if (!Importer.isMiddle) {
+    Importer.isMiddle = true;
+    ExampleVisitor2 example("");
+
+    std::vector<clang::NamedDecl *> decls =
+        example.getWatnedDecls(Importer.getFromContext());
+
+    for (const auto &decl : decls) {
+        if (!(isa<FunctionDecl>(decl) && 
+            (decl->getNameAsString().find("operator new") != -1) ||
+            decl->getNameAsString().find("operator delete") != -1))
+        {
+        continue;
+      }
+      if (Importer.AlreadyVisitedDecls.find(decl) ==
+          Importer.AlreadyVisitedDecls.end()) {
+        Importer.AlreadyVisitedDecls.insert(decl);
+        if (Importer.GetAlreadyImportedOrNull(decl)) {
+          continue;
+        }
+        auto imported = Visit(decl);
+        assert(imported);
+        if (imported) {
+          Importer.MapImported(imported.get(), decl);
+        }
+      }
+    }
+  }
+  
+  
+  auto b = 0;
+  if (D->getDefinition()) {
+    auto alreadyImportedDecl =
+        Importer.GetAlreadyImportedOrNull(D->getDefinition());
+    if (alreadyImportedDecl) {
+      Importer.MapImported(D, alreadyImportedDecl);
+      return alreadyImportedDecl;
+    } else {
+      if (D->getDefinition() != D) {
+        auto foundDef = VisitRecordDecl(D->getDefinition());
+        assert(foundDef);
+        if (foundDef) {
+          Importer.MapImported(D->getDefinition(), foundDef.get());
+        }
+      }
+    }
+  }
+  
   bool IsFriendTemplate = false;
   if (auto *DCXX = dyn_cast<CXXRecordDecl>(D)) {
     IsFriendTemplate =
@@ -2901,7 +3016,12 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
   if (D->isCompleteDefinition())
     if (Error Err = ImportDefinition(D, D2, IDK_Default))
       return std::move(Err);
-
+  
+  if (D->isCompleteDefinition() && dyn_cast<CXXRecordDecl>(D) &&
+      dyn_cast<CXXRecordDecl>(D2)) {
+    declareNeeded(dyn_cast<CXXRecordDecl>(D), dyn_cast<CXXRecordDecl>(D2));
+  }
+  
   return D2;
 }
 
@@ -3511,9 +3631,8 @@ ExpectedDecl ASTNodeImporter::VisitFieldDecl(FieldDecl *D) {
   for (auto *FoundDecl : FoundDecls) {
     if (FieldDecl *FoundField = dyn_cast<FieldDecl>(FoundDecl)) {
       // For anonymous fields, match up by index.
-      if (!Name &&
-          ASTImporter::getFieldIndex(D) !=
-          ASTImporter::getFieldIndex(FoundField))
+      if (!Name && ASTImporter::getFieldIndex(D) !=
+                       ASTImporter::getFieldIndex(FoundField))
         continue;
 
       if (Importer.IsStructurallyEquivalent(D->getType(),
@@ -3879,13 +3998,14 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
 
   // Create the imported variable.
   VarDecl *ToVar;
+  D->isDirectInit();
   if (GetImportedOrCreateDecl(ToVar, D, Importer.getToContext(), DC,
                               ToInnerLocStart, Loc,
                               Name.getAsIdentifierInfo(),
                               ToType, ToTypeSourceInfo,
                               D->getStorageClass()))
     return ToVar;
-
+  ToVar->setInitStyle(D->getInitStyle());
   ToVar->setQualifierInfo(ToQualifierLoc);
   ToVar->setAccess(D->getAccess());
   ToVar->setLexicalDeclContext(LexicalDC);
@@ -5125,6 +5245,14 @@ ASTNodeImporter::VisitTemplateTypeParmDecl(TemplateTypeParmDecl *D) {
         ToIDC);
   }
 
+  if (D->hasDefaultArgument()) {
+    auto defaultType = Importer.Import(D->getDefaultArgumentInfo());
+    assert(defaultType);
+    if (defaultType) {
+      ToD->setDefaultArgument(defaultType.get());
+    }
+  }
+
   return ToD;
 }
 
@@ -5149,6 +5277,17 @@ ASTNodeImporter::VisitNonTypeTemplateParmDecl(NonTypeTemplateParmDecl *D) {
       ToInnerLocStart, ToLocation, D->getDepth(),
       D->getPosition(), ToDeclName.getAsIdentifierInfo(), ToType,
       D->isParameterPack(), ToTypeSourceInfo);
+
+  if (D->hasDefaultArgument()) {
+    auto importedDefaultArg = Visit(D->getDefaultArgument());
+    assert(importedDefaultArg);
+    if (importedDefaultArg) {
+      if (!ToD->getDefaultArgStorage().isSet()) {
+        ToD->setDefaultArgument(
+            reinterpret_cast<Expr *>(importedDefaultArg.get()));
+      }
+    }
+  }
   return ToD;
 }
 
@@ -5297,7 +5436,11 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
 
   if (FromTemplated->isCompleteDefinition() &&
       !ToTemplated->isCompleteDefinition()) {
-    // FIXME: Import definition!
+    if (Error Err = ImportDefinition(FromTemplated, ToTemplated, IDK_Default))
+      return std::move(Err);
+    auto Class = dyn_cast<CXXRecordDecl>(ToTemplated);
+    declareNeeded(dyn_cast<CXXRecordDecl>(FromTemplated),
+                  dyn_cast<CXXRecordDecl>(ToTemplated));
   }
 
   return D2;
@@ -5473,9 +5616,12 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateSpecializationDecl(
 
   D2->setTemplateSpecializationKind(D->getTemplateSpecializationKind());
 
-  if (D->isCompleteDefinition())
+  if (D->isCompleteDefinition()) {
     if (Error Err = ImportDefinition(D, D2))
       return std::move(Err);
+    declareNeeded(D, D2);
+  }
+
 
   return D2;
 }
@@ -5783,7 +5929,6 @@ ASTNodeImporter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
   if (GetImportedOrCreateDecl(ToFunc, D, Importer.getToContext(), DC, Loc, Name,
                               *ParamsOrErr, TemplatedFD))
     return ToFunc;
-
   TemplatedFD->setDescribedFunctionTemplate(ToFunc);
 
   ToFunc->setAccess(D->getAccess());
@@ -7374,7 +7519,7 @@ ASTNodeImporter::VisitCXXPseudoDestructorExpr(CXXPseudoDestructorExpr *E) {
 ExpectedStmt ASTNodeImporter::VisitCXXDependentScopeMemberExpr(
     CXXDependentScopeMemberExpr *E) {
   Error Err = Error::success();
-  auto ToType = importChecked(Err, E->getType());
+  auto ToType = importChecked(Err, E->getBaseType());
   auto ToOperatorLoc = importChecked(Err, E->getOperatorLoc());
   auto ToQualifierLoc = importChecked(Err, E->getQualifierLoc());
   auto ToTemplateKeywordLoc = importChecked(Err, E->getTemplateKeywordLoc());
@@ -7520,7 +7665,7 @@ ASTNodeImporter::VisitUnresolvedLookupExpr(UnresolvedLookupExpr *E) {
 ExpectedStmt
 ASTNodeImporter::VisitUnresolvedMemberExpr(UnresolvedMemberExpr *E) {
   Error Err = Error::success();
-  auto ToType = importChecked(Err, E->getType());
+  auto ToType = importChecked(Err, E->getBaseType());
   auto ToOperatorLoc = importChecked(Err, E->getOperatorLoc());
   auto ToQualifierLoc = importChecked(Err, E->getQualifierLoc());
   auto ToTemplateKeywordLoc = importChecked(Err, E->getTemplateKeywordLoc());
@@ -8414,12 +8559,40 @@ ASTImporter::Import(NestedNameSpecifierLoc FromNNS) {
 
 Expected<TemplateName> ASTImporter::Import(TemplateName From) {
   switch (From.getKind()) {
-  case TemplateName::Template:
+  case TemplateName::Template: {
+    auto templated = dyn_cast<ClassTemplateDecl>(From.getAsTemplateDecl());
+    if (templated) {
+      for (const auto &specialization : templated->specializations()) {
+        if (AlreadyVisitedDecls.find(specialization) ==
+            AlreadyVisitedDecls.end()) {
+          if (GetAlreadyImportedOrNull(specialization)) {
+            continue;
+          }
+          AlreadyVisitedDecls.insert(specialization);
+          auto imported  = Import(QualType(specialization->getTypeForDecl(), 0));
+          assert(imported);
+        }
+      }
+      SmallVector<ClassTemplatePartialSpecializationDecl *, 4> PS;
+      templated->getPartialSpecializations(PS);
+      for (const auto &specialization : PS) {
+          if (GetAlreadyImportedOrNull(specialization))
+          {
+          continue;
+          }
+        if (AlreadyVisitedDecls.find(specialization) ==
+            AlreadyVisitedDecls.end()) {
+          AlreadyVisitedDecls.insert(specialization);
+          auto imported = Import(QualType(specialization->getTypeForDecl(), 0));
+          assert(imported);
+        }
+      }
+    }
     if (ExpectedDecl ToTemplateOrErr = Import(From.getAsTemplateDecl()))
       return TemplateName(cast<TemplateDecl>(*ToTemplateOrErr));
     else
       return ToTemplateOrErr.takeError();
-
+  }
   case TemplateName::OverloadedTemplate: {
     OverloadedTemplateStorage *FromStorage = From.getAsOverloadedTemplate();
     UnresolvedSet<2> ToTemplates;
@@ -8636,7 +8809,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
   auto RParenLocOrErr = Import(From->getRParenLoc());
   if (!RParenLocOrErr)
     return RParenLocOrErr.takeError();
-
+  CXXCtorInitializer *initializer = nullptr;
   if (From->isBaseInitializer()) {
     auto ToTInfoOrErr = Import(From->getTypeSourceInfo());
     if (!ToTInfoOrErr)
@@ -8647,7 +8820,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
       if (Error Err = importInto(EllipsisLoc, From->getEllipsisLoc()))
         return std::move(Err);
 
-    return new (ToContext) CXXCtorInitializer(
+    initializer =  new (ToContext) CXXCtorInitializer(
         ToContext, *ToTInfoOrErr, From->isBaseVirtual(), *LParenLocOrErr,
         *ToExprOrErr, *RParenLocOrErr, EllipsisLoc);
   } else if (From->isMemberInitializer()) {
@@ -8659,7 +8832,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
     if (!MemberLocOrErr)
       return MemberLocOrErr.takeError();
 
-    return new (ToContext) CXXCtorInitializer(
+    initializer = new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<FieldDecl>(*ToFieldOrErr), *MemberLocOrErr,
         *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
   } else if (From->isIndirectMemberInitializer()) {
@@ -8671,7 +8844,7 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
     if (!MemberLocOrErr)
       return MemberLocOrErr.takeError();
 
-    return new (ToContext) CXXCtorInitializer(
+    initializer = new (ToContext) CXXCtorInitializer(
         ToContext, cast_or_null<IndirectFieldDecl>(*ToIFieldOrErr),
         *MemberLocOrErr, *LParenLocOrErr, *ToExprOrErr, *RParenLocOrErr);
   } else if (From->isDelegatingInitializer()) {
@@ -8679,13 +8852,22 @@ Expected<CXXCtorInitializer *> ASTImporter::Import(CXXCtorInitializer *From) {
     if (!ToTInfoOrErr)
       return ToTInfoOrErr.takeError();
 
-    return new (ToContext)
+    initializer = new (ToContext)
         CXXCtorInitializer(ToContext, *ToTInfoOrErr, *LParenLocOrErr,
                            *ToExprOrErr, *RParenLocOrErr);
   } else {
     // FIXME: assert?
+    assert(false);
     return make_error<ImportError>();
   }
+  if (initializer) {
+    if (From->getSourceOrder() >= 0) {
+      initializer->setSourceOrder(From->getSourceOrder());
+    }
+    return initializer;
+  }
+  assert(false);
+  return make_error<ImportError>();
 }
 
 Expected<CXXBaseSpecifier *>
@@ -8892,7 +9074,7 @@ void ASTImporter::CompleteDecl (Decl *D) {
 Decl *ASTImporter::MapImported(Decl *From, Decl *To) {
   llvm::DenseMap<Decl *, Decl *>::iterator Pos = ImportedDecls.find(From);
   assert((Pos == ImportedDecls.end() || Pos->second == To) &&
-      "Try to import an already imported Decl");
+         "Try to import an already imported Decl");
   if (Pos != ImportedDecls.end())
     return Pos->second;
   ImportedDecls[From] = To;

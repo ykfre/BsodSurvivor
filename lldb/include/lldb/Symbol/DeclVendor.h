@@ -12,7 +12,7 @@
 #include "lldb/lldb-defines.h"
 
 #include <vector>
-
+#include "clang/AST/DeclBase.h"
 namespace lldb_private {
 
 // The Decl vendor class is intended as a generic interface to search for named
@@ -48,7 +48,8 @@ public:
   /// \return
   ///     The number of Decls added to decls; will not exceed
   ///     max_matches.
-  virtual uint32_t FindDecls(ConstString name, bool append,
+  virtual uint32_t FindDecls(clang::DeclContext *context,ConstString name,
+                             bool append,
                              uint32_t max_matches,
                              std::vector<CompilerDecl> &decls) = 0;
 

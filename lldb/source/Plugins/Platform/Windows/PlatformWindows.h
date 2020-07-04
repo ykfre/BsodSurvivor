@@ -33,6 +33,8 @@ public:
 
   lldb_private::ConstString GetPluginName() override;
 
+   bool SupportsModules() override { return true; }
+
   uint32_t GetPluginVersion() override { return 1; }
 
   // lldb_private::Platform functions

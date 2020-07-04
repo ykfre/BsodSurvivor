@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTContext.h"
+
+#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/PrettyPrinter.h"
@@ -95,6 +97,14 @@
 
 #include <cctype>
 #include <memory>
+
+
+
+#include "lldb/lldb-enumerations.h"
+#include <fstream>
+#include "lldb/Symbol/CompileUnit.h"
+#include "llvm/Object/Coff.h"
+#include "clang/Lex/PreprocessorOptions.h"
 
 using namespace clang;
 using namespace llvm;
@@ -298,6 +308,661 @@ static void SetupModuleHeaderPaths(CompilerInstance *compiler,
 //===----------------------------------------------------------------------===//
 // Implementation of ClangExpressionParser
 //===----------------------------------------------------------------------===//
+
+
+void *deserialize(void *obj, size_t sizeofObj, int &index,
+                  std::vector<char> deserialized_compiler_invocation) {
+  memcpy(obj, deserialized_compiler_invocation.data() + index, sizeofObj);
+
+  index += sizeofObj;
+  return obj;
+}
+
+void deserializeAndChange(size_t &obj, int &index,
+                          std::vector<char> deserialized_compiler_invocation) {
+  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+}
+
+void deserializeAndChange(bool &obj, int &index,
+                          std::vector<char> deserialized_compiler_invocation) {
+  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+}
+
+void deserializeAndChange(unsigned int &obj, int &index,
+                          std::vector<char> deserialized_compiler_invocation) {
+  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+}
+
+template <typename T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
+[[nodiscard]] T
+deserialize(T obj, int &index,
+            std::vector<char> deserialized_compiler_invocation) {
+  return *(T *)deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+}
+
+void deserialize(std::string &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj = std::string(&deserialized_compiler_invocation.at(index));
+  index += obj.size() + 1;
+}
+
+void deserialize(HeaderSearchOptions::Entry &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  deserialize(obj.Path, index, deserialized_compiler_invocation);
+  obj.IgnoreSysRoot =
+      deserialize(obj.IgnoreSysRoot, index, deserialized_compiler_invocation);
+  obj.IsFramework =
+      deserialize(obj.IsFramework, index, deserialized_compiler_invocation);
+  obj.Group = (frontend::IncludeDirGroup)deserialize(
+      (int)obj.Group, index, deserialized_compiler_invocation);
+}
+
+template <typename T>
+void deserialize(std::vector<T> &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj.clear();
+  size_t objectsNum = 0;
+  deserializeAndChange(objectsNum, index, deserialized_compiler_invocation);
+  for (int i = 0; i < objectsNum; i++) {
+    T item;
+    deserialize(item, index, deserialized_compiler_invocation);
+    obj.push_back(item);
+  }
+}
+
+void deserialize(HeaderSearchOptions::SystemHeaderPrefix &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  deserialize(obj.Prefix, index, deserialized_compiler_invocation);
+  deserializeAndChange(obj.IsSystemHeader, index,
+                       deserialized_compiler_invocation);
+}
+
+void deserialize(std::vector<HeaderSearchOptions::SystemHeaderPrefix> &obj,
+                 int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj.clear();
+  size_t objectsNum = 0;
+  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  for (int i = 0; i < objectsNum; i++) {
+    HeaderSearchOptions::SystemHeaderPrefix systemPrefix("", false);
+    deserialize(systemPrefix,index,deserialized_compiler_invocation);
+    obj.push_back(systemPrefix);
+  }
+}
+
+void deserialize(std::vector<HeaderSearchOptions::Entry> &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj.clear();
+  size_t objectsNum = 0;
+  deserializeAndChange(objectsNum,index,deserialized_compiler_invocation);
+  for (int i = 0; i < objectsNum; i++) {
+    HeaderSearchOptions::Entry entry("", frontend::IncludeDirGroup::Quoted,
+                                     true, true);
+    deserialize(entry, index, deserialized_compiler_invocation);
+    obj.push_back(entry);
+  }
+}
+
+template <typename T, typename Y>
+void deserialize(std::map<T, Y> &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj.clear();
+  size_t objectsNum = 0;
+  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  for (int i = 0; i < objectsNum; i++) {
+    T key;
+    deserialize(key,index,deserialized_compiler_invocation);
+    Y value;
+    deserialize(value,index,deserialized_compiler_invocation);
+    obj[key] = value;
+  }
+}
+
+void deserialize(std::vector<std::pair<std::string, bool>> &obj, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  obj.clear();
+  size_t objectsNum = 0;
+  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  for (int i = 0; i < objectsNum; i++) {
+    std::string first;
+    bool second = false;
+    deserialize(first, index, deserialized_compiler_invocation);
+    deserializeAndChange(second, index, deserialized_compiler_invocation);
+
+    obj.push_back(std::make_pair(first, second));
+  }
+}
+
+void deserialize(LangOptions &langOptions, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  langOptions.C99 =
+      deserialize(langOptions.C99, index, deserialized_compiler_invocation);
+  langOptions.C11 =
+      deserialize(langOptions.C11, index, deserialized_compiler_invocation);
+  langOptions.C17 =
+      deserialize(langOptions.C17, index, deserialized_compiler_invocation);
+  langOptions.C2x =
+      deserialize(langOptions.C2x, index, deserialized_compiler_invocation);
+  langOptions.MSVCCompat = deserialize(langOptions.MSVCCompat, index,
+                                       deserialized_compiler_invocation);
+  langOptions.MicrosoftExt = deserialize(langOptions.MicrosoftExt, index,
+                                         deserialized_compiler_invocation);
+  langOptions.AsmBlocks = deserialize(langOptions.AsmBlocks, index,
+                                      deserialized_compiler_invocation);
+  langOptions.Borland =
+      deserialize(langOptions.Borland, index, deserialized_compiler_invocation);
+  langOptions.CPlusPlus = deserialize(langOptions.CPlusPlus, index,
+                                      deserialized_compiler_invocation);
+  langOptions.CPlusPlus11 = deserialize(langOptions.CPlusPlus11, index,
+                                        deserialized_compiler_invocation);
+  langOptions.CPlusPlus14 = deserialize(langOptions.CPlusPlus14, index,
+                                        deserialized_compiler_invocation);
+  langOptions.CPlusPlus17 = deserialize(langOptions.CPlusPlus17, index,
+                                        deserialized_compiler_invocation);
+  langOptions.CPlusPlus20 = deserialize(langOptions.CPlusPlus20, index,
+                                        deserialized_compiler_invocation);
+  langOptions.ObjC =
+      deserialize(langOptions.ObjC, index, deserialized_compiler_invocation);
+  langOptions.ObjCDefaultSynthProperties =
+      deserialize(langOptions.ObjCDefaultSynthProperties, index,
+                  deserialized_compiler_invocation);
+  langOptions.EncodeExtendedBlockSig =
+      deserialize(langOptions.EncodeExtendedBlockSig, index,
+                  deserialized_compiler_invocation);
+  langOptions.ObjCInferRelatedResultType =
+      deserialize(langOptions.ObjCInferRelatedResultType, index,
+                  deserialized_compiler_invocation);
+  langOptions.AppExt =
+      deserialize(langOptions.AppExt, index, deserialized_compiler_invocation);
+  langOptions.Trigraphs = deserialize(langOptions.Trigraphs, index,
+                                      deserialized_compiler_invocation);
+  langOptions.LineComment = deserialize(langOptions.LineComment, index,
+                                        deserialized_compiler_invocation);
+  langOptions.Bool =
+      deserialize(langOptions.Bool, index, deserialized_compiler_invocation);
+  langOptions.Half =
+      deserialize(langOptions.Half, index, deserialized_compiler_invocation);
+  langOptions.WChar =
+      deserialize(langOptions.WChar, index, deserialized_compiler_invocation);
+  langOptions.Char8 =
+      deserialize(langOptions.Char8, index, deserialized_compiler_invocation);
+  langOptions.DeclSpecKeyword = deserialize(langOptions.DeclSpecKeyword, index,
+                                            deserialized_compiler_invocation);
+  langOptions.DollarIdents = deserialize(langOptions.DollarIdents, index,
+                                         deserialized_compiler_invocation);
+  langOptions.AsmPreprocessor = deserialize(langOptions.AsmPreprocessor, index,
+                                            deserialized_compiler_invocation);
+  langOptions.GNUMode =
+      deserialize(langOptions.GNUMode, index, deserialized_compiler_invocation);
+  langOptions.GNUKeywords = deserialize(langOptions.GNUKeywords, index,
+                                        deserialized_compiler_invocation);
+  langOptions.GNUCVersion = deserialize(langOptions.GNUCVersion, index,
+                                        deserialized_compiler_invocation);
+  langOptions.ImplicitInt = deserialize(langOptions.ImplicitInt, index,
+                                        deserialized_compiler_invocation);
+  langOptions.Digraphs = deserialize(langOptions.Digraphs, index,
+                                     deserialized_compiler_invocation);
+  langOptions.HexFloats = deserialize(langOptions.HexFloats, index,
+                                      deserialized_compiler_invocation);
+  langOptions.CXXOperatorNames = deserialize(
+      langOptions.CXXOperatorNames, index, deserialized_compiler_invocation);
+  langOptions.AppleKext = deserialize(langOptions.AppleKext, index,
+                                      deserialized_compiler_invocation);
+  langOptions.PascalStrings = deserialize(langOptions.PascalStrings, index,
+                                          deserialized_compiler_invocation);
+  langOptions.WritableStrings = deserialize(langOptions.WritableStrings, index,
+                                            deserialized_compiler_invocation);
+  langOptions.ConstStrings = deserialize(langOptions.ConstStrings, index,
+                                         deserialized_compiler_invocation);
+  langOptions.ConvergentFunctions = deserialize(
+      langOptions.ConvergentFunctions, index, deserialized_compiler_invocation);
+  langOptions.AltiVec =
+      deserialize(langOptions.AltiVec, index, deserialized_compiler_invocation);
+  langOptions.ZVector =
+      deserialize(langOptions.ZVector, index, deserialized_compiler_invocation);
+  langOptions.Exceptions = deserialize(langOptions.Exceptions, index,
+                                       deserialized_compiler_invocation);
+  langOptions.ObjCExceptions = deserialize(langOptions.ObjCExceptions, index,
+                                           deserialized_compiler_invocation);
+  langOptions.CXXExceptions = deserialize(langOptions.CXXExceptions, index,
+                                          deserialized_compiler_invocation);
+  langOptions.DWARFExceptions = deserialize(langOptions.DWARFExceptions, index,
+                                            deserialized_compiler_invocation);
+  langOptions.SjLjExceptions = deserialize(langOptions.SjLjExceptions, index,
+                                           deserialized_compiler_invocation);
+  langOptions.SEHExceptions = deserialize(langOptions.SEHExceptions, index,
+                                          deserialized_compiler_invocation);
+  langOptions.WasmExceptions = deserialize(langOptions.WasmExceptions, index,
+                                           deserialized_compiler_invocation);
+  langOptions.ExternCNoUnwind = deserialize(langOptions.ExternCNoUnwind, index,
+                                            deserialized_compiler_invocation);
+  langOptions.TraditionalCPP = deserialize(langOptions.TraditionalCPP, index,
+                                           deserialized_compiler_invocation);
+  langOptions.RTTI =
+      deserialize(langOptions.RTTI, index, deserialized_compiler_invocation);
+  langOptions.RTTIData = deserialize(langOptions.RTTIData, index,
+                                     deserialized_compiler_invocation);
+  langOptions.MSBitfields = deserialize(langOptions.MSBitfields, index,
+                                        deserialized_compiler_invocation);
+  langOptions.Freestanding = deserialize(langOptions.Freestanding, index,
+                                         deserialized_compiler_invocation);
+  langOptions.NoBuiltin = deserialize(langOptions.NoBuiltin, index,
+                                      deserialized_compiler_invocation);
+  langOptions.NoMathBuiltin = deserialize(langOptions.NoMathBuiltin, index,
+                                          deserialized_compiler_invocation);
+  langOptions.GNUAsm =
+      deserialize(langOptions.GNUAsm, index, deserialized_compiler_invocation);
+  langOptions.Coroutines = deserialize(langOptions.Coroutines, index,
+                                       deserialized_compiler_invocation);
+  langOptions.DllExportInlines = deserialize(
+      langOptions.DllExportInlines, index, deserialized_compiler_invocation);
+  langOptions.RelaxedTemplateTemplateArgs =
+      deserialize(langOptions.RelaxedTemplateTemplateArgs, index,
+                  deserialized_compiler_invocation);
+  langOptions.DoubleSquareBracketAttributes =
+      deserialize(langOptions.DoubleSquareBracketAttributes, index,
+                  deserialized_compiler_invocation);
+  langOptions.ThreadsafeStatics = deserialize(
+      langOptions.ThreadsafeStatics, index, deserialized_compiler_invocation);
+  langOptions.POSIXThreads = deserialize(langOptions.POSIXThreads, index,
+                                         deserialized_compiler_invocation);
+  langOptions.Blocks =
+      deserialize(langOptions.Blocks, index, deserialized_compiler_invocation);
+  langOptions.EmitAllDecls = deserialize(langOptions.EmitAllDecls, index,
+                                         deserialized_compiler_invocation);
+  langOptions.MathErrno = deserialize(langOptions.MathErrno, index,
+                                      deserialized_compiler_invocation);
+  langOptions.HeinousExtensions = deserialize(
+      langOptions.HeinousExtensions, index, deserialized_compiler_invocation);
+  deserialize(langOptions.Modules, index,
+                                 deserialized_compiler_invocation);
+  deserialize(langOptions.ModulesTS, index,
+                                   deserialized_compiler_invocation);
+  deserialize(langOptions.CPlusPlusModules, index,
+              deserialized_compiler_invocation);
+  deserialize(langOptions.CompilingPCH, index,
+              deserialized_compiler_invocation);
+  deserialize(
+      langOptions.BuildingPCHWithObjectFile, index,
+              deserialized_compiler_invocation);
+  langOptions.CacheGeneratedPCH = deserialize(langOptions.CacheGeneratedPCH, index,
+              deserialized_compiler_invocation);
+  deserialize(langOptions.ModulesDeclUse, index,
+      deserialized_compiler_invocation);
+  deserialize(langOptions.ModulesSearchAll, index,
+              deserialized_compiler_invocation);
+  deserialize(langOptions.ModulesStrictDeclUse,
+                                              index,
+              deserialized_compiler_invocation);
+  langOptions.ModulesErrorRecovery = deserialize(langOptions.ModulesErrorRecovery,
+                                              index,
+              deserialized_compiler_invocation);
+  deserialize(langOptions.ImplicitModules, index,
+              deserialized_compiler_invocation);
+  deserialize(
+      langOptions.ModulesLocalVisibility, index,
+              deserialized_compiler_invocation);
+  langOptions.Optimize = deserialize(langOptions.Optimize, index,
+                                     deserialized_compiler_invocation);
+  langOptions.OptimizeSize = deserialize(langOptions.OptimizeSize, index,
+                                         deserialized_compiler_invocation);
+  langOptions.Static =
+      deserialize(langOptions.Static, index, deserialized_compiler_invocation);
+  langOptions.PackStruct = deserialize(langOptions.PackStruct, index,
+                                       deserialized_compiler_invocation);
+  langOptions.MaxTypeAlign = deserialize(langOptions.MaxTypeAlign, index,
+                                         deserialized_compiler_invocation);
+  langOptions.AlignDouble = deserialize(langOptions.AlignDouble, index,
+                                        deserialized_compiler_invocation);
+  langOptions.LongDoubleSize = deserialize(langOptions.LongDoubleSize, index,
+                                           deserialized_compiler_invocation);
+  langOptions.PPCIEEELongDouble = deserialize(
+      langOptions.PPCIEEELongDouble, index, deserialized_compiler_invocation);
+  langOptions.PICLevel = deserialize(langOptions.PICLevel, index,
+                                     deserialized_compiler_invocation);
+  langOptions.PIE =
+      deserialize(langOptions.PIE, index, deserialized_compiler_invocation);
+  langOptions.ROPI =
+      deserialize(langOptions.ROPI, index, deserialized_compiler_invocation);
+  langOptions.RWPI =
+      deserialize(langOptions.RWPI, index, deserialized_compiler_invocation);
+  langOptions.GNUInline = deserialize(langOptions.GNUInline, index,
+                                      deserialized_compiler_invocation);
+  langOptions.NoInlineDefine = deserialize(langOptions.NoInlineDefine, index,
+                                           deserialized_compiler_invocation);
+  langOptions.Deprecated = deserialize(langOptions.Deprecated, index,
+                                       deserialized_compiler_invocation);
+  langOptions.FastMath = deserialize(langOptions.FastMath, index, deserialized_compiler_invocation);
+  langOptions.FiniteMathOnly = deserialize(langOptions.FiniteMathOnly, index,
+                                           deserialized_compiler_invocation);
+  langOptions.UnsafeFPMath = deserialize(langOptions.UnsafeFPMath, index,
+                                         deserialized_compiler_invocation);
+  langOptions.ObjCGCBitmapPrint = deserialize(
+      langOptions.ObjCGCBitmapPrint, index, deserialized_compiler_invocation);
+  langOptions.AccessControl = deserialize(langOptions.AccessControl, index,
+                                          deserialized_compiler_invocation);
+  langOptions.CharIsSigned = deserialize(langOptions.CharIsSigned, index,
+                                         deserialized_compiler_invocation);
+  langOptions.WCharSize = deserialize(langOptions.WCharSize, index,
+                                      deserialized_compiler_invocation);
+  langOptions.WCharIsSigned = deserialize(langOptions.WCharIsSigned, index,
+                                          deserialized_compiler_invocation);
+  langOptions.ShortEnums = deserialize(langOptions.ShortEnums, index,
+                                       deserialized_compiler_invocation);
+  langOptions.OpenCL =
+      deserialize(langOptions.OpenCL, index, deserialized_compiler_invocation);
+  langOptions.OpenCLVersion = deserialize(langOptions.OpenCLVersion, index,
+                                          deserialized_compiler_invocation);
+  langOptions.OpenCLCPlusPlus = deserialize(langOptions.OpenCLCPlusPlus, index,
+                                            deserialized_compiler_invocation);
+  langOptions.OpenCLCPlusPlusVersion =
+      deserialize(langOptions.OpenCLCPlusPlusVersion, index,
+                  deserialized_compiler_invocation);
+  langOptions.NativeHalfType = deserialize(langOptions.NativeHalfType, index,
+                                           deserialized_compiler_invocation);
+  langOptions.NativeHalfArgsAndReturns =
+      deserialize(langOptions.NativeHalfArgsAndReturns, index,
+                  deserialized_compiler_invocation);
+  langOptions.HalfArgsAndReturns = deserialize(
+      langOptions.HalfArgsAndReturns, index, deserialized_compiler_invocation);
+  langOptions.CUDA =
+      deserialize(langOptions.CUDA, index, deserialized_compiler_invocation);
+  langOptions.HIP =
+      deserialize(langOptions.HIP, index, deserialized_compiler_invocation);
+  langOptions.OpenMP =
+      deserialize(langOptions.OpenMP, index, deserialized_compiler_invocation);
+  langOptions.OpenMPSimd = deserialize(langOptions.OpenMPSimd, index,
+                                       deserialized_compiler_invocation);
+  langOptions.OpenMPUseTLS = deserialize(langOptions.OpenMPUseTLS, index,
+                                         deserialized_compiler_invocation);
+  langOptions.OpenMPIsDevice = deserialize(langOptions.OpenMPIsDevice, index,
+                                           deserialized_compiler_invocation);
+  langOptions.OpenMPCUDAMode = deserialize(langOptions.OpenMPCUDAMode, index,
+                                           deserialized_compiler_invocation);
+  langOptions.OpenMPIRBuilder = deserialize(langOptions.OpenMPIRBuilder, index,
+                                            deserialized_compiler_invocation);
+  langOptions.OpenMPCUDAForceFullRuntime =
+      deserialize(langOptions.OpenMPCUDAForceFullRuntime, index,
+                  deserialized_compiler_invocation);
+  langOptions.OpenMPCUDANumSMs = deserialize(
+      langOptions.OpenMPCUDANumSMs, index, deserialized_compiler_invocation);
+  langOptions.OpenMPCUDABlocksPerSM =
+      deserialize(langOptions.OpenMPCUDABlocksPerSM, index,
+                  deserialized_compiler_invocation);
+  langOptions.OpenMPCUDAReductionBufNum =
+      deserialize(langOptions.OpenMPCUDAReductionBufNum, index,
+                  deserialized_compiler_invocation);
+  langOptions.OpenMPOptimisticCollapse =
+      deserialize(langOptions.OpenMPOptimisticCollapse, index,
+                  deserialized_compiler_invocation);
+  langOptions.RenderScript = deserialize(langOptions.RenderScript, index,
+                                         deserialized_compiler_invocation);
+  langOptions.CUDAIsDevice = deserialize(langOptions.CUDAIsDevice, index, deserialized_compiler_invocation);
+  langOptions.CUDAAllowVariadicFunctions =
+      deserialize(langOptions.CUDAAllowVariadicFunctions, index, deserialized_compiler_invocation);
+  langOptions.CUDAHostDeviceConstexpr =
+      deserialize(langOptions.CUDAHostDeviceConstexpr,index, deserialized_compiler_invocation);
+  langOptions.CUDADeviceApproxTranscendentals =
+      deserialize(langOptions.CUDADeviceApproxTranscendentals,index, deserialized_compiler_invocation);
+  langOptions.GPURelocatableDeviceCode =
+      deserialize(langOptions.GPURelocatableDeviceCode,index, deserialized_compiler_invocation);
+  langOptions.GPUAllowDeviceInit = deserialize(langOptions.GPUAllowDeviceInit,index, deserialized_compiler_invocation);
+  langOptions.GPUMaxThreadsPerBlock =
+      deserialize(langOptions.GPUMaxThreadsPerBlock,index, deserialized_compiler_invocation);
+  langOptions.SYCLIsDevice = deserialize(langOptions.SYCLIsDevice,index, deserialized_compiler_invocation);
+  langOptions.HIPUseNewLaunchAPI = deserialize(langOptions.HIPUseNewLaunchAPI,index, deserialized_compiler_invocation);
+  langOptions.SizedDeallocation = deserialize(langOptions.SizedDeallocation,index, deserialized_compiler_invocation);
+  langOptions.AlignedAllocation = deserialize(langOptions.AlignedAllocation,index, deserialized_compiler_invocation);
+  langOptions.AlignedAllocationUnavailable =
+      deserialize(langOptions.AlignedAllocationUnavailable,index, deserialized_compiler_invocation);
+  langOptions.NewAlignOverride = deserialize(langOptions.NewAlignOverride,index, deserialized_compiler_invocation);
+  langOptions.ConceptSatisfactionCaching =
+      deserialize(langOptions.ConceptSatisfactionCaching,index, deserialized_compiler_invocation);
+  langOptions.ModulesCodegen = deserialize(langOptions.ModulesCodegen,index, deserialized_compiler_invocation);
+  langOptions.ModulesDebugInfo = deserialize(langOptions.ModulesDebugInfo,index, deserialized_compiler_invocation);
+  langOptions.ElideConstructors = deserialize(langOptions.ElideConstructors,index, deserialized_compiler_invocation);
+  langOptions.DumpRecordLayouts = deserialize(langOptions.DumpRecordLayouts,index, deserialized_compiler_invocation);
+  langOptions.DumpRecordLayoutsSimple =
+      deserialize(langOptions.DumpRecordLayoutsSimple,index, deserialized_compiler_invocation);
+  langOptions.DumpVTableLayouts = deserialize(langOptions.DumpVTableLayouts,index, deserialized_compiler_invocation);
+  langOptions.NoConstantCFStrings =
+      deserialize(langOptions.NoConstantCFStrings,index, deserialized_compiler_invocation);
+  langOptions.InlineVisibilityHidden =
+      deserialize(langOptions.InlineVisibilityHidden,index, deserialized_compiler_invocation);
+  langOptions.GlobalAllocationFunctionVisibilityHidden =
+      deserialize(langOptions.GlobalAllocationFunctionVisibilityHidden,index, deserialized_compiler_invocation);
+  langOptions.ParseUnknownAnytype =
+      deserialize(langOptions.ParseUnknownAnytype,index, deserialized_compiler_invocation);
+  langOptions.DebuggerSupport = deserialize(langOptions.DebuggerSupport,index, deserialized_compiler_invocation);
+  langOptions.DebuggerCastResultToId =
+      deserialize(langOptions.DebuggerCastResultToId,index, deserialized_compiler_invocation);
+  langOptions.DebuggerObjCLiteral =
+      deserialize(langOptions.DebuggerObjCLiteral,index, deserialized_compiler_invocation);
+  langOptions.SpellChecking = deserialize(langOptions.SpellChecking,index, deserialized_compiler_invocation);
+
+  langOptions.SinglePrecisionConstants =
+      deserialize(langOptions.SinglePrecisionConstants,index, deserialized_compiler_invocation);
+  langOptions.FastRelaxedMath = deserialize(langOptions.FastRelaxedMath,index, deserialized_compiler_invocation);
+  langOptions.NoBitFieldTypeAlign =
+      deserialize(langOptions.NoBitFieldTypeAlign,index, deserialized_compiler_invocation);
+  langOptions.HexagonQdsp6Compat = deserialize(langOptions.HexagonQdsp6Compat,index, deserialized_compiler_invocation);
+  langOptions.ObjCAutoRefCount = deserialize(langOptions.ObjCAutoRefCount,index, deserialized_compiler_invocation);
+  langOptions.ObjCWeakRuntime = deserialize(langOptions.ObjCWeakRuntime,index, deserialized_compiler_invocation);
+  langOptions.ObjCWeak = deserialize(langOptions.ObjCWeak,index, deserialized_compiler_invocation);
+  langOptions.ObjCSubscriptingLegacyRuntime =
+      deserialize(langOptions.ObjCSubscriptingLegacyRuntime,index, deserialized_compiler_invocation);
+  langOptions.CFProtectionBranch = deserialize(langOptions.CFProtectionBranch,index, deserialized_compiler_invocation);
+  langOptions.FakeAddressSpaceMap =
+      deserialize(langOptions.FakeAddressSpaceMap,index, deserialized_compiler_invocation);
+  langOptions.IncludeDefaultHeader =
+      deserialize(langOptions.IncludeDefaultHeader,index, deserialized_compiler_invocation);
+  langOptions.DeclareOpenCLBuiltins =
+      deserialize(langOptions.DeclareOpenCLBuiltins,index, deserialized_compiler_invocation);
+  langOptions.DelayedTemplateParsing =
+      deserialize(langOptions.DelayedTemplateParsing,index, deserialized_compiler_invocation);
+  langOptions.BlocksRuntimeOptional =
+      deserialize(langOptions.BlocksRuntimeOptional,index, deserialized_compiler_invocation);
+  langOptions.CompleteMemberPointers =
+      deserialize(langOptions.CompleteMemberPointers,index, deserialized_compiler_invocation);
+  langOptions.SetVisibilityForExternDecls =
+      deserialize(langOptions.SetVisibilityForExternDecls,index, deserialized_compiler_invocation);
+  langOptions.ArrowDepth = deserialize(langOptions.ArrowDepth,index, deserialized_compiler_invocation);
+  langOptions.InstantiationDepth = deserialize(langOptions.InstantiationDepth,index, deserialized_compiler_invocation);
+  langOptions.ConstexprCallDepth = deserialize(langOptions.ConstexprCallDepth,index, deserialized_compiler_invocation);
+  langOptions.ConstexprStepLimit = deserialize(langOptions.ConstexprStepLimit,index, deserialized_compiler_invocation);
+
+  langOptions.EnableNewConstInterp =
+      deserialize(langOptions.EnableNewConstInterp,index, deserialized_compiler_invocation);
+  langOptions.BracketDepth = deserialize(langOptions.BracketDepth,index, deserialized_compiler_invocation);
+  langOptions.NumLargeByValueCopy =
+      deserialize(langOptions.NumLargeByValueCopy,index, deserialized_compiler_invocation);
+  langOptions.MSCompatibilityVersion =
+      deserialize(langOptions.MSCompatibilityVersion,index, deserialized_compiler_invocation);
+  langOptions.ApplePragmaPack = deserialize(langOptions.ApplePragmaPack,index, deserialized_compiler_invocation);
+  langOptions.RetainCommentsFromSystemHeaders =
+      deserialize(langOptions.RetainCommentsFromSystemHeaders,index, deserialized_compiler_invocation);
+  langOptions.SanitizeAddressFieldPadding =
+      deserialize(langOptions.SanitizeAddressFieldPadding,index, deserialized_compiler_invocation);
+  langOptions.Cmse = deserialize(langOptions.Cmse,index, deserialized_compiler_invocation);
+
+  langOptions.XRayInstrument = deserialize(langOptions.XRayInstrument,index, deserialized_compiler_invocation);
+  langOptions.XRayAlwaysEmitCustomEvents =
+      deserialize(langOptions.XRayAlwaysEmitCustomEvents,index, deserialized_compiler_invocation);
+  langOptions.XRayAlwaysEmitTypedEvents =
+      deserialize(langOptions.XRayAlwaysEmitTypedEvents,index, deserialized_compiler_invocation);
+  langOptions.ForceEmitVTables = deserialize(langOptions.ForceEmitVTables,index, deserialized_compiler_invocation);
+  langOptions.AllowEditorPlaceholders =
+      deserialize(langOptions.AllowEditorPlaceholders,index, deserialized_compiler_invocation);
+  langOptions.FunctionAlignment = deserialize(langOptions.FunctionAlignment,index, deserialized_compiler_invocation);
+  langOptions.FixedPoint = deserialize(langOptions.FixedPoint,index, deserialized_compiler_invocation);
+  langOptions.PaddingOnUnsignedFixedPoint =
+      deserialize(langOptions.PaddingOnUnsignedFixedPoint,index, deserialized_compiler_invocation);
+  langOptions.RegisterStaticDestructors =
+      deserialize(langOptions.RegisterStaticDestructors,index, deserialized_compiler_invocation);
+
+  deserialize(langOptions.SanitizerBlacklistFiles,index, deserialized_compiler_invocation);
+  deserialize(langOptions.XRayAlwaysInstrumentFiles,index, deserialized_compiler_invocation);
+  deserialize(langOptions.XRayNeverInstrumentFiles,index, deserialized_compiler_invocation);
+  deserialize(langOptions.XRayAttrListFiles,index, deserialized_compiler_invocation);
+  deserialize(langOptions.ObjCConstantStringClass,index, deserialized_compiler_invocation);
+  deserialize(langOptions.OverflowHandler,index, deserialized_compiler_invocation);
+
+  deserialize(langOptions.ModuleName,index, deserialized_compiler_invocation);
+  deserialize(langOptions.CurrentModule,index, deserialized_compiler_invocation);
+  deserialize(langOptions.ModuleFeatures,index, deserialized_compiler_invocation);
+  deserialize(langOptions.NoBuiltinFuncs,index, deserialized_compiler_invocation);
+  deserialize(langOptions.OMPHostIRFile,index, deserialized_compiler_invocation);
+  deserializeAndChange(langOptions.IsHeaderFile,index, deserialized_compiler_invocation);
+}
+
+void deserialize(PreprocessorOptions &options, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+  deserialize(options.Macros,index, deserialized_compiler_invocation);
+  deserialize(options.Includes,index, deserialized_compiler_invocation);
+  deserialize(options.MacroIncludes,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.UsePredefines, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.DetailedRecord, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.PCHWithHdrStop, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.PCHWithHdrStopCreate, index,
+                       deserialized_compiler_invocation);
+  deserialize(options.PCHThroughHeader,index, deserialized_compiler_invocation);
+  deserialize(options.ImplicitPCHInclude,index, deserialized_compiler_invocation);
+  deserialize(options.ChainedIncludes,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.DisablePCHValidation,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.AllowPCHWithCompilerErrors, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.DumpDeserializedPCHDecls, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.GeneratePreamble,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.WriteCommentListToPCH, index,
+                       deserialized_compiler_invocation);
+  deserializeAndChange(options.SingleFileParseMode,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.LexEditorPlaceholders,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.RemappedFilesKeepOriginalName,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.RetainRemappedFileBuffers,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.RetainExcludedConditionalBlocks,index, deserialized_compiler_invocation);
+  options.ObjCXXARCStandardLibrary = (ObjCXXARCStandardLibraryKind)deserialize((int)options.ObjCXXARCStandardLibrary,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.SetUpStaticAnalyzer,index, deserialized_compiler_invocation);
+  deserializeAndChange(options.DisablePragmaDebugCrash,index, deserialized_compiler_invocation);
+}
+
+void deserialize(HeaderSearchOptions &options, int &index,
+                 std::vector<char> deserialized_compiler_invocation) {
+
+  deserialize(options.Sysroot, index, deserialized_compiler_invocation);
+  deserialize(options.UserEntries,index, deserialized_compiler_invocation);
+  deserialize(options.SystemHeaderPrefixes,index, deserialized_compiler_invocation);
+  deserialize(options.ResourceDir,index, deserialized_compiler_invocation);
+
+  deserialize(options.ModuleCachePath,index, deserialized_compiler_invocation);
+  deserialize(options.ModuleUserBuildPath,index, deserialized_compiler_invocation);
+
+  deserialize(options.PrebuiltModulePaths,index, deserialized_compiler_invocation);
+  deserialize(options.ModuleFormat,index, deserialized_compiler_invocation);
+  options.DisableModuleHash = deserialize(options.DisableModuleHash,index, deserialized_compiler_invocation);
+
+  options.ImplicitModuleMaps = deserialize(options.ImplicitModuleMaps,index, deserialized_compiler_invocation);
+  options.ModuleMapFileHomeIsCwd = deserialize(options.ModuleMapFileHomeIsCwd,index, deserialized_compiler_invocation);
+  options.ModuleCachePruneInterval =
+      deserialize(options.ModuleCachePruneInterval,index, deserialized_compiler_invocation);
+  options.ModuleCachePruneAfter = deserialize(options.ModuleCachePruneAfter,index, deserialized_compiler_invocation);
+  options.BuildSessionTimestamp = deserialize(options.BuildSessionTimestamp,index, deserialized_compiler_invocation);
+  deserialize(options.VFSOverlayFiles,index, deserialized_compiler_invocation);
+  options.UseBuiltinIncludes = deserialize(options.UseBuiltinIncludes,index, deserialized_compiler_invocation);
+
+  options.UseStandardSystemIncludes =
+      deserialize(options.UseStandardSystemIncludes,index, deserialized_compiler_invocation);
+  options.UseStandardCXXIncludes = deserialize(options.UseStandardCXXIncludes,index, deserialized_compiler_invocation);
+  options.UseLibcxx = deserialize(options.UseLibcxx,index, deserialized_compiler_invocation);
+  options.Verbose = deserialize(options.Verbose,index, deserialized_compiler_invocation);
+
+  options.ModulesValidateOncePerBuildSession =
+      deserialize(options.ModulesValidateOncePerBuildSession,index, deserialized_compiler_invocation);
+  options.ModulesValidateSystemHeaders =
+      deserialize(options.ModulesValidateSystemHeaders,index, deserialized_compiler_invocation);
+  options.ValidateASTInputFilesContent =
+      deserialize(options.ValidateASTInputFilesContent,index, deserialized_compiler_invocation);
+  options.UseDebugInfo = deserialize(options.UseDebugInfo,index, deserialized_compiler_invocation);
+  options.ModulesValidateDiagnosticOptions =
+      deserialize(options.ModulesValidateDiagnosticOptions,index, deserialized_compiler_invocation);
+  options.ModulesHashContent = deserialize(options.ModulesHashContent,index, deserialized_compiler_invocation);
+  options.ModulesStrictContextHash =
+      deserialize(options.ModulesStrictContextHash,index, deserialized_compiler_invocation);
+}
+
+
+
+void tryCompleteData(CompilerInstance &CI, std::string wanted_obj_path,
+    std::vector<char>deserialized_compiler_invocation) {
+  int index = 0;
+  while (index < deserialized_compiler_invocation.size()) {
+    std::string current_object_path;
+    deserialize(current_object_path, index, deserialized_compiler_invocation);
+    std::replace(wanted_obj_path.begin(), wanted_obj_path.end(), '/', '\\');
+    std::replace(current_object_path.begin(), current_object_path.end(), '/',
+                 '\\');
+    std::transform(current_object_path.begin(), current_object_path.end(),
+                   current_object_path.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    std::transform(wanted_obj_path.begin(), wanted_obj_path.end(),
+                   wanted_obj_path.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    size_t size = 0;
+    size = deserialize(size, index, deserialized_compiler_invocation);
+    if (wanted_obj_path == current_object_path) {
+      deserialize(CI.getLangOpts(), index, deserialized_compiler_invocation);
+      deserialize(CI.getPreprocessorOpts(), index, deserialized_compiler_invocation);
+      deserialize(CI.getHeaderSearchOpts(), index, deserialized_compiler_invocation);
+      break;
+    } else {
+      index += size;
+    }
+  }
+}
+
+void tryCompleteData(const std::string &exe_path, lldb_private::Target &target, CompilerInstance& CI) {
+  std::ifstream is(exe_path, std::ifstream::binary);
+  if (is) {
+    // get length of file:
+    is.seekg(0, is.end);
+    int length = is.tellg();
+    is.seekg(0, is.beg);
+    std::vector<char> exe_data(length);
+    is.read(exe_data.data(), exe_data.size());
+    std::error_code ec;
+    auto memoryBuffer =
+        MemoryBufferRef(toStringRef(llvm::ArrayRef<uint8_t>(
+                            (uint8_t *)exe_data.data(), exe_data.size())),
+                        "");
+    auto coff = object::COFFObjectFile::create(memoryBuffer);
+    for (const auto &section : coff->get()->sections()) {
+      auto name = section.getName().get();
+      if (section.getName() && (section.getName().get() == ".llvm_co" ||
+                                section.getName().get() == ".llvm_command")) {
+        auto contents = section.getContents();
+        if (contents) {
+          auto trueContents = contents.get();
+          std::vector<char> serialized_command =
+              std::vector<char>(trueContents.begin(), trueContents.end());
+          auto context = target.CalculateProcess()
+                             ->GetThreadList()
+                             .GetSelectedThread()
+                             ->GetSelectedFrame()
+                             ->GetSymbolContext(lldb::eSymbolContextCompUnit);
+          auto comp_unit = context.comp_unit;
+          if (nullptr != comp_unit) {
+            auto comp_path = comp_unit->GetPrimaryFile().GetPath();
+            tryCompleteData(CI, comp_path, serialized_command);
+          }
+        }
+      }
+    }
+  }
+}
+
 
 ClangExpressionParser::ClangExpressionParser(
     ExecutionContextScope *exe_scope, Expression &expr,
@@ -572,6 +1237,20 @@ ClangExpressionParser::ClangExpressionParser(
     }
   }
 
+
+  std::string exe_path = exe_scope->CalculateProcess()->getPath();
+  if (exe_path.empty()) {
+    exe_path = exe_scope->CalculateTarget()
+                   ->GetExecutableModule()
+                   ->GetFileSpec()
+                   .GetPath();
+  }
+  tryCompleteData(exe_path, *exe_scope->CalculateTarget(), *m_compiler);
+    
+  // Register the support for object-file-wrapped Clang modules.
+  auto PCHOps = m_compiler->getPCHContainerOperations();
+  PCHOps->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
+  PCHOps->registerReader(std::make_unique<ObjectFilePCHContainerReader>());
   lang_opts.ThreadsafeStatics = false;
   lang_opts.AccessControl = false; // Debuggers get universal access
   lang_opts.DollarIdents = true;   // $ indicates a persistent variable name
@@ -1060,11 +1739,11 @@ ClangExpressionParser::ParseInternal(DiagnosticManager &diagnostic_manager,
                                *Consumer, TU_Complete, completion_consumer));
   m_compiler->setASTConsumer(std::move(Consumer));
 
-  if (ast_context.getLangOpts().Modules) {
-    m_compiler->createASTReader();
-    m_ast_context->setSema(&m_compiler->getSema());
+if (ast_context.getLangOpts().Modules) {
+    //m_compiler->createASTReader();
+    
   }
-
+m_ast_context->setSema(&m_compiler->getSema());
   ClangExpressionDeclMap *decl_map = type_system_helper->DeclMap();
   if (decl_map) {
     decl_map->InstallCodeGenerator(&m_compiler->getASTConsumer());

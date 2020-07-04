@@ -3547,7 +3547,8 @@ bool Sema::MergeFunctionDecl(FunctionDecl *New, NamedDecl *&OldD,
 
           Diag(New->getLocation(), NewDiag);
         } else {
-          Diag(New->getLocation(), diag::err_member_redeclared_in_instantiation)
+          __debugbreak();
+          Diag(Old->getLocation(), diag::err_member_redeclared_in_instantiation)
             << New << New->getType();
         }
         Diag(OldLocation, PrevDiag) << Old << Old->getType();

@@ -41,6 +41,7 @@
 #include "lldb/Utility/State.h"
 
 using namespace lldb_private;
+extern bool g_is_lldb_execution;
 
 char ClangFunctionCaller::ID;
 
@@ -187,6 +188,7 @@ ClangFunctionCaller::CompileFunction(lldb::ThreadSP thread_to_use_sp,
 
   lldb::ProcessSP jit_process_sp(m_jit_process_wp.lock());
   if (jit_process_sp) {
+    g_is_lldb_execution = true; 
     const bool generate_debug_info = true;
     auto *clang_parser = new ClangExpressionParser(jit_process_sp.get(), *this,
                                                    generate_debug_info);
