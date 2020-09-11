@@ -320,17 +320,17 @@ void *deserialize(void *obj, size_t sizeofObj, int &index,
 
 void deserializeAndChange(size_t &obj, int &index,
                           std::vector<char> deserialized_compiler_invocation) {
-  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+  deserialize(&obj, sizeof(obj), index, deserialized_compiler_invocation);
 }
 
 void deserializeAndChange(bool &obj, int &index,
                           std::vector<char> deserialized_compiler_invocation) {
-  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+  deserialize(&obj, sizeof(obj), index, deserialized_compiler_invocation);
 }
 
 void deserializeAndChange(unsigned int &obj, int &index,
                           std::vector<char> deserialized_compiler_invocation) {
-  deserialize(&obj, sizeof(obj),index,deserialized_compiler_invocation);
+  deserialize(&obj, sizeof(obj), index, deserialized_compiler_invocation);
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value, int> = 0>
@@ -382,10 +382,10 @@ void deserialize(std::vector<HeaderSearchOptions::SystemHeaderPrefix> &obj,
                  std::vector<char> deserialized_compiler_invocation) {
   obj.clear();
   size_t objectsNum = 0;
-  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  deserializeAndChange(objectsNum, index, deserialized_compiler_invocation);
   for (int i = 0; i < objectsNum; i++) {
     HeaderSearchOptions::SystemHeaderPrefix systemPrefix("", false);
-    deserialize(systemPrefix,index,deserialized_compiler_invocation);
+    deserialize(systemPrefix, index, deserialized_compiler_invocation);
     obj.push_back(systemPrefix);
   }
 }
@@ -394,7 +394,7 @@ void deserialize(std::vector<HeaderSearchOptions::Entry> &obj, int &index,
                  std::vector<char> deserialized_compiler_invocation) {
   obj.clear();
   size_t objectsNum = 0;
-  deserializeAndChange(objectsNum,index,deserialized_compiler_invocation);
+  deserializeAndChange(objectsNum, index, deserialized_compiler_invocation);
   for (int i = 0; i < objectsNum; i++) {
     HeaderSearchOptions::Entry entry("", frontend::IncludeDirGroup::Quoted,
                                      true, true);
@@ -408,12 +408,12 @@ void deserialize(std::map<T, Y> &obj, int &index,
                  std::vector<char> deserialized_compiler_invocation) {
   obj.clear();
   size_t objectsNum = 0;
-  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  deserializeAndChange(objectsNum, index, deserialized_compiler_invocation);
   for (int i = 0; i < objectsNum; i++) {
     T key;
-    deserialize(key,index,deserialized_compiler_invocation);
+    deserialize(key, index, deserialized_compiler_invocation);
     Y value;
-    deserialize(value,index,deserialized_compiler_invocation);
+    deserialize(value, index, deserialized_compiler_invocation);
     obj[key] = value;
   }
 }
@@ -422,7 +422,7 @@ void deserialize(std::vector<std::pair<std::string, bool>> &obj, int &index,
                  std::vector<char> deserialized_compiler_invocation) {
   obj.clear();
   size_t objectsNum = 0;
-  deserializeAndChange(objectsNum,index, deserialized_compiler_invocation);
+  deserializeAndChange(objectsNum, index, deserialized_compiler_invocation);
   for (int i = 0; i < objectsNum; i++) {
     std::string first;
     bool second = false;
@@ -588,7 +588,7 @@ void deserialize(LangOptions &langOptions, int &index,
   langOptions.CacheGeneratedPCH = deserialize(langOptions.CacheGeneratedPCH, index,
               deserialized_compiler_invocation);
   deserialize(langOptions.ModulesDeclUse, index,
-      deserialized_compiler_invocation);
+              deserialized_compiler_invocation);
   deserialize(langOptions.ModulesSearchAll, index,
               deserialized_compiler_invocation);
   deserialize(langOptions.ModulesStrictDeclUse,
@@ -596,7 +596,7 @@ void deserialize(LangOptions &langOptions, int &index,
               deserialized_compiler_invocation);
   langOptions.ModulesErrorRecovery = deserialize(langOptions.ModulesErrorRecovery,
                                               index,
-              deserialized_compiler_invocation);
+                  deserialized_compiler_invocation);
   deserialize(langOptions.ImplicitModules, index,
               deserialized_compiler_invocation);
   deserialize(
@@ -807,7 +807,7 @@ void deserialize(LangOptions &langOptions, int &index,
   deserialize(langOptions.ObjCConstantStringClass,index, deserialized_compiler_invocation);
   deserialize(langOptions.OverflowHandler,index, deserialized_compiler_invocation);
 
-  deserialize(langOptions.ModuleName,index, deserialized_compiler_invocation);
+  deserialize(langOptions.ModuleName, index, deserialized_compiler_invocation);
   deserialize(langOptions.CurrentModule,index, deserialized_compiler_invocation);
   deserialize(langOptions.ModuleFeatures,index, deserialized_compiler_invocation);
   deserialize(langOptions.NoBuiltinFuncs,index, deserialized_compiler_invocation);
@@ -817,9 +817,9 @@ void deserialize(LangOptions &langOptions, int &index,
 
 void deserialize(PreprocessorOptions &options, int &index,
                  std::vector<char> deserialized_compiler_invocation) {
-  deserialize(options.Macros,index, deserialized_compiler_invocation);
-  deserialize(options.Includes,index, deserialized_compiler_invocation);
-  deserialize(options.MacroIncludes,index, deserialized_compiler_invocation);
+  deserialize(options.Macros, index, deserialized_compiler_invocation);
+  deserialize(options.Includes, index, deserialized_compiler_invocation);
+  deserialize(options.MacroIncludes, index, deserialized_compiler_invocation);
   deserializeAndChange(options.UsePredefines, index,
                        deserialized_compiler_invocation);
   deserializeAndChange(options.DetailedRecord, index,
@@ -830,7 +830,7 @@ void deserialize(PreprocessorOptions &options, int &index,
                        deserialized_compiler_invocation);
   deserialize(options.PCHThroughHeader,index, deserialized_compiler_invocation);
   deserialize(options.ImplicitPCHInclude,index, deserialized_compiler_invocation);
-  deserialize(options.ChainedIncludes,index, deserialized_compiler_invocation);
+  deserialize(options.ChainedIncludes, index, deserialized_compiler_invocation);
   deserializeAndChange(options.DisablePCHValidation,index, deserialized_compiler_invocation);
   deserializeAndChange(options.AllowPCHWithCompilerErrors, index,
                        deserialized_compiler_invocation);
@@ -853,15 +853,15 @@ void deserialize(HeaderSearchOptions &options, int &index,
                  std::vector<char> deserialized_compiler_invocation) {
 
   deserialize(options.Sysroot, index, deserialized_compiler_invocation);
-  deserialize(options.UserEntries,index, deserialized_compiler_invocation);
+  deserialize(options.UserEntries, index, deserialized_compiler_invocation);
   deserialize(options.SystemHeaderPrefixes,index, deserialized_compiler_invocation);
-  deserialize(options.ResourceDir,index, deserialized_compiler_invocation);
+  deserialize(options.ResourceDir, index, deserialized_compiler_invocation);
 
-  deserialize(options.ModuleCachePath,index, deserialized_compiler_invocation);
+  deserialize(options.ModuleCachePath, index, deserialized_compiler_invocation);
   deserialize(options.ModuleUserBuildPath,index, deserialized_compiler_invocation);
 
   deserialize(options.PrebuiltModulePaths,index, deserialized_compiler_invocation);
-  deserialize(options.ModuleFormat,index, deserialized_compiler_invocation);
+  deserialize(options.ModuleFormat, index, deserialized_compiler_invocation);
   options.DisableModuleHash = deserialize(options.DisableModuleHash,index, deserialized_compiler_invocation);
 
   options.ImplicitModuleMaps = deserialize(options.ImplicitModuleMaps,index, deserialized_compiler_invocation);
@@ -870,7 +870,7 @@ void deserialize(HeaderSearchOptions &options, int &index,
       deserialize(options.ModuleCachePruneInterval,index, deserialized_compiler_invocation);
   options.ModuleCachePruneAfter = deserialize(options.ModuleCachePruneAfter,index, deserialized_compiler_invocation);
   options.BuildSessionTimestamp = deserialize(options.BuildSessionTimestamp,index, deserialized_compiler_invocation);
-  deserialize(options.VFSOverlayFiles,index, deserialized_compiler_invocation);
+  deserialize(options.VFSOverlayFiles, index, deserialized_compiler_invocation);
   options.UseBuiltinIncludes = deserialize(options.UseBuiltinIncludes,index, deserialized_compiler_invocation);
 
   options.UseStandardSystemIncludes =
@@ -896,7 +896,7 @@ void deserialize(HeaderSearchOptions &options, int &index,
 
 
 void tryCompleteData(CompilerInstance &CI, std::string wanted_obj_path,
-    std::vector<char>deserialized_compiler_invocation) {
+                     std::vector<char> deserialized_compiler_invocation) {
   int index = 0;
   while (index < deserialized_compiler_invocation.size()) {
     std::string current_object_path;
@@ -1246,7 +1246,7 @@ ClangExpressionParser::ClangExpressionParser(
                    .GetPath();
   }
   tryCompleteData(exe_path, *exe_scope->CalculateTarget(), *m_compiler);
-    
+
   // Register the support for object-file-wrapped Clang modules.
   auto PCHOps = m_compiler->getPCHContainerOperations();
   PCHOps->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
@@ -1263,7 +1263,7 @@ ClangExpressionParser::ClangExpressionParser(
   m_compiler->getCodeGenOpts().EmitDeclMetadata = true;
   m_compiler->getCodeGenOpts().InstrumentFunctions = false;
   m_compiler->getCodeGenOpts().setFramePointer(
-                                    CodeGenOptions::FramePointerKind::All);
+      CodeGenOptions::FramePointerKind::All);
   if (generate_debug_info)
     m_compiler->getCodeGenOpts().setDebugInfo(codegenoptions::FullDebugInfo);
   else
@@ -1638,6 +1638,17 @@ unsigned ClangExpressionParser::Parse(DiagnosticManager &diagnostic_manager) {
   return ParseInternal(diagnostic_manager);
 }
 
+#include <sstream>
+std::vector<std::string> splitToLines(const std::string &str) {
+  std::stringstream ss(str);
+  std::string to;
+  std::vector<std::string> res;
+  while (std::getline(ss, to, '\n')) {
+    res.push_back(to);
+  }
+  return res;
+}
+
 unsigned
 ClangExpressionParser::ParseInternal(DiagnosticManager &diagnostic_manager,
                                      CodeCompleteConsumer *completion_consumer,
@@ -1651,6 +1662,19 @@ ClangExpressionParser::ParseInternal(DiagnosticManager &diagnostic_manager,
   adapter->ResetManager(&diagnostic_manager);
 
   const char *expr_text = m_expr.Text();
+  std::string text = expr_text;
+  auto lines = splitToLines(text);
+  std::string headers;
+  std::string newText;
+  for (const auto &line : lines) {
+    if (line.find("#include") != -1) {
+      headers += line + "\n";
+    } else {
+      newText += line + "\n";
+    }
+  }
+  newText = headers + newText;
+  expr_text = newText.c_str();
 
   clang::SourceManager &source_mgr = m_compiler->getSourceManager();
   bool created_main_file = false;
@@ -1739,11 +1763,11 @@ ClangExpressionParser::ParseInternal(DiagnosticManager &diagnostic_manager,
                                *Consumer, TU_Complete, completion_consumer));
   m_compiler->setASTConsumer(std::move(Consumer));
 
-if (ast_context.getLangOpts().Modules) {
-    //m_compiler->createASTReader();
+  if (ast_context.getLangOpts().Modules) {
+    // m_compiler->createASTReader();
     
   }
-m_ast_context->setSema(&m_compiler->getSema());
+  m_ast_context->setSema(&m_compiler->getSema());
   ClangExpressionDeclMap *decl_map = type_system_helper->DeclMap();
   if (decl_map) {
     decl_map->InstallCodeGenerator(&m_compiler->getASTConsumer());

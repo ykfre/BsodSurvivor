@@ -2061,10 +2061,14 @@ LanguageLinkage VarDecl::getLanguageLinkage() const {
 }
 
 bool VarDecl::isExternC() const {
+  if (hasAttr<OpenCLKernelAttr>())
+    return true;
   return isDeclExternC(*this);
 }
 
 bool VarDecl::isInExternCContext() const {
+  if (hasAttr<OpenCLKernelAttr>())
+    return true;
   return getLexicalDeclContext()->isExternCContext();
 }
 
@@ -3064,6 +3068,8 @@ LanguageLinkage FunctionDecl::getLanguageLinkage() const {
 }
 
 bool FunctionDecl::isExternC() const {
+  if (hasAttr<OpenCLKernelAttr>())
+    return true;
   return isDeclExternC(*this);
 }
 

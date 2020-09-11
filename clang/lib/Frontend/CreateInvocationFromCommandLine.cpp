@@ -32,7 +32,7 @@
 using namespace clang;
 using namespace llvm::opt;
 
-bool g_is_lldb_execution = true;
+bool g_is_lldb_execution = false;
 
 std::vector<char> g_serailizeCompilerInvocation;
 

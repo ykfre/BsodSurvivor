@@ -762,7 +762,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SplitDwarfOutput =
       std::string(Args.getLastArgValue(OPT_split_dwarf_output));
   Opts.SplitDwarfInlining = !Args.hasArg(OPT_fno_split_dwarf_inlining);
-  Opts.DebugTypeExtRefs = Args.hasArg(OPT_dwarf_ext_refs);
+  Opts.DebugTypeExtRefs = true;
   Opts.DebugExplicitImport = Args.hasArg(OPT_dwarf_explicit_import);
   Opts.DebugFwdTemplateParams = Args.hasArg(OPT_debug_forward_template_params);
   Opts.EmbedSource = Args.hasArg(OPT_gembed_source);
@@ -2846,7 +2846,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     !Args.hasArg(OPT_fno_modules_search_all) &&
     Args.hasArg(OPT_fmodules_search_all);
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
-  Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
+  Opts.ImplicitModules = true;
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus20);

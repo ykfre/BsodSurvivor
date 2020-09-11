@@ -3218,7 +3218,7 @@ static void RenderModulesOptions(Compilation &C, const Driver &D,
   // Users can pass -fno-cxx-modules to turn off modules support for
   // C++/Objective-C++ programs.
   bool HaveClangModules = false;
-  if (Args.hasFlag(options::OPT_fmodules, options::OPT_fno_modules, false)) {
+  if (Args.hasFlag(options::OPT_fmodules, options::OPT_fno_modules, true)) {
     bool AllowedInCXX = Args.hasFlag(options::OPT_fcxx_modules,
                                      options::OPT_fno_cxx_modules, true);
     if (AllowedInCXX || !types::isCXX(Input.getType())) {
@@ -3251,7 +3251,7 @@ static void RenderModulesOptions(Compilation &C, const Driver &D,
     CmdArgs.push_back("-fmodules-strict-decluse");
 
   // -fno-implicit-modules turns off implicitly compiling modules on demand.
-  bool ImplicitModules = false;
+  bool ImplicitModules = true;
   if (!Args.hasFlag(options::OPT_fimplicit_modules,
                     options::OPT_fno_implicit_modules, HaveClangModules)) {
     if (HaveModules)
@@ -3781,8 +3781,8 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
 
   // FIXME: Move backend command line options to the module.
   // If -gline-tables-only or -gline-directives-only is the last option it wins.
-  if (const Arg *A = Args.getLastArg(options::OPT_gmodules))
-    if (checkDebugInfoOption(A, Args, D, TC)) {
+  if (true)
+    if (true) {
       if (DebugInfoKind != codegenoptions::DebugLineTablesOnly &&
           DebugInfoKind != codegenoptions::DebugDirectivesOnly) {
         DebugInfoKind = codegenoptions::LimitedDebugInfo;

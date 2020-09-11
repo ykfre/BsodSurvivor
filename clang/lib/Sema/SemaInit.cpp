@@ -5629,21 +5629,6 @@ void InitializationSequence::InitializeFrom(Sema &S,
   //   parenthesized list of expressions.
   QualType DestType = Entity.getType();
 
-  if (Entity.getDecl())
-  {
-
-    std::cout << S.getASTContext()
-                     .getSourceManager()
-                     .getFilename(Entity.getDecl()->getBeginLoc())
-                     .str()
-              << std::endl;
-    std::cout << S.getASTContext().getSourceManager().getExpansionColumnNumber(
-        Entity.getDecl()->getBeginLoc()) << std::endl;
-    std::cout << S.getASTContext().getSourceManager().getExpansionLineNumber(
-                     Entity.getDecl()->getBeginLoc())
-              << std::endl;
-  }
-
   if (DestType->isDependentType() ||
       Expr::hasAnyTypeDependentArguments(Args)) {
     SequenceKind = DependentSequence;

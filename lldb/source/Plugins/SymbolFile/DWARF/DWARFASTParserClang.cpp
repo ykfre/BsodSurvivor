@@ -1188,7 +1188,7 @@ TypeSP DWARFASTParserClang::ParseSubroutine(const DWARFDIE &die,
             ignore_containing_context ? m_ast.GetTranslationUnitDecl()
                                       : containing_decl_ctx,
             GetOwningClangModule(die), name, clang_type, attrs.storage,
-            attrs.is_inline);
+            attrs.is_inline, attrs.mangled_name);
 
         if (has_template_params) {
           TypeSystemClang::TemplateParameterInfos template_param_infos;

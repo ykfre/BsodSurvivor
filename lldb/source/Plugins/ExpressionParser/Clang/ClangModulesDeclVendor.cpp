@@ -321,7 +321,6 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
   diagnostic_consumer->ClearDiagnostics();
 
   clang::Module *top_level_module = DoGetModule(clang_path.front(), false);
-
   if (!top_level_module) {
     diagnostic_consumer->DumpDiagnostics(error_stream);
     error_stream.Printf("error: Couldn't load top-level module %s\n",
@@ -343,7 +342,6 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
   }
 
   clang::Module *requested_module = DoGetModule(clang_path, true);
-
   if (requested_module != nullptr) {
     if (exported_modules) {
       ReportModuleExports(*exported_modules, requested_module);
@@ -405,22 +403,32 @@ public:
     std::vector<clang::NamedDecl *> wanted_decls;
     for (const auto &decl : s_cached_decls) {
       if (auto var = llvm::dyn_cast<clang::ClassTemplateDecl>(decl)) {
-        if (m_wantedDeclName == var->getTemplatedDecl()->getName().str()) {
-          wanted_decls.push_back(decl);
+        if (var->isThisDeclarationADefinition()) {
+          if (m_wantedDeclName == var->getTemplatedDecl()->getName().str()) {
+            wanted_decls.push_back(decl);
+          }
         }
       } else if (auto var = llvm::dyn_cast<
                      clang::ClassTemplatePartialSpecializationDecl>(decl)) {
-        auto templated = var->getSpecializedTemplate()->getTemplatedDecl();
-        if (m_wantedDeclName == templated->getName()) {
-          wanted_decls.push_back(decl);
+        if (var->isThisDeclarationADefinition()) {
+
+          auto templated = var->getSpecializedTemplate()->getTemplatedDecl();
+          if (m_wantedDeclName == templated->getName()) {
+            wanted_decls.push_back(decl);
+          }
         }
       } else if (auto var =
                      llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(
                          decl)) {
-        auto templated =
-            var->getSpecializedTemplate()->getTemplatedDecl()->getName().str();
-        if (m_wantedDeclName == templated) {
-          wanted_decls.push_back(decl);
+        if (var->isThisDeclarationADefinition()) {
+
+          auto templated = var->getSpecializedTemplate()
+                               ->getTemplatedDecl()
+                               ->getName()
+                               .str();
+          if (m_wantedDeclName == templated) {
+            wanted_decls.push_back(decl);
+          }
         }
       } else {
         if (decl->getDeclName().isIdentifier() && m_wantedDeclName == decl->getName()) {

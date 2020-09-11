@@ -12458,12 +12458,22 @@ static void AddOverloadedCallCandidate(Sema &S,
     if (!dyn_cast<FunctionProtoType>(Func->getType()->getAs<FunctionType>()))
       return;
 
-    S.AddOverloadCandidate(Func, FoundDecl, Args, CandidateSet,
-                           /*SuppressUserConversions=*/false,
-                           PartialOverloading);
+    if (Func->getDescribedTemplate())
+    {
+      S.AddTemplateOverloadCandidate(
+          dyn_cast<FunctionTemplateDecl>(Func->getDescribedTemplate()),
+          FoundDecl,
+                                     ExplicitTemplateArgs, Args, CandidateSet,
+          /*SuppressUserConversions=*/false, PartialOverloading);
+    }
+    else
+    {
+      S.AddOverloadCandidate(Func, FoundDecl, Args, CandidateSet,
+                             /*SuppressUserConversions=*/false,
+                             PartialOverloading);
+    }
     return;
   }
-
   if (FunctionTemplateDecl *FuncTemplate
       = dyn_cast<FunctionTemplateDecl>(Callee)) {
     S.AddTemplateOverloadCandidate(FuncTemplate, FoundDecl,

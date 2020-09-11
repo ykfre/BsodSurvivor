@@ -105,9 +105,6 @@ public:
     return Writers[Format].get();
   }
   const PCHContainerReader *getReaderOrNull(llvm::StringRef Format) {
-    for(const auto& key : Readers.keys()) {
-      std::cout << key.str();
-    }
     return Readers[Format].get();
   }
   const PCHContainerReader &getRawReader() {

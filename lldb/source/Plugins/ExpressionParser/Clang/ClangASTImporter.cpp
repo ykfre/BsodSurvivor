@@ -855,7 +855,6 @@ static bool templateArgsAreSupported(ArrayRef<TemplateArgument> a) {
 
 llvm::Expected<clang::Decl *>
 ClangASTImporter::ASTImporterDelegate::handleStdHandler(clang::Decl *From) {
-  return nullptr;
   if (m_std_handler && m_std_handler->m_sema) {
     auto externalSource =
         m_std_handler->m_sema->getASTContext().getExternalSource();
