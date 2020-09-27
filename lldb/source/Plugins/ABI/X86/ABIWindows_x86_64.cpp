@@ -164,15 +164,24 @@ bool ABIWindows_x86_64::PrepareTrivialCall(Thread &thread, addr_t sp,
             (uint64_t)sp, (uint64_t)(sp & ~0xfull));
 
   sp &= ~(0xfull); // 16-byte alignment
+  ProcessSP process_sp(thread.GetProcess());
+
+  Status error;
+
+  for (auto i = 0; i < args.size(); i++) {
+    uint64_t value = args[i];
+    process_sp->WriteMemory(sp+i*sizeof(uint64_t), &value, sizeof(uint64_t), error);
+    if (!error.Success()) {
+      return false;
+    }
+  }
 
   sp -= 8; // return address
 
-  Status error;
   const RegisterInfo *pc_reg_info =
       reg_ctx->GetRegisterInfo(eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
   const RegisterInfo *sp_reg_info =
       reg_ctx->GetRegisterInfo(eRegisterKindGeneric, LLDB_REGNUM_GENERIC_SP);
-  ProcessSP process_sp(thread.GetProcess());
 
   RegisterValue reg_value;
   LLDB_LOGF(log,
@@ -199,6 +208,19 @@ bool ABIWindows_x86_64::PrepareTrivialCall(Thread &thread, addr_t sp,
     return false;
 
   return true;
+}
+
+bool ABIWindows_x86_64::PrepareTrivialCall(
+    lldb_private::Thread &thread, lldb::addr_t sp, lldb::addr_t functionAddress,
+    lldb::addr_t returnAddress, llvm::Type &prototype,
+    llvm::ArrayRef<CallArgument> args) const {
+  std::vector<addr_t> raw_args;
+  for (const auto &arg : args) {
+    raw_args.push_back(arg.value);
+  }
+  llvm::ArrayRef<addr_t> arrayRefArgs(raw_args.data(), raw_args.size());
+  return PrepareTrivialCall(thread, sp, functionAddress, returnAddress,
+                            arrayRefArgs);
 }
 
 static bool ReadIntegerArgument(Scalar &scalar, unsigned int bit_width,
@@ -589,6 +611,36 @@ static bool FlattenAggregateType(
     }
   }
   return true;
+}
+
+// get value object specialized to work with llvm IR types
+lldb::ValueObjectSP
+    ABIWindows_x86_64::GetReturnValueObjectImpl(lldb_private::Thread &thread,
+                                          llvm::Type &retType) const {
+  Value value;
+  ValueObjectSP vObjSP;
+
+  // get the current register context
+  RegisterContext *reg_ctx = thread.GetRegisterContext().get();
+  if (!reg_ctx)
+    return vObjSP;
+
+  // for now just pop R0 to find the return value
+  const lldb_private::RegisterInfo *rax_info =
+      reg_ctx->GetRegisterInfoByName("rax");
+  if (rax_info == nullptr)
+    return vObjSP;
+
+  // read r0 register value
+  lldb_private::RegisterValue rax_value;
+  if (!reg_ctx->ReadRegister(rax_info, rax_value))
+    return vObjSP;
+  value.GetScalar() = rax_value.GetAsUInt64();
+ 
+  // pack the value into a ValueObjectSP
+  vObjSP = ValueObjectConstResult::Create(thread.GetStackFrameAtIndex(0).get(),
+                                          value, ConstString(""));
+  return vObjSP;
 }
 
 ValueObjectSP ABIWindows_x86_64::GetReturnValueObjectImpl(

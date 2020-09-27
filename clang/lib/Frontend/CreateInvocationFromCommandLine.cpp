@@ -384,26 +384,10 @@ void serialize(CompilerInvocation &CI,
     g_serailizeCompilerInvocation.insert(g_serailizeCompilerInvocation.end(),newSerialized.begin(), newSerialized.end());
   }
 
-  std::ofstream f("commands" + std::to_string(GetCurrentProcessId()),
-                  std::ios::binary | std::ios::ate);
-  f.write(g_serailizeCompilerInvocation.data(),
-          g_serailizeCompilerInvocation.size());
 }
 
 std::vector<char> read_serialize() {
-  std::ifstream is("commands" + std::to_string(GetCurrentProcessId()),
-                   std::ifstream::binary);
-  if (is) {
-    // get length of file:
-    is.seekg(0, is.end);
-    int length = is.tellg();
-    is.seekg(0, is.beg);
-    std::vector<char> compilerInvocationSerialized(length);
-    is.read(compilerInvocationSerialized.data(),
-            compilerInvocationSerialized.size());
-    return compilerInvocationSerialized;
-  }
-  return std::vector<char>();
+  return g_serailizeCompilerInvocation;
 }
 
 std::unique_ptr<CompilerInvocation> clang::createInvocationFromCommandLine(

@@ -29,6 +29,8 @@
 using namespace lldb;
 using namespace lldb_private;
 
+void *g_bpAddress = nullptr;
+
 // ThreadPlanCallFunction: Plan to call a single function
 bool ThreadPlanCallFunction::ConstructorSetup(
     Thread &thread, ABI *&abi, lldb::addr_t &start_load_addr,
@@ -64,18 +66,22 @@ bool ThreadPlanCallFunction::ConstructorSetup(
     return false;
   }
 
-  llvm::Expected<Address> start_address = GetTarget().GetEntryPointAddress();
-  if (!start_address) {
-    m_constructor_errors.Printf(
-        "%s", llvm::toString(start_address.takeError()).c_str());
-    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.", static_cast<void *>(this),
-              m_constructor_errors.GetData());
-    return false;
+  if (nullptr != g_bpAddress) {
+    llvm::Expected<Address> start_address = GetTarget().GetEntryPointAddress();
+    if (!start_address) {
+      m_constructor_errors.Printf(
+          "%s", llvm::toString(start_address.takeError()).c_str());
+      LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.",
+                static_cast<void *>(this), m_constructor_errors.GetData());
+      return false;
+      m_start_addr = *start_address;
+    } else {
+      m_start_addr = lldb_private::Address((size_t)g_bpAddress);
+    }
+
+    start_load_addr = m_start_addr.GetLoadAddress(&GetTarget());
   }
-
-  m_start_addr = *start_address;
-  start_load_addr = m_start_addr.GetLoadAddress(&GetTarget());
-
+  
   // Checkpoint the thread state so we can restore it later.
   if (log && log->GetVerbose())
     ReportRegisterState("About to checkpoint thread before function call.  "
@@ -110,15 +116,6 @@ ThreadPlanCallFunction::ThreadPlanCallFunction(
   lldb::addr_t start_load_addr = LLDB_INVALID_ADDRESS;
   lldb::addr_t function_load_addr = LLDB_INVALID_ADDRESS;
   ABI *abi = nullptr;
-
-  if (!ConstructorSetup(thread, abi, start_load_addr, function_load_addr))
-    return;
-
-  if (!abi->PrepareTrivialCall(thread, m_function_sp, function_load_addr,
-                               start_load_addr, args))
-    return;
-
-  ReportRegisterState("Function call was set up.  Register state was:");
 
   m_valid = true;
 }
@@ -166,47 +163,7 @@ void ThreadPlanCallFunction::ReportRegisterState(const char *message) {
 }
 
 void ThreadPlanCallFunction::DoTakedown(bool success) {
-  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_STEP));
-
-  if (!m_valid) {
-    // Don't call DoTakedown if we were never valid to begin with.
-    LLDB_LOGF(log,
-              "ThreadPlanCallFunction(%p): Log called on "
-              "ThreadPlanCallFunction that was never valid.",
-              static_cast<void *>(this));
-    return;
-  }
-
-  if (!m_takedown_done) {
-    Thread &thread = GetThread();
-    if (success) {
-      SetReturnValue();
-    }
-    LLDB_LOGF(log,
-              "ThreadPlanCallFunction(%p): DoTakedown called for thread "
-              "0x%4.4" PRIx64 ", m_valid: %d complete: %d.\n",
-              static_cast<void *>(this), m_tid, m_valid, IsPlanComplete());
-    m_takedown_done = true;
-    m_stop_address =
-        thread.GetStackFrameAtIndex(0)->GetRegisterContext()->GetPC();
-    m_real_stop_info_sp = GetPrivateStopInfo();
-    if (!thread.RestoreRegisterStateFromCheckpoint(m_stored_thread_state)) {
-      LLDB_LOGF(log,
-                "ThreadPlanCallFunction(%p): DoTakedown failed to restore "
-                "register state",
-                static_cast<void *>(this));
-    }
-    SetPlanComplete(success);
-    ClearBreakpoints();
-    if (log && log->GetVerbose())
-      ReportRegisterState("Restoring thread state after function call.  "
-                          "Restored register state:");
-  } else {
-    LLDB_LOGF(log,
-              "ThreadPlanCallFunction(%p): DoTakedown called as no-op for "
-              "thread 0x%4.4" PRIx64 ", m_valid: %d complete: %d.\n",
-              static_cast<void *>(this), m_tid, m_valid, IsPlanComplete());
-  }
+  SetPlanComplete(success);
 }
 
 void ThreadPlanCallFunction::WillPop() { DoTakedown(PlanSucceeded()); }
@@ -242,6 +199,7 @@ Vote ThreadPlanCallFunction::ShouldReportStop(Event *event_ptr) {
 }
 
 bool ThreadPlanCallFunction::DoPlanExplainsStop(Event *event_ptr) {
+  return false;
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_STEP |
                                                   LIBLLDB_LOG_PROCESS));
   m_real_stop_info_sp = GetPrivateStopInfo();

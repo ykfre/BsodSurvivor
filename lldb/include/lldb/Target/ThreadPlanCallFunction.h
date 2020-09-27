@@ -96,7 +96,6 @@ public:
 
   void SetStopOthers(bool new_value) override;
 
-protected:
   void ReportRegisterState(const char *message);
 
   bool DoPlanExplainsStop(Event *event_ptr) override;
@@ -123,6 +122,7 @@ protected:
   bool m_trap_exceptions;
   Address m_function_addr;
   Address m_start_addr;
+  std::vector<size_t> m_args;
   lldb::addr_t m_function_sp;
   lldb::ThreadPlanSP m_subplan_sp;
   LanguageRuntime *m_cxx_language_runtime;

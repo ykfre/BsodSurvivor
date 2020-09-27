@@ -3994,6 +3994,10 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     CCValAssign &VA = ArgLocs[I];
     EVT RegVT = VA.getLocVT();
     SDValue Arg = OutVals[OutIndex];
+    if (CI) {
+      auto debugLoc = CI->getDebugLoc();
+      Arg.getNode()->setDebugLoc(debugLoc);
+   }
     bool isByVal = Flags.isByVal();
 
     // Promote the value if needed.

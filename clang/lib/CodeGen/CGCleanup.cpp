@@ -640,6 +640,7 @@ static void destroyOptimisticNormalEntry(CodeGenFunction &CGF,
 /// current insertion point is threaded through the cleanup, as are
 /// any branch fixups on the cleanup.
 void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
+
   assert(!EHStack.empty() && "cleanup stack is empty!");
   assert(isa<EHCleanupScope>(*EHStack.begin()) && "top not a cleanup!");
   EHCleanupScope &Scope = cast<EHCleanupScope>(*EHStack.begin());
@@ -767,8 +768,9 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     // emit it directly.
     if (HasFallthrough && !HasPrebranchedFallthrough &&
         !HasFixups && !HasExistingBranches) {
-
       destroyOptimisticNormalEntry(*this, Scope);
+      addCallToTempSehFunc();
+
       EHStack.popCleanup();
 
       EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
@@ -890,11 +892,10 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
         assert(BranchThroughDest);
         InstsToAppend.push_back(llvm::BranchInst::Create(BranchThroughDest));
       }
-
       // IV.  Pop the cleanup and emit it.
       EHStack.popCleanup();
       assert(EHStack.hasNormalCleanups() == HasEnclosingCleanups);
-
+      addCallToTempSehFunc();
       EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
 
       // Append the prepared cleanup prologue from above.
@@ -995,6 +996,7 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     // We only actually emit the cleanup code if the cleanup is either
     // active or was used before it was deactivated.
     if (EHActiveFlag.isValid() || IsActive) {
+
       cleanupFlags.setIsForEHCleanup();
       EmitCleanup(*this, Fn, cleanupFlags, EHActiveFlag);
     }

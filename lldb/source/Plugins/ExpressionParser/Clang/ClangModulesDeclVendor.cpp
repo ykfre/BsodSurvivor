@@ -483,14 +483,18 @@ public:
     return clang::RecursiveASTVisitor<ExampleVisitor>::TraverseDecl(decl);
   }
 
-private:
   std::string m_wantedDeclName;
-  static bool s_is_cached_decls;
-  static std::vector<clang::NamedDecl *> s_cached_decls;
+  thread_local static bool s_is_cached_decls;
+  thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
 };
 
-bool ExampleVisitor::s_is_cached_decls = false;
-std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls{};
+thread_local bool ExampleVisitor::s_is_cached_decls = false;
+thread_local std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls{};
+
+void clearClangModulesDeclVendorImplCache() {
+  ExampleVisitor::s_is_cached_decls = false;
+  ExampleVisitor::s_cached_decls.clear();
+}
 
 uint32_t ClangModulesDeclVendorImpl::FindDecls(
     clang::DeclContext *context, ConstString name, bool append,
@@ -714,7 +718,7 @@ ClangModulesDeclVendorImpl::DoGetModule(clang::ModuleIdPath path,
 
 static const char *ModuleImportBufferName = "LLDBModulesMemoryBuffer";
 
-void tryCompleteData(const std::string &exe_path, lldb_private::Target &target,
+extern bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Target &target,
                      clang::CompilerInstance &CI);
 
 lldb_private::ClangModulesDeclVendor *
@@ -833,7 +837,12 @@ ClangModulesDeclVendor::Create(Target &target) {
   if (exe_path.empty()) {
     exe_path = target.GetExecutableModule()->GetFileSpec().GetPath();
   }
-  tryCompleteData(exe_path, target, *instance);
+  bool isSucceededToHaveSettingsFromSection =
+      getCompileSettingsFromSection(exe_path, target, *instance);
+
+  if (!isSucceededToHaveSettingsFromSection && log) {
+    log->Warning("There is no llvm_command section in the pe file\n");
+  }
   std::unique_ptr<clang::FrontendAction> action(new clang::SyntaxOnlyAction);
 
   instance->setTarget(clang::TargetInfo::CreateTargetInfo(

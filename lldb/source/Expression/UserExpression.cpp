@@ -367,7 +367,6 @@ UserExpression::Evaluate(ExecutionContext &exe_ctx,
           LLDB_LOG(log, "== [UserExpression::Evaluate] Execution completed "
                         "normally with no result ==");
 
-          error.SetError(UserExpression::kNoResult, lldb::eErrorTypeGeneric);
         }
       }
     }

@@ -895,7 +895,7 @@ void deserialize(HeaderSearchOptions &options, int &index,
 
 
 
-void tryCompleteData(CompilerInstance &CI, std::string wanted_obj_path,
+bool getCompileSettingsFromSection(CompilerInstance &CI, std::string wanted_obj_path,
                      std::vector<char> deserialized_compiler_invocation) {
   int index = 0;
   while (index < deserialized_compiler_invocation.size()) {
@@ -916,15 +916,16 @@ void tryCompleteData(CompilerInstance &CI, std::string wanted_obj_path,
       deserialize(CI.getLangOpts(), index, deserialized_compiler_invocation);
       deserialize(CI.getPreprocessorOpts(), index, deserialized_compiler_invocation);
       deserialize(CI.getHeaderSearchOpts(), index, deserialized_compiler_invocation);
-      break;
+      return true;
     } else {
       index += size;
     }
   }
+  return false;
 }
 
-void tryCompleteData(const std::string &exe_path, lldb_private::Target &target, CompilerInstance& CI) {
-  std::ifstream is(exe_path, std::ifstream::binary);
+bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Target &target, CompilerInstance& CI) {
+  std::ifstream is("C:\\Users\\idowe\\source\\repos\\Project3\\Debug\\minispy.exe", std::ifstream::binary);
   if (is) {
     // get length of file:
     is.seekg(0, is.end);
@@ -938,10 +939,15 @@ void tryCompleteData(const std::string &exe_path, lldb_private::Target &target, 
                             (uint8_t *)exe_data.data(), exe_data.size())),
                         "");
     auto coff = object::COFFObjectFile::create(memoryBuffer);
+    int i = 0;
     for (const auto &section : coff->get()->sections()) {
-      auto name = section.getName().get();
-      if (section.getName() && (section.getName().get() == ".llvm_co" ||
-                                section.getName().get() == ".llvm_command")) {
+      i++;
+      bool hasName = section.getName().operator bool();
+      if(!hasName) {
+        __debugbreak();
+      }
+      auto name = section.getName();
+      if (section.getName() && (section.getName().get() == ".command")) {
         auto contents = section.getContents();
         if (contents) {
           auto trueContents = contents.get();
@@ -955,12 +961,13 @@ void tryCompleteData(const std::string &exe_path, lldb_private::Target &target, 
           auto comp_unit = context.comp_unit;
           if (nullptr != comp_unit) {
             auto comp_path = comp_unit->GetPrimaryFile().GetPath();
-            tryCompleteData(CI, comp_path, serialized_command);
+            return getCompileSettingsFromSection(CI, comp_path, serialized_command);
           }
         }
       }
     }
   }
+  return false;
 }
 
 
@@ -1245,8 +1252,13 @@ ClangExpressionParser::ClangExpressionParser(
                    ->GetFileSpec()
                    .GetPath();
   }
-  tryCompleteData(exe_path, *exe_scope->CalculateTarget(), *m_compiler);
+  bool isSucceededToHaveSettingsFromSection = getCompileSettingsFromSection(exe_path, *exe_scope->CalculateTarget(), *m_compiler);
 
+  if (!isSucceededToHaveSettingsFromSection && log) {
+    log->Warning("There is no llvm_command section in the pe file\n");
+  }else {
+    log->Warning("There is llvm_command section in the pe file\n");
+  }
   // Register the support for object-file-wrapped Clang modules.
   auto PCHOps = m_compiler->getPCHContainerOperations();
   PCHOps->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
@@ -1258,7 +1270,8 @@ ClangExpressionParser::ClangExpressionParser(
   // 'fopen'). Those libc functions are already correctly handled by LLDB, and
   // additionally enabling them as expandable builtins is breaking Clang.
   lang_opts.NoBuiltin = true;
-
+  lang_opts.Exceptions = 0;
+  lang_opts.CXXExceptions = 0;
   // Set CodeGen options
   m_compiler->getCodeGenOpts().EmitDeclMetadata = true;
   m_compiler->getCodeGenOpts().InstrumentFunctions = false;

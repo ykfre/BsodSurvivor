@@ -39,8 +39,9 @@ public:
 
   void GetDescription(Stream *s, lldb::DescriptionLevel level) override;
 
-protected:
   void SetReturnValue() override;
+
+protected:
 
 private:
   llvm::Type &m_return_type;

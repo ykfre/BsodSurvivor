@@ -131,7 +131,7 @@ public:
 
   /// MSVC needs an extra flag to indicate a catchall.
   CatchTypeInfo getCatchAllTypeInfo() override {
-    return CatchTypeInfo{nullptr, 0x40};
+    return CatchTypeInfo{nullptr, 0};
   }
 
   bool shouldTypeidBeNullChecked(bool IsDeref, QualType SrcRecordTy) override;

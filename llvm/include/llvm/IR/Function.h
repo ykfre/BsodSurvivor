@@ -555,11 +555,10 @@ public:
   bool doesNoCfCheck() const { return hasFnAttribute(Attribute::NoCfCheck); }
 
   /// Determine if the function cannot unwind.
-  bool doesNotThrow() const {
-    return hasFnAttribute(Attribute::NoUnwind);
+  bool doesNotThrow() const { return false;
   }
   void setDoesNotThrow() {
-    addFnAttr(Attribute::NoUnwind);
+    
   }
 
   /// Determine if the call cannot be duplicated.

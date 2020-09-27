@@ -681,7 +681,7 @@ void WinCOFFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
     Asm.registerSection(*AddrsigSection);
   }
   CommandLineSection = Asm.getContext().getCOFFSection(
-      ".llvm_command", COFF::IMAGE_SCN_MEM_DISCARDABLE,
+      ".command", COFF::IMAGE_SCN_MEM_DISCARDABLE,
       SectionKind::getMetadata());
   Asm.registerSection(*CommandLineSection);
   // "Define" each section & symbol. This creates section & symbol

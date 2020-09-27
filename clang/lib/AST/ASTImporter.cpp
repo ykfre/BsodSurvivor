@@ -98,14 +98,20 @@ public:
     }
     return clang::RecursiveASTVisitor<ExampleVisitor2>::TraverseDecl(decl);
   }
-private:
   std::string m_wantedDeclName;
-  static bool s_is_cached_decls;
-  static std::vector<clang::NamedDecl *> s_cached_decls;
+  thread_local static bool s_is_cached_decls;
+  thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
 };
 
-bool ExampleVisitor2::s_is_cached_decls = false;
-std::vector<clang::NamedDecl *> ExampleVisitor2::s_cached_decls{};
+thread_local bool ExampleVisitor2::s_is_cached_decls = false;
+thread_local std::vector<clang::NamedDecl *> ExampleVisitor2::s_cached_decls{};
+
+
+void clearAstImporterCache() {
+  ExampleVisitor2::s_is_cached_decls = false;
+  ExampleVisitor2::s_cached_decls.clear();
+}
+
 namespace clang {
 
   using llvm::make_error;
@@ -2784,7 +2790,6 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
   }
 
   
-  auto b = 0;
   if (D->getDefinition()) {
     auto alreadyImportedDecl =
         Importer.GetAlreadyImportedOrNull(D->getDefinition());
@@ -5456,7 +5461,6 @@ ExpectedDecl ASTNodeImporter::VisitClassTemplateDecl(ClassTemplateDecl *D) {
       !ToTemplated->isCompleteDefinition()) {
     if (Error Err = ImportDefinition(FromTemplated, ToTemplated, IDK_Default))
       return std::move(Err);
-    auto Class = dyn_cast<CXXRecordDecl>(ToTemplated);
     declareNeeded(dyn_cast<CXXRecordDecl>(FromTemplated),
                   dyn_cast<CXXRecordDecl>(ToTemplated));
   }

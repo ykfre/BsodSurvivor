@@ -309,7 +309,7 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
     auto *CleanupPad = cast<CleanupPadInst>(FirstNonPHI);
 
     // It's possible for a cleanup to be visited twice: it might have multiple
-    // cleanupret instructions.
+    // cleanupret invokeInstructionsToRemove.
     if (FuncInfo.EHPadStateMap.count(CleanupPad))
       return;
 
@@ -414,7 +414,7 @@ static void calculateSEHStateNumbers(WinEHFuncInfo &FuncInfo,
     auto *CleanupPad = cast<CleanupPadInst>(FirstNonPHI);
 
     // It's possible for a cleanup to be visited twice: it might have multiple
-    // cleanupret instructions.
+    // cleanupret invokeInstructionsToRemove.
     if (FuncInfo.EHPadStateMap.count(CleanupPad))
       return;
 
@@ -745,7 +745,7 @@ void WinEHPrepare::demotePHIsOnFunclets(Function &F,
 
 void WinEHPrepare::cloneCommonBlocks(Function &F) {
   // We need to clone all blocks which belong to multiple funclets.  Values are
-  // remapped throughout the funclet to propagate both the new instructions
+  // remapped throughout the funclet to propagate both the new invokeInstructionsToRemove
   // *and* the new basic blocks themselves.
   for (auto &Funclets : FuncletBlocks) {
     BasicBlock *FuncletPadBB = Funclets.first;
@@ -770,7 +770,7 @@ void WinEHPrepare::cloneCommonBlocks(Function &F) {
                               << "\' for funclet \'" << FuncletPadBB->getName()
                               << "\'.\n");
 
-      // Create a new basic block and copy instructions into it!
+      // Create a new basic block and copy invokeInstructionsToRemove into it!
       BasicBlock *CBB =
           CloneBasicBlock(BB, VMap, Twine(".for.", FuncletPadBB->getName()));
       // Insert the clone immediately after the original to ensure determinism
@@ -818,10 +818,10 @@ void WinEHPrepare::cloneCommonBlocks(Function &F) {
                               << "\'.\n");
     }
 
-    // Loop over all of the instructions in this funclet, fixing up operand
+    // Loop over all of the invokeInstructionsToRemove in this funclet, fixing up operand
     // references as we go.  This uses VMap to do all the hard work.
     for (BasicBlock *BB : BlocksInFunclet)
-      // Loop over all instructions, fixing each one as we find it...
+      // Loop over all invokeInstructionsToRemove, fixing each one as we find it...
       for (Instruction &I : *BB)
         RemapInstruction(&I, VMap,
                          RF_IgnoreMissingLocals | RF_NoModuleLevelChanges);
@@ -995,7 +995,7 @@ void WinEHPrepare::removeImplausibleInstructions(Function &F) {
           changeToUnreachable(&I, /*UseLLVMTrap=*/false);
         }
 
-        // There are no more instructions in the block (except for unreachable),
+        // There are no more invokeInstructionsToRemove in the block (except for unreachable),
         // we are done.
         break;
       }
@@ -1055,8 +1055,35 @@ void WinEHPrepare::verifyPreparedFunclets(Function &F) {
   }
 }
 #endif
-
+#include <ostream>
+#include <fstream>
 bool WinEHPrepare::prepareExplicitEH(Function &F) {
+  
+    std::vector<llvm::InvokeInst *> invokeInstructionsToRemove;
+    for (auto &block : F) {
+      for (auto &inst : block) {
+        if (dyn_cast<llvm::InvokeInst>(&inst) &&
+            dyn_cast<llvm::InvokeInst>(&inst)
+                    ->getUnwindDest()
+                    ->getTerminator() == nullptr) {
+          invokeInstructionsToRemove.push_back(dyn_cast<llvm::InvokeInst>(&inst));
+
+        }
+      }
+    }
+
+    for (auto &invokeInstToRemove : invokeInstructionsToRemove) {
+      CallInst *NewCall = createCallMatchingInvoke(invokeInstToRemove);
+      NewCall->takeName(invokeInstToRemove);
+      NewCall->insertBefore(invokeInstToRemove);
+      invokeInstToRemove->replaceAllUsesWith(NewCall);
+
+      // Follow the call by a branch to the normal destination.
+      BasicBlock *NormalDestBB = invokeInstToRemove->getNormalDest();
+      BranchInst::Create(NormalDestBB, invokeInstToRemove);
+      invokeInstToRemove->eraseFromParent();
+    }
+  
   // Remove unreachable blocks.  It is not valuable to assign them a color and
   // their existence can trick us into thinking values are alive when they are
   // not.

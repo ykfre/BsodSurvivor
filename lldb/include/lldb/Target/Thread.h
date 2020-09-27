@@ -412,10 +412,12 @@ public:
 
   Status ReturnFromFrameWithIndex(uint32_t frame_idx,
                                   lldb::ValueObjectSP return_value_sp,
+      lldb_private::ExecutionContext &executionContext,
                                   bool broadcast = false);
 
   Status ReturnFromFrame(lldb::StackFrameSP frame_sp,
                          lldb::ValueObjectSP return_value_sp,
+                         lldb_private::ExecutionContext &executionContext,
                          bool broadcast = false);
 
   Status JumpToLine(const FileSpec &file, uint32_t line,
@@ -1165,6 +1167,15 @@ public:
 
   lldb::ThreadSP GetCurrentExceptionBacktrace();
 
+  virtual Unwind &GetUnwinder();
+
+  
+  bool RunFunc(const lldb_private::Address &funcAddr,
+               const std::vector<uint64_t> &args, size_t &returnValue,
+               lldb_private::Status &error,
+               const EvaluateExpressionOptions &options,
+               lldb_private::ExecutionContext &exe_ctx);
+
 protected:
   friend class ThreadPlan;
   friend class ThreadList;
@@ -1188,7 +1199,8 @@ protected:
 
   ThreadPlan *GetPreviousPlan(ThreadPlan *plan) const;
 
-  virtual Unwind &GetUnwinder();
+  
+
 
   // Check to see whether the thread is still at the last breakpoint hit that
   // stopped it.
@@ -1259,6 +1271,8 @@ private:
   StructuredData::ObjectSP m_extended_info; // The extended info for this thread
 
   void BroadcastSelectedFrameChange(StackID &new_frame_id);
+
+
 
   Thread(const Thread &) = delete;
   const Thread &operator=(const Thread &) = delete;

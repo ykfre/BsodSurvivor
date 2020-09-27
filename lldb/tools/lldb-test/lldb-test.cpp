@@ -1,27 +1,19 @@
+
 #include "Api/SystemInitializerFull.h"
 #include "DynamicLoaderWindowsDYLD.h"
 #include "MCJIT.h"
 #include "MyRegisterContext.h"
 #include "ObjectFilePECOFF.h"
-#include "Plugins/ABI/MacOSX-arm/ABIMacOSX_arm.h"
-#include "Plugins/ABI/MacOSX-arm64/ABIMacOSX_arm64.h"
-#include "Plugins/ABI/MacOSX-i386/ABIMacOSX_i386.h"
-#include "Plugins/ABI/SysV-arc/ABISysV_arc.h"
-#include "Plugins/ABI/SysV-arm/ABISysV_arm.h"
-#include "Plugins/ABI/SysV-arm64/ABISysV_arm64.h"
-#include "Plugins/ABI/SysV-hexagon/ABISysV_hexagon.h"
-#include "Plugins/ABI/SysV-i386/ABISysV_i386.h"
-#include "Plugins/ABI/SysV-mips/ABISysV_mips.h"
-#include "Plugins/ABI/SysV-mips64/ABISysV_mips64.h"
-#include "Plugins/ABI/SysV-ppc/ABISysV_ppc.h"
-#include "Plugins/ABI/SysV-ppc64/ABISysV_ppc64.h"
-#include "Plugins/ABI/SysV-s390x/ABISysV_s390x.h"
-#include "Plugins/ABI/SysV-x86_64/ABISysV_x86_64.h"
-#include "Plugins/ABI/Windows-x86_64/ABIWindows_x86_64.h"
+#include "lldb/Target/Unwind.h"
+#include "lldb/lldb-enumerations.h"
+#include "lldb/lldb-private.h"
+#include "plugins/Disassembler/LLVMC/DisassemblerLLVMC.h"
+#include <optional>
+
+#include "Plugins/ABI/X86/ABIWindows_x86_64.h"
 #include "Plugins/Architecture/Arm/ArchitectureArm.h"
 #include "Plugins/Architecture/Mips/ArchitectureMips.h"
 #include "Plugins/Architecture/PPC64/ArchitecturePPC64.h"
-#include "Plugins/Disassembler/llvm/DisassemblerLLVMC.h"
 #include "Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOS.h"
 #include "Plugins/DynamicLoader/MacOSX-DYLD/DynamicLoaderMacOSXDYLD.h"
 #include "Plugins/DynamicLoader/POSIX-DYLD/DynamicLoaderPOSIXDYLD.h"
@@ -32,10 +24,6 @@
 #include "Plugins/Instruction/MIPS/EmulateInstructionMIPS.h"
 #include "Plugins/Instruction/MIPS64/EmulateInstructionMIPS64.h"
 #include "Plugins/Instruction/PPC64/EmulateInstructionPPC64.h"
-#include "Plugins/InstrumentationRuntime/ASan/ASanRuntime.h"
-#include "Plugins/InstrumentationRuntime/MainThreadChecker/MainThreadCheckerRuntime.h"
-#include "Plugins/InstrumentationRuntime/TSan/TSanRuntime.h"
-#include "Plugins/InstrumentationRuntime/UBSan/UBSanRuntime.h"
 #include "Plugins/JITLoader/GDB/JITLoaderGDB.h"
 #include "Plugins/Language/CPlusPlus/CPlusPlusLanguage.h"
 #include "Plugins/Language/ObjC/ObjCLanguage.h"
@@ -73,16 +61,18 @@
 #include "Plugins/SymbolFile/Symtab/SymbolFileSymtab.h"
 #include "Plugins/SymbolVendor/ELF/SymbolVendorELF.h"
 #include "Plugins/SystemRuntime/MacOSX/SystemRuntimeMacOSX.h"
+#include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "Plugins/UnwindAssembly/InstEmulation/UnwindAssemblyInstEmulation.h"
 #include "Plugins/UnwindAssembly/x86/UnwindAssembly-x86.h"
 #include "RunArgs.h"
 #include "SymbolFileNativePDB.h"
+#include "Utils.h"
 #include "lldb/API/SBDebugger.h"
 #include "lldb/Host/HostInfoBase.h"
-#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/DynamicLoader.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
+#include "lldb/Target/Target.h"
 #include "lldb/Target/TargetList.h"
 #include "lldb/core/Debugger.h"
 #include "lldb/core/Module.h"
@@ -92,6 +82,8 @@
 #include "llvm/Support/TargetSelect.h"
 #include <Windows.h>
 #include <bitset>
+#include <ehdata.h>
+#include <fstream>
 #include <iostream>
 
 bool GetTripleForProcess(const lldb_private::FileSpec &executable,
@@ -151,18 +143,28 @@ public:
     SetCanRunCode(true);
     auto dynamic_loader = (lldb_private::DynamicLoaderWindowsDYLD *)
         lldb_private::DynamicLoaderWindowsDYLD::CreateInstance(this, true);
-    lldb_private::FileSpec fileSpec(RunArgs.file_path);
-    llvm::Triple triple;
-    GetTripleForProcess(fileSpec, triple);
-    auto moduleSp = lldb::ModuleSP(
-        new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
-    setPath(fileSpec.GetPath());
-    target_sp->SetExecutableModule(moduleSp);
+    int num = 0;
+    std::string modulePath;
+    for (const auto &module : RunArgs.modules) {
+      num++;
+      modulePath = "c:\\temp\\" + std::to_string(num) + ".dll";
 
-    dynamic_loader->OnLoadModule(moduleSp, lldb_private::ModuleSpec(),
-                                 (size_t)RunArgs.start_address);
-    auto &images = GetTarget().GetImages();
-    images.Append(moduleSp);
+      lldb_private::FileSpec fileSpec(modulePath);
+      llvm::Triple triple;
+      GetTripleForProcess(fileSpec, triple);
+      std::ofstream f(modulePath, std::ios::binary);
+      f.write(module.buffer.data(), module.buffer.size());
+      f.close();
+      auto moduleSp = lldb::ModuleSP(
+          new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
+      dynamic_loader->OnLoadModule(moduleSp, lldb_private::ModuleSpec(),
+                                   (size_t)module.startAddr);
+
+      auto &images = GetTarget().GetImages();
+      images.Append(moduleSp);
+    }
+
+    setPath(modulePath);
   }
   void Suspend() { m_RunArgs.suspendThread(); }
 
@@ -171,7 +173,7 @@ public:
                 lldb::ThreadPlanSP &thread_plan_sp,
                 const lldb_private::EvaluateExpressionOptions &options,
                 lldb_private::DiagnosticManager &diagnostic_manager) {
-    return m_RunArgs.runThreadPlan(exe_ctx);
+    return m_RunArgs.runThreadPlan(exe_ctx, thread_plan_sp);
   }
 
   // Check if a given Process
@@ -215,7 +217,11 @@ public:
   lldb::addr_t DoAllocateMemory(size_t size, uint32_t permissions,
                                 lldb_private::Status &error) override {
 
-    return (lldb::addr_t)m_RunArgs.allocateMemory(size);
+    void *memory = m_RunArgs.allocateMemory(size);
+    if (nullptr == memory) {
+      error.SetErrorString("not enough memory");
+    }
+    return (lldb::addr_t)memory;
   }
 
   lldb_private::Status DoDeallocateMemory(lldb::addr_t ptr) override {
@@ -247,7 +253,7 @@ public:
                                        lldb_private::ArchSpec &arch) override {
     return true;
   }
-
+  bool SupportsModules() override { return true; }
   bool IsCompatibleArchitecture(
       const lldb_private::ArchSpec &arch, bool exact_arch_match,
       lldb_private::ArchSpec *compatible_arch_ptr) override {
@@ -286,10 +292,11 @@ public:
       : Thread(process, tid, use_invalid_index_id), m_RunArgs(RunArgs) {}
   ~Thread2() { DestroyThread(); }
 
-  virtual void RefreshStateAfterStop(){};
+  void RefreshStateAfterStop() override{};
 
-  virtual lldb::RegisterContextSP GetRegisterContext() {
-    return CreateRegisterContextForFrame(nullptr);
+  lldb::RegisterContextSP GetRegisterContext() override {
+    m_register_context = CreateRegisterContextForFrame(nullptr);
+    return m_register_context;
   }
 
   bool CalculateStopInfo() {
@@ -298,15 +305,15 @@ public:
   }
 
   virtual lldb::RegisterContextSP
-  CreateRegisterContextForFrame(lldb_private::StackFrame *frame) {
-    if (!m_register_context) {
-      m_register_context =
-          lldb::RegisterContextSP(new lldb_private::MyRegisterContext(
-              m_RunArgs.getRegisterValue, m_RunArgs.setRegisterValue,
-              CalculateTarget()->GetArchitecture(), *this, 0));
+  CreateRegisterContextForFrame(lldb_private::StackFrame *frame) override {
+    auto frameIndex = 0;
+    if (frame != nullptr) {
+      frameIndex = frame->GetConcreteFrameIndex();
     }
 
-    return m_register_context;
+    return lldb::RegisterContextSP(new lldb_private::MyRegisterContext(
+        m_RunArgs.getRegisterValue, m_RunArgs.setRegisterValue, *this,
+        frameIndex));
   }
 
 private:
@@ -351,7 +358,6 @@ public:
   lldb::StackFrameSP CalculateStackFrame() override {
     if (!m_frame.get()) {
       m_frame = CalculateThread()->GetSelectedFrame();
-      ((Process2 *)(CalculateProcess().get()))->SetStackFrame(m_frame);
     }
     return m_frame;
   };
@@ -375,46 +381,7 @@ private:
   RunArgs m_RunArgs;
 };
 
-void showResult(lldb::ValueObjectSP result_valobj_sp,
-                lldb_private::Stream &stream) {
-  if (result_valobj_sp) {
-
-    if (result_valobj_sp->GetError().Success()) {
-
-      lldb_private::DumpValueObjectOptions options;
-      options.SetMaximumDepth(5);
-      options.SetMaximumPointerDepth(
-          {lldb_private::DumpValueObjectOptions::PointerDepth::Mode::Always,
-           5});
-
-      options.SetVariableFormatDisplayLanguage(
-          result_valobj_sp->GetPreferredDisplayLanguage());
-
-      result_valobj_sp->Dump(stream, options);
-
-    } else {
-      if (result_valobj_sp->GetError().GetError() ==
-          lldb_private::UserExpression::kNoResult) {
-      } else {
-        const char *error_cstr = result_valobj_sp->GetError().AsCString();
-        if (error_cstr && error_cstr[0]) {
-          const size_t error_cstr_len = strlen(error_cstr);
-          const bool ends_with_newline = error_cstr[error_cstr_len - 1] == '\n';
-          if (strstr(error_cstr, "error:") != error_cstr)
-            stream.PutCString("error: ");
-          stream.Write(error_cstr, error_cstr_len);
-          if (!ends_with_newline)
-            stream.EOL();
-        } else {
-          stream.PutCString("error: unknown error\n");
-        }
-      }
-    }
-  }
-}
-
-bool run(RunArgs runArgs) {
-
+void initializeLLdbGlobals() {
   lldb_private::CPlusPlusLanguage::Initialize();
   lldb_private::SystemInitializerCommon system;
   system.Initialize();
@@ -443,17 +410,13 @@ bool run(RunArgs runArgs) {
   SymbolFileDWARF::Initialize();
   UnwindAssemblyInstEmulation::Initialize();
   UnwindAssembly_x86::Initialize();
-  lldb_private::ClangASTContext::Initialize();
 
   DisassemblerLLVMC::Initialize();
-
+  lldb_private::TypeSystemClang::Initialize();
   JITLoaderGDB::Initialize();
   ProcessElfCore::Initialize();
   ProcessMachCore::Initialize();
   lldb_private::MemoryHistoryASan::Initialize();
-  lldb_private::AddressSanitizerRuntime::Initialize();
-  lldb_private::ThreadSanitizerRuntime::Initialize();
-  lldb_private::UndefinedBehaviorSanitizerRuntime::Initialize();
   lldb_private::DynamicLoaderWindowsDYLD::Initialize();
 
   // Scan for any system or user LLDB plug-ins
@@ -464,10 +427,277 @@ bool run(RunArgs runArgs) {
   // AFTER PluginManager::Initialize is called.
 
   lldb_private::Debugger::SettingsInitialize();
+  llvm::MCJIT::Register();
+}
+
+#pragma pack(push, ehdata, 4)
+struct UnwindInfoContinue {
+  union {
+    unsigned long ExceptionHandler;
+    unsigned long FunctionEntry;
+  };
+  unsigned long ExceptionData;
+};
+
+typedef struct _s_FuncInfo2 {
+  unsigned int magicNumber : 29; // Identifies version of compiler
+  unsigned int bbtFlags : 3;     // flags that may be set by BBT processing
+  __ehstate_t maxState;          // Highest state number plus one (thus
+                                 // number of entries in unwind map)
+#if _EH_RELATIVE_FUNCINFO
+  int dispUnwindMap;       // Image relative offset of the unwind map
+  unsigned int nTryBlocks; // Number of 'try' blocks in this function
+  int dispTryBlockMap;     // Image relative offset of the handler map
+  unsigned int
+      nIPMapEntries;    // # entries in the IP-to-state map. NYI (reserved)
+  int dispIPtoStateMap; // Image relative offset of the IP to state map
+  int dispUwindHelp;    // Displacement of unwind helpers from base
+  int dispESTypeList;   // Image relative list of types for exception
+                        // specifications
+#else
+  UnwindMapEntry *pUnwindMap;     // Where the unwind map is
+  unsigned int nTryBlocks;        // Number of 'try' blocks in this function
+  TryBlockMapEntry *pTryBlockMap; // Where the handler map is
+  unsigned int
+      nIPMapEntries;       // # entries in the IP-to-state map. NYI (reserved)
+  void *pIPtoStateMap;     // An IP to state map.  NYI (reserved).
+  ESTypeList *pESTypeList; // List of types for exception specifications
+#endif
+  int EHFlags; // Flags for some features.
+} FuncInfo2;
+
+typedef struct _s_UnwindMapEntry2 {
+  __ehstate_t toState; // State this action takes us to
+#if _EH_RELATIVE_FUNCINFO
+  int action; // Image relative offset of funclet
+#else
+  void(__cdecl *action)(void); // Funclet to call to effect state change
+#endif
+} UnwindMapEntry2;
+#pragma pack(pop, ehdata)
+
+class RunTimeInfo {
+public:
+  RunTimeInfo(const std::vector<RUNTIME_FUNCTION> &RuntimeInfos, void *base);
+
+  llvm::Optional<RUNTIME_FUNCTION> findRunTime(size_t rip);
+
+private:
+  std::vector<RUNTIME_FUNCTION> m_runtimeFunctions;
+  void *m_base;
+};
+
+RunTimeInfo::RunTimeInfo(const std::vector<RUNTIME_FUNCTION> &runtimeInfos,
+                         void *base)
+    : m_runtimeFunctions(runtimeInfos), m_base(base) {}
+
+llvm::Optional<RUNTIME_FUNCTION> RunTimeInfo::findRunTime(size_t rip) {
+  rip -= (size_t)m_base;
+  for (uint32_t i = 0; i < m_runtimeFunctions.size(); i++) {
+    if (m_runtimeFunctions[i].BeginAddress <= rip &&
+        m_runtimeFunctions[i].EndAddress >= rip) {
+      return m_runtimeFunctions[i];
+    }
+  }
+  return llvm::Optional<RUNTIME_FUNCTION>();
+}
+
+llvm::Optional<RunTimeInfo> getRunTimeAddress(size_t moduleStart,
+                                              lldb_private::Process &process) {
+  IMAGE_DOS_HEADER pidh;
+  lldb_private::Status status;
+  process.ReadMemory(moduleStart, &pidh, sizeof(pidh), status);
+  if (!status.Success()) {
+    return llvm::Optional<RunTimeInfo>();
+  }
+  IMAGE_NT_HEADERS pinh;
+  size_t current_index = moduleStart + pidh.e_lfanew;
+  process.ReadMemory(current_index, &pinh, sizeof(pinh), status);
+  if (!status.Success()) {
+    return llvm::Optional<RunTimeInfo>();
+  }
+
+  IMAGE_OPTIONAL_HEADER pioh;
+  current_index += offsetof(IMAGE_NT_HEADERS, OptionalHeader);
+  process.ReadMemory(current_index, &pioh, sizeof(IMAGE_OPTIONAL_HEADER),
+                     status);
+  if (!status.Success()) {
+    return llvm::Optional<RunTimeInfo>();
+  }
+
+  auto exceptionDirectoryRva =
+      pioh.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+
+  std::vector<RUNTIME_FUNCTION> runtimesInfos(exceptionDirectoryRva.Size /
+                                              sizeof(RUNTIME_FUNCTION));
+  process.ReadMemory(exceptionDirectoryRva.VirtualAddress + moduleStart,
+                     runtimesInfos.data(),
+                     runtimesInfos.size() * sizeof(RUNTIME_FUNCTION), status);
+  if (!status.Success()) {
+    return llvm::Optional<RunTimeInfo>();
+  }
+  return RunTimeInfo(runtimesInfos, (void *)moduleStart);
+}
+
+int findState(size_t rip, const std::vector<IptoStateMapEntry> &ipo) {
+  for (uint32_t i = 0; i < ipo.size(); i++) {
+    if ((i != ipo.size() - 1 && ipo[i].Ip <= rip && ipo[i + 1].Ip > rip) ||
+        (i == ipo.size() - 1 && ipo[i].Ip <= rip)) {
+      return ipo[i].State;
+    }
+  }
+  return -1;
+}
+
+extern void *g_bpAddress;
+
+std::optional<lldb::ModuleSP>
+getContainingModule(lldb_private::ExecutionContext &executionContext,
+                    size_t pc) {
+  auto modules = executionContext.GetTargetPtr()->GetImages();
+  for (int i = 0; i < modules.GetSize(); i++) {
+
+    auto module = modules.GetModuleAtIndex(i);
+    auto objFile = module->GetObjectFile();
+    auto sections = *objFile->GetSectionList();
+    std::vector<lldb::SectionSP> sectionsList;
+    for (const auto &section : sections) {
+      sectionsList.push_back(section);
+    }
+
+    auto baseStartAddr = objFile->GetBaseAddress().GetLoadAddress(
+        executionContext.GetTargetPtr());
+    if (baseStartAddr == -1) {
+      continue;
+    }
+    auto lastSection = sectionsList[sectionsList.size() - 1];
+    auto lastSectionAddr =
+        lastSection->GetLoadBaseAddress(executionContext.GetTargetPtr());
+    auto lastSectionSize = lastSection->GetBitSize();
+    if (baseStartAddr <= pc && pc < lastSectionSize + lastSectionAddr) {
+      return module;
+    }
+  }
+  return std::nullopt;
+}
+
+lldb_private::Status
+returnFromCurrentFrame(const RunArgs &runArgs, lldb_private::Thread &thread,
+                       lldb_private::ExecutionContext &executionContext,
+                       bool shouldRunDestructors) {
+  lldb_private::Status return_error;
+
+  lldb_private::MyRegisterContext olderFrameContext(
+      runArgs.getRegisterValue, runArgs.setRegisterValue, thread, 1);
+  lldb::DataBufferSP olderFrameRegisters;
+  olderFrameContext.ReadAllRegisterValues(olderFrameRegisters);
+  lldb_private::MyRegisterContext youngestContext(
+      runArgs.getRegisterValue, runArgs.setRegisterValue, thread, 0);
+  if (shouldRunDestructors) {
+    auto module =
+        getContainingModule(executionContext, youngestContext.GetPC());
+    auto objFile = module.value()->GetObjectFile();
+    auto baseStartAddr = objFile->GetBaseAddress().GetLoadAddress(
+        executionContext.GetTargetPtr());
+    auto runTimeInfoTable =
+        getRunTimeAddress(baseStartAddr, *executionContext.GetProcessPtr());
+    if (!runTimeInfoTable) {
+      return return_error;
+    }
+    auto runTimeInfo =
+        runTimeInfoTable.getValue().findRunTime(youngestContext.GetPC());
+    if (!runTimeInfo) {
+      return return_error;
+    }
+    UNWIND_INFO unwindInfo;
+
+    executionContext.GetProcessPtr()->ReadMemory(
+        baseStartAddr + runTimeInfo->UnwindInfoAddress, &unwindInfo,
+        sizeof(unwindInfo), return_error);
+    if (!return_error.Success()) {
+      return return_error;
+    }
+    if (unwindInfo.Flags & UNW_FLAG_EHANDLER ||
+        unwindInfo.Flags & UNW_FLAG_UHANDLER) {
+      int moreCountOfCodesNum = ((unwindInfo.CountOfCodes + 1) & ~1) - 1;
+      UnwindInfoContinue unwindInfoEnd;
+      executionContext.GetProcessPtr()->ReadMemory(
+          baseStartAddr + runTimeInfo->UnwindInfoAddress +
+              +sizeof(UNWIND_INFO) + moreCountOfCodesNum * sizeof(UNWIND_CODE),
+          &unwindInfoEnd, sizeof(unwindInfoEnd), return_error);
+      if (!return_error.Success()) {
+        return return_error;
+      }
+      FuncInfo2 funcInfo;
+      executionContext.GetProcessPtr()->ReadMemory(
+          baseStartAddr + unwindInfoEnd.ExceptionData, (void *)&funcInfo,
+          sizeof(funcInfo), return_error);
+      if (!return_error.Success()) {
+        return return_error;
+      }
+      if (funcInfo.magicNumber != 0x19930522) {
+        return return_error;
+      }
+      std::vector<IptoStateMapEntry> ipoEntries(funcInfo.nIPMapEntries);
+      executionContext.GetProcessPtr()->ReadMemory(
+          baseStartAddr + funcInfo.dispIPtoStateMap, (void *)ipoEntries.data(),
+          ipoEntries.size() * sizeof(IptoStateMapEntry), return_error);
+      if (!return_error.Success()) {
+        return return_error;
+      }
+      int currentState =
+          findState(youngestContext.GetPC() - baseStartAddr, ipoEntries);
+      if (-1 == currentState) {
+        lldb_private::Log *log(
+            lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
+        LLDB_LOGF(log, "no desturctors");
+      }
+
+      if (-1 == funcInfo.maxState) {
+        lldb_private::Log *log(
+            lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
+        LLDB_LOGF(log, "no desturctors");
+      }
+      std::vector<UnwindMapEntry2> unwindMap(funcInfo.maxState);
+      executionContext.GetProcessPtr()->ReadMemory(
+          baseStartAddr + funcInfo.dispUnwindMap, (void *)unwindMap.data(),
+          unwindMap.size() * sizeof(UnwindMapEntry2), return_error);
+      if (!return_error.Success()) {
+        return return_error;
+      }
+      while (currentState != -1 && unwindMap[currentState].action) {
+        auto funcAddr = baseStartAddr + unwindMap[currentState].action;
+        lldb_private::EvaluateExpressionOptions options;
+        options.SetDebug(false);
+        options.SetIgnoreBreakpoints(false);
+        options.SetUnwindOnError(false);
+        options.SetKeepInMemory(false);
+        options.SetTryAllThreads(false);
+        options.SetStopOthers(true);
+        std::vector<uint64_t> args;
+        args.push_back(0);
+        args.push_back(youngestContext.GetSP());
+        lldb_private::Log *log(
+            lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
+        LLDB_LOGF(log, "calling desturctor %p", funcAddr);
+        runArgs.runFunction((void *)funcAddr, args);
+        currentState = unwindMap[currentState].toState;
+      }
+    }
+  }
+  youngestContext.WriteAllRegisterValues(olderFrameRegisters);
+  return return_error;
+}
+
+void clearClangModulesDeclVendorImplCache();
+void clearAstImporterCache();
+
+size_t g_lastRip = 0;
+
+bool run(RunArgs &runArgs) {
 
   lldb_private::Platform::SetHostPlatform(
       lldb::PlatformSP(new Platform2(true, runArgs)));
-  auto a = lldb_private::Platform::GetHostPlatform();
   auto debugger = lldb_private::Debugger::CreateInstance();
   int FD;
   if (std::error_code ec = llvm::sys::fs::openFileForWrite(
@@ -476,12 +706,8 @@ bool run(RunArgs runArgs) {
     return false;
   }
   auto log_stream_sp = std::make_shared<llvm::raw_fd_ostream>(FD, true, true);
-  assert(debugger->EnableLog("lldb", {"expr", "unwind"}, "log.txt", 0,
-                             *log_stream_sp));
-
-  lldb_private::Log *log(lldb_private::GetLogIfAnyCategoriesSet(
-      LIBLLDB_LOG_EXPRESSIONS | LIBLLDB_LOG_STEP));
-  assert(log);
+  assert(debugger->EnableLog("lldb", {"expr", "unwind", "default"}, "log.txt",
+                             0, *log_stream_sp));
 
   lldb_private::LoadDependentFiles load_dependent_files =
       lldb_private::eLoadDependentsNo;
@@ -489,42 +715,72 @@ bool run(RunArgs runArgs) {
   auto &targetList = debugger->GetTargetList();
 
   assert(targetList
-             .CreateTarget(*debugger, runArgs.file_path, "",
+             .CreateTarget(*debugger, "c:\\Windows\\System32\\kernel32.dll", "",
                            load_dependent_files, nullptr, target_sp)
              .Success());
-  lldb_private::FileSpec fileSpec(runArgs.file_path);
   llvm::Triple triple;
-  GetTripleForProcess(fileSpec, triple);
+  triple.setArch(llvm::Triple::x86_64);
   target_sp->SetArchitecture(lldb_private::ArchSpec(triple));
-
   lldb::ValueObjectSP value;
   auto exe_ctx = MyCtx(target_sp, runArgs);
-  exe_ctx.CalculateThread()->SetSelectedFrameByIndex(runArgs.frameIndex);
+  exe_ctx.CalculateThread()->SetSelectedFrameByIndex(
+      runArgs.selectedFrameIndex);
   lldb_private::EvaluateExpressionOptions options;
-  options.SetUnwindOnError(true);
-  options.SetIgnoreBreakpoints(true);
-  options.SetKeepInMemory(true);
+  options.SetUnwindOnError(false);
+  options.SetIgnoreBreakpoints(false);
+  options.SetKeepInMemory(false);
   options.SetUseDynamic(lldb::eDynamicDontRunTarget);
   options.SetTryAllThreads(true);
-  options.SetDebug(true);
+  options.SetDebug(false);
   options.SetCoerceToId(false);
   options.SetExecutionPolicy(lldb_private::eExecutionPolicyAlways);
   options.SetGenerateDebugInfo(true);
   options.SetTimeout(llvm::None);
-  llvm::MCJIT::Register();
   target_sp->GetProcessSP() = exe_ctx.CalculateProcess();
   exe_ctx.CalculateStackFrame();
-  auto module =
-      exe_ctx.CalculateProcess()->GetTarget().GetImages().GetModuleAtIndex(1);
-  if (runArgs.bpAddress) {
-    auto entryPointAddress = exe_ctx.CalculateTarget()->GetEntryPointAddress();
-
-    runArgs.addBreakpoint((void *)(entryPointAddress.get().GetLoadAddress(
-        exe_ctx.CalculateTarget().get())));
+  runArgs.runAndRestoreState = [&](std::function<size_t()> func) {
+    lldb_private::MyRegisterContext context(runArgs.getRegisterValue,
+                                            runArgs.setRegisterValue,
+                                            *exe_ctx.CalculateThread(), 0);
+    lldb::DataBufferSP olderFrameRegisters;
+    context.ReadAllRegisterValues(olderFrameRegisters);
+    auto ret = func();
+    context.WriteAllRegisterValues(olderFrameRegisters);
+    return ret;
+  };
+  lldb_private::MyRegisterContext registersContext(
+      runArgs.getRegisterValue, runArgs.setRegisterValue,
+      *exe_ctx.CalculateThread(), 0);
+  lldb_private::ExecutionContext exe_ctx2;
+  exe_ctx.CalculateExecutionContext(exe_ctx2);
+  auto containinModule =
+      getContainingModule(exe_ctx2, registersContext.GetPC());
+  auto modulePath =
+      std::string(containinModule->get()->GetFileSpec().GetCString());
+  exe_ctx.CalculateProcess()->setPath(
+      modulePath);
+  if (g_lastRip != registersContext.GetPC()) {
+    clearClangModulesDeclVendorImplCache();
+    clearAstImporterCache();
+    g_lastRip = registersContext.GetPC();
   }
-  lldb::ExpressionResults result = target_sp->EvaluateExpression(
-      runArgs.expression, &exe_ctx, value, options);
-  assert(lldb::eExpressionCompleted == result);
-  showResult(value, *runArgs.stream);
+  g_bpAddress = runArgs.bpAddress;
+
+  if (!runArgs.shouldReturn) {
+    lldb::ExpressionResults result = target_sp->EvaluateExpression(
+        runArgs.expression, &exe_ctx, value, options);
+
+    THROW_IF_FALSE(lldb::eExpressionCompleted == result,
+                   "failed to evaluate expression");
+  } else {
+    lldb_private::ExecutionContext exe_ctx2;
+    exe_ctx.CalculateExecutionContext(exe_ctx2);
+    auto error =
+        returnFromCurrentFrame(runArgs, *exe_ctx.CalculateThread(), exe_ctx2,
+                               runArgs.shouldCallDestructorsOnReturn);
+    THROW_IF_FALSE(error.Success(), "failed to return from current frame");
+  }
+  auto process = exe_ctx.CalculateProcess();
+  process->Finalize();
   return true;
 }

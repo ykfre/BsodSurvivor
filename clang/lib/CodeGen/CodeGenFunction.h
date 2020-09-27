@@ -231,9 +231,10 @@ template <> struct DominatingValue<RValue> {
 class CodeGenFunction : public CodeGenTypeCache {
   CodeGenFunction(const CodeGenFunction &) = delete;
   void operator=(const CodeGenFunction &) = delete;
-
   friend class CGCXXABI;
 public:
+  void addCallToTempSehFunc();
+
   /// A jump destination is an abstract label, branching to which may
   /// require a jump out through normal cleanups.
   struct JumpDest {

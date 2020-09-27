@@ -4101,6 +4101,7 @@ llvm::CallBase *CodeGenFunction::EmitCallOrInvoke(llvm::FunctionCallee Callee,
       getBundlesForFunclet(Callee.getCallee());
 
   llvm::CallBase *Inst;
+
   if (!InvokeDest)
     Inst = Builder.CreateCall(Callee, Args, BundleList, Name);
   else {
