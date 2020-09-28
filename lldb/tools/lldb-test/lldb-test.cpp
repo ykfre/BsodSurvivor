@@ -4,12 +4,6 @@
 #include "MCJIT.h"
 #include "MyRegisterContext.h"
 #include "ObjectFilePECOFF.h"
-#include "lldb/Target/Unwind.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-private.h"
-#include "plugins/Disassembler/LLVMC/DisassemblerLLVMC.h"
-#include <optional>
-
 #include "Plugins/ABI/X86/ABIWindows_x86_64.h"
 #include "Plugins/Architecture/Arm/ArchitectureArm.h"
 #include "Plugins/Architecture/Mips/ArchitectureMips.h"
@@ -74,17 +68,23 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/TargetList.h"
+#include "lldb/Target/Unwind.h"
 #include "lldb/core/Debugger.h"
 #include "lldb/core/Module.h"
 #include "lldb/core/Section.h"
+#include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
+#include "lldb/lldb-private.h"
 #include "lldb/target/target.h"
+#include "llvm\Object\XCOFFObjectFile.h"
+#include "plugins/Disassembler/LLVMC/DisassemblerLLVMC.h"
 #include "llvm/Support/TargetSelect.h"
 #include <Windows.h>
 #include <bitset>
 #include <ehdata.h>
 #include <fstream>
 #include <iostream>
+#include <optional>
 
 bool GetTripleForProcess(const lldb_private::FileSpec &executable,
                          llvm::Triple &triple) {
@@ -143,11 +143,10 @@ public:
     SetCanRunCode(true);
     auto dynamic_loader = (lldb_private::DynamicLoaderWindowsDYLD *)
         lldb_private::DynamicLoaderWindowsDYLD::CreateInstance(this, true);
-    int num = 0;
     std::string modulePath;
+    bool foundOurModule = false;
     for (const auto &module : RunArgs.modules) {
-      num++;
-      modulePath = "c:\\temp\\" + std::to_string(num) + ".dll";
+      modulePath = "c:\\temp\\" + module.moduleName + ".dll";
 
       lldb_private::FileSpec fileSpec(modulePath);
       llvm::Triple triple;
@@ -157,14 +156,22 @@ public:
       f.close();
       auto moduleSp = lldb::ModuleSP(
           new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
+      lldb_private::FileSpec exeFileSpec(RunArgs.file_path);
+      auto exeModule = lldb::ModuleSP(new lldb_private::Module(
+          exeFileSpec, lldb_private::ArchSpec(triple)));
+      if (((ObjectFilePECOFF *)moduleSp->GetObjectFile())->GetUUID() ==
+          ((ObjectFilePECOFF *)exeModule->GetObjectFile())->GetUUID()) {
+        moduleSp = exeModule;
+        foundOurModule = true;
+      }
       dynamic_loader->OnLoadModule(moduleSp, lldb_private::ModuleSpec(),
                                    (size_t)module.startAddr);
 
       auto &images = GetTarget().GetImages();
       images.Append(moduleSp);
     }
-
-    setPath(modulePath);
+    THROW_IF(!foundOurModule, "We don't have our module, check the path you given in configuration");
+    setPath(RunArgs.file_path);
   }
   void Suspend() { m_RunArgs.suspendThread(); }
 
@@ -750,15 +757,28 @@ bool run(RunArgs &runArgs) {
   };
   lldb_private::MyRegisterContext registersContext(
       runArgs.getRegisterValue, runArgs.setRegisterValue,
-      *exe_ctx.CalculateThread(), 0);
+      *exe_ctx.CalculateThread(), runArgs.selectedFrameIndex);
   lldb_private::ExecutionContext exe_ctx2;
   exe_ctx.CalculateExecutionContext(exe_ctx2);
   auto containinModule =
       getContainingModule(exe_ctx2, registersContext.GetPC());
   auto modulePath =
       std::string(containinModule->get()->GetFileSpec().GetCString());
-  exe_ctx.CalculateProcess()->setPath(
-      modulePath);
+  exe_ctx.CalculateProcess()->setPath(modulePath);
+  runArgs.runFunction = [&](void *addr, std::vector<size_t> args) {
+    auto thread = exe_ctx.CalculateThread();
+    lldb_private::Status error;
+    lldb_private::EvaluateExpressionOptions options;
+    options.SetDebug(false);
+    options.SetIgnoreBreakpoints(false);
+    options.SetUnwindOnError(false);
+    options.SetKeepInMemory(false);
+    options.SetTryAllThreads(false);
+    options.SetStopOthers(true);
+    size_t returnValue = 0;
+    thread->RunFunc((size_t)addr, args, returnValue, error, options, exe_ctx2);
+    return returnValue;
+  };
   if (g_lastRip != registersContext.GetPC()) {
     clearClangModulesDeclVendorImplCache();
     clearAstImporterCache();
@@ -769,7 +789,7 @@ bool run(RunArgs &runArgs) {
   if (!runArgs.shouldReturn) {
     lldb::ExpressionResults result = target_sp->EvaluateExpression(
         runArgs.expression, &exe_ctx, value, options);
-
+    target_sp->GetProcessSP()->Finalize();
     THROW_IF_FALSE(lldb::eExpressionCompleted == result,
                    "failed to evaluate expression");
   } else {
@@ -780,7 +800,5 @@ bool run(RunArgs &runArgs) {
                                runArgs.shouldCallDestructorsOnReturn);
     THROW_IF_FALSE(error.Success(), "failed to return from current frame");
   }
-  auto process = exe_ctx.CalculateProcess();
-  process->Finalize();
   return true;
 }

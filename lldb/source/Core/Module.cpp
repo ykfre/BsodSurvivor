@@ -810,6 +810,13 @@ void Module::FindFunctions(ConstString name,
           symtab->FindFunctionSymbols(lookup_info.GetLookupName(),
                                       lookup_info.GetNameTypeMask(), sc_list);
       }
+    } else {
+      auto objFile = GetObjectFile();
+      if (objFile && include_symbols) {
+        auto symtab = objFile->GetSymtab();
+        if (symtab)
+          symtab->FindFunctionSymbols(name, name_type_mask, sc_list);
+      }
     }
 
     const size_t new_size = sc_list.GetSize();
@@ -825,6 +832,14 @@ void Module::FindFunctions(ConstString name,
       // requested
       if (include_symbols) {
         Symtab *symtab = symbols->GetSymtab();
+        if (symtab)
+          symtab->FindFunctionSymbols(name, name_type_mask, sc_list);
+      }
+    } else {
+
+      auto objFile = GetObjectFile();
+      if (objFile && include_symbols) {
+        auto symtab = objFile->GetSymtab();
         if (symtab)
           symtab->FindFunctionSymbols(name, name_type_mask, sc_list);
       }

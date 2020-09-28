@@ -41,7 +41,6 @@ public:
 
   void SetReturnValue() override;
 
-protected:
 
 private:
   llvm::Type &m_return_type;

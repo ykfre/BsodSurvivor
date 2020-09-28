@@ -243,7 +243,12 @@ LLVMUserExpression::DoExecute(DiagnosticManager &diagnostic_manager,
     }
   }
 
+  if (FinalizeJITExecution(diagnostic_manager, exe_ctx, result,
+                           function_stack_bottom, function_stack_top)) {
   return lldb::eExpressionCompleted;
+  } else {
+    return lldb::eExpressionResultUnavailable;
+  }
 }
 
 bool LLVMUserExpression::FinalizeJITExecution(

@@ -925,7 +925,7 @@ bool getCompileSettingsFromSection(CompilerInstance &CI, std::string wanted_obj_
 }
 
 bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Target &target, CompilerInstance& CI) {
-  std::ifstream is("C:\\Users\\idowe\\source\\repos\\Project3\\Debug\\minispy.exe", std::ifstream::binary);
+  std::ifstream is(exe_path, std::ifstream::binary);
   if (is) {
     // get length of file:
     is.seekg(0, is.end);
@@ -2080,54 +2080,6 @@ lldb_private::Status ClangExpressionParser::PrepareForExecution(
       err.SetErrorString("Top-level code needs to be inserted into a runnable "
                          "target, but the target can't be run");
       return err;
-    }
-
-    if (execution_policy == eExecutionPolicyAlways ||
-        (execution_policy != eExecutionPolicyTopLevel && !can_interpret)) {
-      if (m_expr.NeedsValidation() && process) {
-        if (!process->GetDynamicCheckers()) {
-          ClangDynamicCheckerFunctions *dynamic_checkers =
-              new ClangDynamicCheckerFunctions();
-
-          DiagnosticManager install_diagnostics;
-
-          if (!dynamic_checkers->Install(install_diagnostics, exe_ctx)) {
-            if (install_diagnostics.Diagnostics().size())
-              err.SetErrorString(install_diagnostics.GetString().c_str());
-            else
-              err.SetErrorString("couldn't install checkers, unknown error");
-
-            return err;
-          }
-
-          process->SetDynamicCheckers(dynamic_checkers);
-
-          LLDB_LOGF(log, "== [ClangExpressionParser::PrepareForExecution] "
-                         "Finished installing dynamic checkers ==");
-        }
-
-        if (auto *checker_funcs = llvm::dyn_cast<ClangDynamicCheckerFunctions>(
-                process->GetDynamicCheckers())) {
-          IRDynamicChecks ir_dynamic_checks(*checker_funcs,
-                                            function_name.AsCString());
-
-          llvm::Module *module = execution_unit_sp->GetModule();
-          if (!module || !ir_dynamic_checks.runOnModule(*module)) {
-            err.SetErrorToGenericError();
-            err.SetErrorString("Couldn't add dynamic checks to the expression");
-            return err;
-          }
-
-          if (custom_passes.LatePasses) {
-            LLDB_LOGF(log,
-                      "%s - Running Late IR Passes from LanguageRuntime on "
-                      "expression module '%s'",
-                      __FUNCTION__, m_expr.FunctionName());
-
-            custom_passes.LatePasses->run(*module);
-          }
-        }
-      }
     }
 
     if (execution_policy == eExecutionPolicyAlways ||

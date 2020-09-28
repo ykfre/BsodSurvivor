@@ -65,7 +65,36 @@ void ThreadPlanCallUserExpression::WillPop() {
     m_user_expression_sp.reset();
 }
 
-bool ThreadPlanCallUserExpression::MischiefManaged() { return true; }
+bool ThreadPlanCallUserExpression::MischiefManaged() {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
+
+  if (IsPlanComplete()) {
+    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): Completed call function plan.",
+              static_cast<void *>(this));
+
+    if (m_manage_materialization && PlanSucceeded() && m_user_expression_sp) {
+      lldb::addr_t function_stack_top;
+      lldb::addr_t function_stack_bottom;
+      lldb::addr_t function_stack_pointer = GetFunctionStackPointer();
+
+      function_stack_bottom = function_stack_pointer - HostInfo::GetPageSize();
+      function_stack_top = function_stack_pointer;
+
+      DiagnosticManager diagnostics;
+
+      ExecutionContext exe_ctx(GetThread());
+
+      m_user_expression_sp->FinalizeJITExecution(
+          diagnostics, exe_ctx, m_result_var_sp, function_stack_bottom,
+          function_stack_top);
+    }
+
+    ThreadPlan::MischiefManaged();
+    return true;
+  } else {
+    return false;
+  }
+}
 
 StopInfoSP ThreadPlanCallUserExpression::GetRealStopInfo() {
   StopInfoSP stop_info_sp = ThreadPlanCallFunction::GetRealStopInfo();
