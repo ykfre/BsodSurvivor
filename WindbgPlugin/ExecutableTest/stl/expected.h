@@ -27,9 +27,7 @@
 #include <type_traits>
 #include <utility>
 
-#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
-#define TL_EXPECTED_EXCEPTIONS_ENABLED
-#endif
+
 
 #if (defined(_MSC_VER) && _MSC_VER == 1900)
 #define TL_EXPECTED_MSVC2015
@@ -140,10 +138,10 @@ namespace tl {
 
         constexpr explicit unexpected(E&& e) : m_val(std::move(e)) {}
 
-        constexpr const E& value() const& { return m_val; }
+        const E& value() const& { return m_val; }
         TL_EXPECTED_11_CONSTEXPR E& value()& { return m_val; }
         TL_EXPECTED_11_CONSTEXPR E&& value()&& { return std::move(m_val); }
-        constexpr const E&& value() const&& { return std::move(m_val); }
+        const E&& value() const&& { return std::move(m_val); }
 
     private:
         E m_val;
@@ -188,7 +186,7 @@ namespace tl {
         template<typename E>
         [[noreturn]] TL_EXPECTED_11_CONSTEXPR void throw_exception(E&& e) {
 #ifdef TL_EXPECTED_EXCEPTIONS_ENABLED
-            throw std::forward<E>(e);
+            //_THROW(std::forward<E>(e));
 #else
 #ifdef _MSC_VER
             __assume(0);
@@ -772,8 +770,7 @@ namespace tl {
                     auto tmp = std::move(geterr());
                     geterr().~unexpected<E>();
 #ifdef TL_EXPECTED_EXCEPTIONS_ENABLED
-                    try {
-                        construct(std::move(rhs).get());
+                    construct(std::move(rhs).get());
                     }
                     catch (...) {
                         geterr() = std::move(tmp);
@@ -834,21 +831,21 @@ namespace tl {
             bool has_value() const { return this->m_has_val; }
 
             TL_EXPECTED_11_CONSTEXPR T& get()& { return this->m_val; }
-            constexpr const T& get() const& { return this->m_val; }
+            const T& get() const& { return this->m_val; }
             TL_EXPECTED_11_CONSTEXPR T&& get()&& { return std::move(this->m_val); }
 #ifndef TL_EXPECTED_NO_CONSTRR
-            constexpr const T&& get() const&& { return std::move(this->m_val); }
+            const T&& get() const&& { return std::move(this->m_val); }
 #endif
 
             TL_EXPECTED_11_CONSTEXPR unexpected<E>& geterr()& {
                 return this->m_unexpect;
             }
-            constexpr const unexpected<E>& geterr() const& { return this->m_unexpect; }
+            const unexpected<E>& geterr() const& { return this->m_unexpect; }
             TL_EXPECTED_11_CONSTEXPR unexpected<E>&& geterr()&& {
                 return std::move(this->m_unexpect);
             }
 #ifndef TL_EXPECTED_NO_CONSTRR
-            constexpr const unexpected<E>&& geterr() const&& {
+            const unexpected<E>&& geterr() const&& {
                 return std::move(this->m_unexpect);
             }
 #endif
@@ -900,12 +897,12 @@ namespace tl {
             TL_EXPECTED_11_CONSTEXPR unexpected<E>& geterr()& {
                 return this->m_unexpect;
             }
-            constexpr const unexpected<E>& geterr() const& { return this->m_unexpect; }
+            const unexpected<E>& geterr() const& { return this->m_unexpect; }
             TL_EXPECTED_11_CONSTEXPR unexpected<E>&& geterr()&& {
                 return std::move(this->m_unexpect);
             }
 #ifndef TL_EXPECTED_NO_CONSTRR
-            constexpr const unexpected<E>&& geterr() const&& {
+            const unexpected<E>&& geterr() const&& {
                 return std::move(this->m_unexpect);
             }
 #endif
@@ -1256,10 +1253,10 @@ namespace tl {
 
         template <class U = T,
             detail::enable_if_t<!std::is_void<U>::value>* = nullptr>
-            constexpr const U& val() const {
+            const U& val() const {
             return this->m_val;
         }
-        constexpr const unexpected<E>& err() const { return this->m_unexpect; }
+        const unexpected<E>& err() const { return this->m_unexpect; }
 
         using impl_base = detail::expected_move_assign_base<T, E>;
         using ctor_base = detail::expected_default_ctor_base<T, E>;
@@ -1893,12 +1890,12 @@ namespace tl {
             }
         }
 
-        constexpr const T* operator->() const { return valptr(); }
+        const T* operator->() const { return valptr(); }
         TL_EXPECTED_11_CONSTEXPR T* operator->() { return valptr(); }
 
         template <class U = T,
             detail::enable_if_t<!std::is_void<U>::value>* = nullptr>
-            constexpr const U& operator*() const& {
+            const U& operator*() const& {
             return val();
         }
         template <class U = T,
@@ -1908,7 +1905,7 @@ namespace tl {
         }
         template <class U = T,
             detail::enable_if_t<!std::is_void<U>::value>* = nullptr>
-            constexpr const U&& operator*() const&& {
+            const U&& operator*() const&& {
             return std::move(val());
         }
         template <class U = T,
@@ -1922,7 +1919,7 @@ namespace tl {
 
         template <class U = T,
             detail::enable_if_t<!std::is_void<U>::value>* = nullptr>
-            TL_EXPECTED_11_CONSTEXPR const U& value() const& {
+            const U& value() const& {
             if (!has_value())
                 detail::throw_exception(bad_expected_access<E>(err().value()));
             return val();
@@ -1936,7 +1933,7 @@ namespace tl {
         }
         template <class U = T,
             detail::enable_if_t<!std::is_void<U>::value>* = nullptr>
-            TL_EXPECTED_11_CONSTEXPR const U&& value() const&& {
+            const U&& value() const&& {
             if (!has_value())
                 detail::throw_exception(bad_expected_access<E>(std::move(err()).value()));
             return std::move(val());
@@ -1949,9 +1946,9 @@ namespace tl {
             return std::move(val());
         }
 
-        constexpr const E& error() const& { return err().value(); }
+        const E& error() const& { return err().value(); }
         TL_EXPECTED_11_CONSTEXPR E& error()& { return err().value(); }
-        constexpr const E&& error() const&& { return std::move(err().value()); }
+        const E&& error() const&& { return std::move(err().value()); }
         TL_EXPECTED_11_CONSTEXPR E&& error()&& { return std::move(err().value()); }
 
         template <class U> constexpr T value_or(U&& v) const& {
@@ -2725,10 +2722,10 @@ namespace std {
 
             constexpr bool initialized() const noexcept { return OptionalBase<T>::init_; }
             typename std::remove_const<T>::type* dataptr() { return std::addressof(OptionalBase<T>::storage_.value_); }
-            constexpr const T* dataptr() const { return detail_::static_addressof(OptionalBase<T>::storage_.value_); }
+            const T* dataptr() const { return detail_::static_addressof(OptionalBase<T>::storage_.value_); }
 
 # if OPTIONAL_HAS_THIS_RVALUE_REFS == 1
-            constexpr const T& contained_val() const& { return OptionalBase<T>::storage_.value_; }
+            const T& contained_val() const& { return OptionalBase<T>::storage_.value_; }
 #   if OPTIONAL_HAS_MOVE_ACCESSORS == 1
             OPTIONAL_MUTABLE_CONSTEXPR T&& contained_val()&& { return std::move(OptionalBase<T>::storage_.value_); }
             OPTIONAL_MUTABLE_CONSTEXPR T& contained_val()& { return OptionalBase<T>::storage_.value_; }
@@ -2737,7 +2734,7 @@ namespace std {
             T&& contained_val()&& { return std::move(OptionalBase<T>::storage_.value_); }
 #   endif
 # else
-            constexpr const T& contained_val() const { return OptionalBase<T>::storage_.value_; }
+            const T& contained_val() const { return OptionalBase<T>::storage_.value_; }
             T& contained_val() { return OptionalBase<T>::storage_.value_; }
 # endif
 

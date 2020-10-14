@@ -2711,6 +2711,21 @@ ExpectedDecl ASTNodeImporter::VisitEnumDecl(EnumDecl *D) {
 }
 
 void ASTNodeImporter::declareNeeded(CXXRecordDecl *from, CXXRecordDecl *to) {
+  for (const auto &method : dyn_cast<CXXRecordDecl>(from)->decls()) {
+    
+      if (!dyn_cast<clang::FieldDecl>(method))
+      {
+      continue;
+    }
+    if (Importer.GetAlreadyImportedOrNull(method)) {
+      continue;
+    }
+    auto foundDef = Visit(method);
+    assert(foundDef);
+    if (foundDef) {
+      Importer.MapImported(method, foundDef.get());
+    }
+  }
   auto &dataStarts = to->data();
   auto sizeToCopy = (char *)&dataStarts.Bases - (char *)&dataStarts;
   memcpy((char *)&to->data(), (char *)&from->data(), sizeToCopy);
@@ -2732,6 +2747,7 @@ void ASTNodeImporter::declareNeeded(CXXRecordDecl *from, CXXRecordDecl *to) {
       }
     }
   }
+  
   for (const auto &method : dyn_cast<CXXRecordDecl>(from)->decls()) {
     if (Importer.GetAlreadyImportedOrNull(method)) {
       continue;
@@ -2742,20 +2758,7 @@ void ASTNodeImporter::declareNeeded(CXXRecordDecl *from, CXXRecordDecl *to) {
       Importer.MapImported(method, foundDef.get());
     }
   }
-  auto BaseIsNotInSet = [&](const CXXRecordDecl *Base) {
-    auto methods = Base->decls();
-    for (const auto &current_method : methods) {
-      if (Importer.GetAlreadyImportedOrNull(current_method)) {
-        continue;
-      }
-      auto foundDef = Visit(current_method);
-      assert(foundDef);
-      if (foundDef) {
-        Importer.MapImported(current_method, foundDef.get());
-      }
-    }
-    return true;
-  };           
+  
 }
 
 ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {

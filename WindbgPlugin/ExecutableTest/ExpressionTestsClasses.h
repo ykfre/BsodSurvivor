@@ -15,6 +15,8 @@ public:
   ClassWithDestructor(int r);
   ClassWithDestructor(const ClassWithDestructor &other);
   ClassWithDestructor &operator=(const ClassWithDestructor &other);
+  bool operator==(const ClassWithDestructor &other)const ;
+  bool operator!=(const ClassWithDestructor &other)const;
   ~ClassWithDestructor();
   int m_r;
 };

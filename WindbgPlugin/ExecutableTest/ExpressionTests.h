@@ -1,9 +1,7 @@
 #pragma once
-#include "stdafx.h"
 
 #include "ExportsDefines.h"
 
-std::unique_ptr<ClassWithDestructor> retFunc();
 namespace test {
 namespace expression {
 API void localVariableSanity();

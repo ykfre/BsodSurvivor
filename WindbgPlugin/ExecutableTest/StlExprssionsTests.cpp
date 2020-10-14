@@ -2,7 +2,6 @@
 
 #include "AssertUtils.h"
 #include "StlExprssionsTests.h"
-#include <expected.h>
 
 #include "Crt.h"
 #include "ExpressionTests.h"
@@ -42,7 +41,6 @@ API void optionalObjectTest() {
 }
 
 API void expectedTest() {
-  /*
   tl::expected<int, int> fs;
   tl::expected<int, int> a;
   std::string expr = "a=5;"
@@ -60,14 +58,15 @@ API void expectedTest() {
                      "FAIL_TEST_IF_FALSE(2 == a.error());"
                      "FAIL_TEST_IF_FALSE(3 == a.value_or(3));";
   RUN_EXPR(expr);
-
+  failTestIfFalse(a.error() ==2 );
+  ClassWithDestructor s(1);
+  s == s;
   std::string expr2 = "std::expected<ClassWithDestructor, int> m(1);"
                       "m=ClassWithDestructor(1); "
                       "m =m;"
                       "FAIL_TEST_IF_FALSE(m == m);";
   RUN_EXPR(expr2);
-  FAIL_TEST_IF_FALSE(g_counter != 0);
-  */
+  failTestIfFalse(g_counter != 0);
 }
 
 std::shared_ptr<int> returnShared() {
@@ -114,9 +113,10 @@ API void uniquePtrTest() {
                      "a.reset();"
                      "std::unique_ptr<int> f;"
                      "f.reset(new int(5));"
+                     "a.reset(new int(5))"
                      "FAIL_TEST_IF_FALSE(*f == 5);"
                      "FAIL_TEST_IF_FALSE(f.get() != nullptr);"
-                     "FAIL_TEST_IF_FALSE(a.get() == nullptr);";
+                     "FAIL_TEST_IF_FALSE(a.get() != nullptr);";
   ;
   RUN_EXPR(expr);
   failTestIfFalse(*a == 5);
@@ -143,16 +143,20 @@ API void windowsApiTest() {
   PROCESS_INFORMATION p;
   p = p;
   std::string expr = ""
-                     "context.R10 = context.R10;"
+                     
                      ""
                      ""
                      "PROCESS_INFORMATION w = {};\n"
                      "s.cb = sizeof(s);\n"
+                     "p.hThread = GetCurrentThread();"
                      "RtlCaptureContext(&context);"
                      ""
+                     "context.R10 = 8;"
                      "FAIL_TEST_IF_FALSE(GetModuleHandle(nullptr)); ";
 
   RUN_EXPR(expr);
+  failTestIfFalse(context.R10 == 8);
+  failTestIfFalse(p.hThread == GetCurrentThread());
 }
 
 } // namespace expression
@@ -163,6 +167,13 @@ ClassWithDestructor::ClassWithDestructor(int r) { m_r = r; }
 ClassWithDestructor::ClassWithDestructor(const ClassWithDestructor &other) {
   m_r = other.m_r;
 }
+bool ClassWithDestructor::operator==(const ClassWithDestructor &other)const{
+  return m_r == m_r;
+};
+
+bool ClassWithDestructor::operator!=(const ClassWithDestructor &other)const {
+  return !(*this == other);
+};
 
 ClassWithDestructor &
 ClassWithDestructor::operator=(const ClassWithDestructor &other) {
