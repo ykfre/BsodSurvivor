@@ -405,6 +405,8 @@ void IRExecutionUnit::GetRunnableInfo(Status &error, lldb::addr_t &func_addr,
       emitNewLine = true;
       ss.PutCString("  ");
       ss.PutCString(Mangled(failed_lookup).GetDemangledName().GetStringRef());
+      ss.PutCString("\nyou probable need to add " "my_" + std::to_string(std::hash<std::string>{}(
+                                               failed_lookup.AsCString())));
     }
 
     m_failed_lookups.clear();

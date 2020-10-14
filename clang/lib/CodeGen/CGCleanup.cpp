@@ -774,6 +774,9 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
       EHStack.popCleanup();
 
       EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
+      if (!EHStack.empty()) {
+        addCallToTempSehFunc();
+      }
 
     // Otherwise, the best approach is to thread everything through
     // the cleanup block and then try to clean up after ourselves.
@@ -892,12 +895,16 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
         assert(BranchThroughDest);
         InstsToAppend.push_back(llvm::BranchInst::Create(BranchThroughDest));
       }
+      addCallToTempSehFunc();
       // IV.  Pop the cleanup and emit it.
       EHStack.popCleanup();
       assert(EHStack.hasNormalCleanups() == HasEnclosingCleanups);
-      addCallToTempSehFunc();
-      EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
 
+      
+      EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
+      if (!EHStack.empty()) {
+        addCallToTempSehFunc();
+      }
       // Append the prepared cleanup prologue from above.
       llvm::BasicBlock *NormalExit = Builder.GetInsertBlock();
       for (unsigned I = 0, E = InstsToAppend.size(); I != E; ++I)

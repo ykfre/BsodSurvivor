@@ -305,53 +305,53 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
     clang::SourceManager &source_manager =
         m_compiler_instance->getASTContext().getSourceManager();
 
-    for (ConstString path_component : module.path) {
-      clang_path.push_back(std::make_pair(
-          &m_compiler_instance->getASTContext().Idents.get(
-              path_component.GetStringRef()),
-          source_manager.getLocForStartOfFile(source_manager.getMainFileID())
-              .getLocWithOffset(m_source_location_index++)));
-    }
+for (ConstString path_component : module.path) {
+    clang_path.push_back(std::make_pair(
+        &m_compiler_instance->getASTContext().Idents.get(
+            path_component.GetStringRef()),
+        source_manager.getLocForStartOfFile(source_manager.getMainFileID())
+        .getLocWithOffset(m_source_location_index++)));
+}
   }
 
-  StoringDiagnosticConsumer *diagnostic_consumer =
-      static_cast<StoringDiagnosticConsumer *>(
+  StoringDiagnosticConsumer* diagnostic_consumer =
+      static_cast<StoringDiagnosticConsumer*>(
           m_compiler_instance->getDiagnostics().getClient());
 
   diagnostic_consumer->ClearDiagnostics();
 
-  clang::Module *top_level_module = DoGetModule(clang_path.front(), false);
+  clang::Module* top_level_module = DoGetModule(clang_path.front(), false);
   if (!top_level_module) {
-    diagnostic_consumer->DumpDiagnostics(error_stream);
-    error_stream.Printf("error: Couldn't load top-level module %s\n",
-                        module.path.front().AsCString());
-    return false;
-  }
-
-  clang::Module *submodule = top_level_module;
-
-  for (auto &component :
-       llvm::ArrayRef<ConstString>(module.path).drop_front()) {
-    submodule = submodule->findSubmodule(component.GetStringRef());
-    if (!submodule) {
       diagnostic_consumer->DumpDiagnostics(error_stream);
-      error_stream.Printf("error: Couldn't load submodule %s\n",
-                          component.GetCString());
+      error_stream.Printf("error: Couldn't load top-level module %s\n",
+          module.path.front().AsCString());
       return false;
-    }
   }
 
-  clang::Module *requested_module = DoGetModule(clang_path, true);
+  clang::Module* submodule = top_level_module;
+
+  for (auto& component :
+      llvm::ArrayRef<ConstString>(module.path).drop_front()) {
+      submodule = submodule->findSubmodule(component.GetStringRef());
+      if (!submodule) {
+          diagnostic_consumer->DumpDiagnostics(error_stream);
+          error_stream.Printf("error: Couldn't load submodule %s\n",
+              component.GetCString());
+          return false;
+      }
+  }
+
+  clang::Module* requested_module = DoGetModule(clang_path, true);
   if (requested_module != nullptr) {
-    if (exported_modules) {
-      ReportModuleExports(*exported_modules, requested_module);
-    }
+      if (exported_modules) {
+          ReportModuleExports(*exported_modules, requested_module);
+      }
 
-    m_imported_modules[imported_module] = requested_module;
+      m_imported_modules[imported_module] = requested_module;
 
-    m_enabled = true;
+      m_enabled = true;
 
-    return true;
+      return true;
   }
 
   return false;
@@ -359,49 +359,78 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
 
 bool ClangModulesDeclVendor::LanguageSupportsClangModules(
     lldb::LanguageType language) {
-  switch (language) {
-  default:
-    return false;
-  case lldb::LanguageType::eLanguageTypeC:
-  case lldb::LanguageType::eLanguageTypeC11:
-  case lldb::LanguageType::eLanguageTypeC89:
-  case lldb::LanguageType::eLanguageTypeC99:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_03:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_11:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_14:
-  case lldb::LanguageType::eLanguageTypeObjC:
-  case lldb::LanguageType::eLanguageTypeObjC_plus_plus:
-    return true;
-  }
+    switch (language) {
+    default:
+        return false;
+    case lldb::LanguageType::eLanguageTypeC:
+    case lldb::LanguageType::eLanguageTypeC11:
+    case lldb::LanguageType::eLanguageTypeC89:
+    case lldb::LanguageType::eLanguageTypeC99:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_03:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_11:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_14:
+    case lldb::LanguageType::eLanguageTypeObjC:
+    case lldb::LanguageType::eLanguageTypeObjC_plus_plus:
+        return true;
+    }
 }
 
 bool ClangModulesDeclVendorImpl::AddModulesForCompileUnit(
-    CompileUnit &cu, ClangModulesDeclVendor::ModuleVector &exported_modules,
-    Stream &error_stream) {
-  if (LanguageSupportsClangModules(cu.GetLanguage())) {
-    for (auto &imported_module : cu.GetImportedModules())
-      if (!AddModule(imported_module, &exported_modules, error_stream))
-        return false;
-  }
-  return true;
+    CompileUnit& cu, ClangModulesDeclVendor::ModuleVector& exported_modules,
+    Stream& error_stream) {
+    if (LanguageSupportsClangModules(cu.GetLanguage())) {
+        for (auto& imported_module : cu.GetImportedModules())
+            if (!AddModule(imported_module, &exported_modules, error_stream))
+                return false;
+    }
+    return true;
 }
 
 // ClangImporter::lookupValue
 class ExampleVisitor : public clang::RecursiveASTVisitor<ExampleVisitor> {
 public:
-  ExampleVisitor(const std::string &wantedDeclName) {
-    m_wantedDeclName = wantedDeclName;
-  }
-
-  std::vector<clang::NamedDecl *> getWatnedDecls(clang::ASTContext &AST) {
-    if (!s_is_cached_decls) {
-      s_is_cached_decls = true;
-      TraverseAST(AST);
+    ExampleVisitor(const std::string& wantedDeclName, clang::DeclContext* context) {
+        m_wantedDeclName = wantedDeclName;
+        m_context = context;
     }
 
-    std::vector<clang::NamedDecl *> wanted_decls;
-    for (const auto &decl : s_cached_decls) {
+    std::vector<clang::NamedDecl*> getWatnedDecls(clang::ASTContext& AST) {
+        if (!s_is_cached_decls) {
+            s_is_cached_decls = true;
+            TraverseAST(AST);
+        }
+
+        std::vector<clang::NamedDecl*> wanted_decls;
+        for (const auto& decl : s_cached_decls) {
+
+
+      auto context = m_context;
+      auto declContext = decl->getDeclContext();
+      auto shouldMoveToNextDecl = false;
+      while (context && declContext) {
+        if ((nullptr != llvm::dyn_cast < clang::NamespaceDecl>(context)) !=
+            (nullptr != llvm::dyn_cast < clang::NamespaceDecl>(declContext))) {
+          break;
+        } else if (llvm::dyn_cast<clang::NamespaceDecl>(context)) {
+          if (llvm::dyn_cast<clang::NamedDecl>(context)
+                  ->getDeclName()
+                  .isIdentifier()) {
+            if (llvm::dyn_cast<clang::NamespaceDecl>(context)->getName() !=
+                llvm::dyn_cast<clang::NamespaceDecl>(declContext)->getName()) {
+              shouldMoveToNextDecl = true;
+              break;
+            }
+          }
+        } else {
+          break;
+        }
+        context = context->getParent();
+        declContext = declContext->getParent();
+      }
+      if (shouldMoveToNextDecl) {
+        continue;
+      }
       if (auto var = llvm::dyn_cast<clang::ClassTemplateDecl>(decl)) {
         if (var->isThisDeclarationADefinition()) {
           if (m_wantedDeclName == var->getTemplatedDecl()->getName().str()) {
@@ -439,9 +468,18 @@ public:
     return wanted_decls;
   }
 
+   bool TraverseCXXRecordDecl(clang::CXXRecordDecl *decl) {
+
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
+        decl->isThisDeclarationADefinition()) {
+      s_cached_decls.push_back(decl);
+    }
+    return clang::RecursiveASTVisitor<ExampleVisitor>::TraverseCXXRecordDecl(decl);
+  }
+
   bool TraverseClassTemplateDecl(clang::ClassTemplateDecl *decl) {
 
-    if (dynamic_cast<clang::NamedDecl *>(decl) &&
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
         decl->isThisDeclarationADefinition()) {
       s_cached_decls.push_back(decl);
     }
@@ -452,7 +490,7 @@ public:
   bool TraverseClassTemplatePartialSpecializationDecl(
       clang::ClassTemplatePartialSpecializationDecl *decl) {
 
-    if (dynamic_cast<clang::NamedDecl *>(decl) &&
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
         decl->isThisDeclarationADefinition()) {
       s_cached_decls.push_back(decl);
     }
@@ -463,7 +501,7 @@ public:
   bool TraverseClassTemplateSpecializationDecl(
       clang::ClassTemplateSpecializationDecl *decl) {
 
-    if (dynamic_cast<clang::NamedDecl *>(decl) &&
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
         decl->isThisDeclarationADefinition()) {
       s_cached_decls.push_back(decl);
     }
@@ -471,10 +509,11 @@ public:
         ExampleVisitor>::TraverseClassTemplateSpecializationDecl(decl);
   }
 
-  bool TraverseDecl(clang::Decl *decl) {
-
-    if (decl && nullptr != decl->getDeclContext() &&
-        llvm::dyn_cast<clang::NamespaceDecl>(decl->getDeclContext())) {
+   bool TraverseDecl(clang::Decl *decl) {
+    if (decl && llvm::dyn_cast<clang::FunctionDecl>(decl) &&
+        (!llvm::dyn_cast<clang::CXXMethodDecl>(decl) ||
+         (nullptr != decl->getDeclContext() &&
+          llvm::dyn_cast<clang::NamespaceDecl>(decl->getDeclContext())))) {
       if (llvm::dyn_cast<clang::NamedDecl>(decl)) {
         s_cached_decls.push_back(llvm::dyn_cast<clang::NamedDecl>(decl));
       }
@@ -482,8 +521,8 @@ public:
 
     return clang::RecursiveASTVisitor<ExampleVisitor>::TraverseDecl(decl);
   }
-
   std::string m_wantedDeclName;
+  clang::DeclContext *m_context = nullptr;
   thread_local static bool s_is_cached_decls;
   thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
 };
@@ -509,7 +548,7 @@ uint32_t ClangModulesDeclVendorImpl::FindDecls(
   clang::IdentifierInfo &ident =
       m_compiler_instance->getASTContext().Idents.get(name.GetStringRef());
 
-  ExampleVisitor example(name.GetStringRef().str());
+  ExampleVisitor example(name.GetStringRef().str(), context);
   auto wanted_decls =
       example.getWatnedDecls(m_compiler_instance->getASTContext());
 
@@ -833,6 +872,9 @@ ClangModulesDeclVendor::Create(Target &target) {
   auto PCHOps = instance->getPCHContainerOperations();
   PCHOps->registerWriter(std::make_unique<clang::ObjectFilePCHContainerWriter>());
   PCHOps->registerReader(std::make_unique<clang::ObjectFilePCHContainerReader>());
+  if (!target.CalculateProcess()) {
+    return nullptr;
+  }
   std::string exe_path = target.CalculateProcess()->getPath();
   if (exe_path.empty()) {
     exe_path = target.GetExecutableModule()->GetFileSpec().GetPath();

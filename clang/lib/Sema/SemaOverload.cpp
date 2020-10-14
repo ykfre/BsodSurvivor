@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cstdlib>
 
+extern bool g_is_lldb_execution;
 using namespace clang;
 using namespace sema;
 
@@ -9908,29 +9909,30 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
   llvm::SmallVector<OverloadCandidate*, 4> PendingBest;
   PendingBest.push_back(&*Best);
   Best->Best = true;
+  if (!g_is_lldb_execution) {
+    // Make sure that this function is better than every other viable
+    // function. If not, we have an ambiguity.
+    while (!PendingBest.empty()) {
+      auto *Curr = PendingBest.pop_back_val();
+      for (auto *Cand : Candidates) {
+        if (Cand->Viable && !Cand->Best &&
+            !isBetterOverloadCandidate(S, *Curr, *Cand, Loc, Kind)) {
+          PendingBest.push_back(Cand);
+          Cand->Best = true;
 
-  // Make sure that this function is better than every other viable
-  // function. If not, we have an ambiguity.
-  while (!PendingBest.empty()) {
-    auto *Curr = PendingBest.pop_back_val();
-    for (auto *Cand : Candidates) {
-      if (Cand->Viable && !Cand->Best &&
-          !isBetterOverloadCandidate(S, *Curr, *Cand, Loc, Kind)) {
-        PendingBest.push_back(Cand);
-        Cand->Best = true;
-
-        if (S.isEquivalentInternalLinkageDeclaration(Cand->Function,
-                                                     Curr->Function))
-          EquivalentCands.push_back(Cand->Function);
-        else
-          Best = end();
+          if (S.isEquivalentInternalLinkageDeclaration(Cand->Function,
+                                                       Curr->Function))
+            EquivalentCands.push_back(Cand->Function);
+          else
+            Best = end();
+        }
       }
     }
-  }
 
-  // If we found more than one best candidate, this is ambiguous.
-  if (Best == end())
-    return OR_Ambiguous;
+    // If we found more than one best candidate, this is ambiguous.
+    if (Best == end())
+      return OR_Ambiguous;
+  }
 
   // Best is the best viable function.
   if (Best->Function && Best->Function->isDeleted())

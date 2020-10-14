@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{ff0805bb-7317-4d80-a233-c37f7c78e77f}</ProjectGuid>
+    <RootNamespace>ExecutableTest</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>llvm</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>llvm</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>llvm</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>llvm</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClAdditionalOptions>-gdwarf -Xclang -femit-all-decls</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClAdditionalOptions>-gdwarf -Xclang -femit-all-decls</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClangClExecutable>C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClangClExecutable>C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>EXPORTS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>a.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>EXPORTS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>a.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>EXPORTS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>a.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>EXPORTS;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>a.def</ModuleDefinitionFile>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="AssertUtils.cpp" />
+    <ClCompile Include="Crt.cpp" />
+    <ClCompile Include="ExpressionTests.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="ReturnFromFrameTests.cpp" />
+    <ClCompile Include="StlExprssionsTests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AssertUtils.h" />
+    <ClInclude Include="Crt.h" />
+    <ClInclude Include="ExportsDefines.h" />
+    <ClInclude Include="ExpressionTests.h" />
+    <ClInclude Include="ExpressionTestsClasses.h" />
+    <ClInclude Include="ReturnFromFrameTests.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="StlExprssionsTests.h" />
+    <ClInclude Include="stl\agents.h" />
+    <ClInclude Include="stl\agile.h" />
+    <ClInclude Include="stl\ammintrin.h" />
+    <ClInclude Include="stl\amp.h" />
+    <ClInclude Include="stl\amprt.h" />
+    <ClInclude Include="stl\amprt_exceptions.h" />
+    <ClInclude Include="stl\amp_graphics.h" />
+    <ClInclude Include="stl\amp_math.h" />
+    <ClInclude Include="stl\amp_short_vectors.h" />
+    <ClInclude Include="stl\arm64intr.h" />
+    <ClInclude Include="stl\arm64_neon.h" />
+    <ClInclude Include="stl\armintr.h" />
+    <ClInclude Include="stl\arm_neon.h" />
+    <ClInclude Include="stl\cfguard.h" />
+    <ClInclude Include="stl\collection.h" />
+    <ClInclude Include="stl\comdef.h" />
+    <ClInclude Include="stl\comdefsp.h" />
+    <ClInclude Include="stl\comip.h" />
+    <ClInclude Include="stl\comutil.h" />
+    <ClInclude Include="stl\concrt.h" />
+    <ClInclude Include="stl\concrtrm.h" />
+    <ClInclude Include="stl\concurrencysal.h" />
+    <ClInclude Include="stl\concurrent_priority_queue.h" />
+    <ClInclude Include="stl\concurrent_queue.h" />
+    <ClInclude Include="stl\concurrent_unordered_map.h" />
+    <ClInclude Include="stl\concurrent_unordered_set.h" />
+    <ClInclude Include="stl\concurrent_vector.h" />
+    <ClInclude Include="stl\crtdefs.h" />
+    <ClInclude Include="stl\crtversion.h" />
+    <ClInclude Include="stl\dloadsup.h" />
+    <ClInclude Include="stl\dvec.h" />
+    <ClInclude Include="stl\eh.h" />
+    <ClInclude Include="stl\ehdata.h" />
+    <ClInclude Include="stl\ehdata4.h" />
+    <ClInclude Include="stl\ehdata4_export.h" />
+    <ClInclude Include="stl\ehdata_forceinclude.h" />
+    <ClInclude Include="stl\ehdata_values.h" />
+    <ClInclude Include="stl\emmintrin.h" />
+    <ClInclude Include="stl\excpt.h" />
+    <ClInclude Include="stl\expected.h" />
+    <ClInclude Include="stl\fvec.h" />
+    <ClInclude Include="stl\gcroot.h" />
+    <ClInclude Include="stl\immintrin.h" />
+    <ClInclude Include="stl\internal_concurrent_hash.h" />
+    <ClInclude Include="stl\internal_split_ordered_list.h" />
+    <ClInclude Include="stl\intrin.h" />
+    <ClInclude Include="stl\intrin0.h" />
+    <ClInclude Include="stl\invkprxy.h" />
+    <ClInclude Include="stl\isa_availability.h" />
+    <ClInclude Include="stl\iso646.h" />
+    <ClInclude Include="stl\ivec.h" />
+    <ClInclude Include="stl\limits.h" />
+    <ClInclude Include="stl\mm3dnow.h" />
+    <ClInclude Include="stl\mmintrin.h" />
+    <ClInclude Include="stl\nmmintrin.h" />
+    <ClInclude Include="stl\omp.h" />
+    <ClInclude Include="stl\optional.hpp" />
+    <ClInclude Include="stl\pgobootrun.h" />
+    <ClInclude Include="stl\pmmintrin.h" />
+    <ClInclude Include="stl\ppl.h" />
+    <ClInclude Include="stl\pplawait.h" />
+    <ClInclude Include="stl\pplcancellation_token.h" />
+    <ClInclude Include="stl\pplinterface.h" />
+    <ClInclude Include="stl\ppltasks.h" />
+    <ClInclude Include="stl\ppltaskscheduler.h" />
+    <ClInclude Include="stl\pplwin.h" />
+    <ClInclude Include="stl\rtcapi.h" />
+    <ClInclude Include="stl\rttidata.h" />
+    <ClInclude Include="stl\sal.h" />
+    <ClInclude Include="stl\setjmp.h" />
+    <ClInclude Include="stl\setjmpex.h" />
+    <ClInclude Include="stl\smmintrin.h" />
+    <ClInclude Include="stl\srv.h" />
+    <ClInclude Include="stl\stdarg.h" />
+    <ClInclude Include="stl\stdbool.h" />
+    <ClInclude Include="stl\stdint.h" />
+    <ClInclude Include="stl\tmmintrin.h" />
+    <ClInclude Include="stl\use_ansi.h" />
+    <ClInclude Include="stl\vadefs.h" />
+    <ClInclude Include="stl\varargs.h" />
+    <ClInclude Include="stl\vcclr.h" />
+    <ClInclude Include="stl\vccorlib.h" />
+    <ClInclude Include="stl\vcruntime.h" />
+    <ClInclude Include="stl\vcruntime_exception.h" />
+    <ClInclude Include="stl\vcruntime_new.h" />
+    <ClInclude Include="stl\vcruntime_new_debug.h" />
+    <ClInclude Include="stl\vcruntime_startup.h" />
+    <ClInclude Include="stl\vcruntime_string.h" />
+    <ClInclude Include="stl\vcruntime_typeinfo.h" />
+    <ClInclude Include="stl\wmmintrin.h" />
+    <ClInclude Include="stl\xatomic.h" />
+    <ClInclude Include="stl\xbit_ops.h" />
+    <ClInclude Include="stl\xcall_once.h" />
+    <ClInclude Include="stl\xcharconv.h" />
+    <ClInclude Include="stl\xcharconv_ryu.h" />
+    <ClInclude Include="stl\xcharconv_ryu_tables.h" />
+    <ClInclude Include="stl\xerrc.h" />
+    <ClInclude Include="stl\xfilesystem_abi.h" />
+    <ClInclude Include="stl\xkeycheck.h" />
+    <ClInclude Include="stl\xlocinfo.h" />
+    <ClInclude Include="stl\xmmintrin.h" />
+    <ClInclude Include="stl\xnode_handle.h" />
+    <ClInclude Include="stl\xpolymorphic_allocator.h" />
+    <ClInclude Include="stl\xsmf_control.h" />
+    <ClInclude Include="stl\xthreads.h" />
+    <ClInclude Include="stl\xtimec.h" />
+    <ClInclude Include="stl\xxamp.h" />
+    <ClInclude Include="stl\xxamp_inl.h" />
+    <ClInclude Include="stl\ymath.h" />
+    <ClInclude Include="stl\yvals.h" />
+    <ClInclude Include="stl\yvals_core.h" />
+    <ClInclude Include="stl\zmmintrin.h" />
+    <ClInclude Include="stl\__msvc_all_public_headers.hpp" />
+    <ClInclude Include="stl\__msvc_system_error_abi.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="AllocateSpaceInStack.asm">
+      <FileType>Document</FileType>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="a.def" />
+    <None Include="stl\listing.inc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+</Project>

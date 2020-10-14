@@ -943,9 +943,6 @@ bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Ta
     for (const auto &section : coff->get()->sections()) {
       i++;
       bool hasName = section.getName().operator bool();
-      if(!hasName) {
-        __debugbreak();
-      }
       auto name = section.getName();
       if (section.getName() && (section.getName().get() == ".command")) {
         auto contents = section.getContents();
@@ -1244,20 +1241,23 @@ ClangExpressionParser::ClangExpressionParser(
     }
   }
 
-
-  std::string exe_path = exe_scope->CalculateProcess()->getPath();
-  if (exe_path.empty()) {
-    exe_path = exe_scope->CalculateTarget()
-                   ->GetExecutableModule()
-                   ->GetFileSpec()
-                   .GetPath();
-  }
-  bool isSucceededToHaveSettingsFromSection = getCompileSettingsFromSection(exe_path, *exe_scope->CalculateTarget(), *m_compiler);
-
-  if (!isSucceededToHaveSettingsFromSection && log) {
-    log->Warning("There is no llvm_command section in the pe file\n");
-  }else {
-    log->Warning("There is llvm_command section in the pe file\n");
+  if (exe_scope->CalculateProcess())
+  {
+    std::string exe_path = exe_scope->CalculateProcess()->getPath();
+    if (exe_path.empty()) {
+      exe_path = exe_scope->CalculateTarget()
+                     ->GetExecutableModule()
+                     ->GetFileSpec()
+                     .GetPath();
+    }
+    bool isSucceededToHaveSettingsFromSection = getCompileSettingsFromSection(
+        exe_path, *exe_scope->CalculateTarget(), *m_compiler);
+    Log *log2(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
+    if (log2) {
+      if (!isSucceededToHaveSettingsFromSection) {
+        log2->Warning("There is no llvm_command section in the pe file\n");
+      }
+    }
   }
   // Register the support for object-file-wrapped Clang modules.
   auto PCHOps = m_compiler->getPCHContainerOperations();
@@ -1687,6 +1687,10 @@ ClangExpressionParser::ParseInternal(DiagnosticManager &diagnostic_manager,
     }
   }
   newText = headers + newText;
+  
+   // Never get a return value;
+  auto index = newText.find_last_of("}");
+  newText = newText.substr(0, index) + ";\n(void)5;" + newText.substr(index);
   expr_text = newText.c_str();
 
   clang::SourceManager &source_mgr = m_compiler->getSourceManager();

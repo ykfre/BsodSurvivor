@@ -855,12 +855,73 @@ static bool templateArgsAreSupported(ArrayRef<TemplateArgument> a) {
 
 llvm::Expected<clang::Decl *>
 ClangASTImporter::ASTImporterDelegate::handleStdHandler(clang::Decl *From) {
+  auto handledTemplate = handleTemplate(From);
+  if (handledTemplate && handledTemplate.get() != nullptr) {
+    return handledTemplate;
+  }
   if (m_std_handler && m_std_handler->m_sema) {
     auto externalSource =
         m_std_handler->m_sema->getASTContext().getExternalSource();
     if (auto clangAst =
             dyn_cast<lldb_private::ClangASTSource::ClangASTSourceProxy>(
                 externalSource)) {
+
+      if (dyn_cast<CXXRecordDecl>(From) &&
+          !dyn_cast < ClassTemplateSpecializationDecl>(From) &&
+          !dyn_cast<ClassTemplateDecl>(From) && 
+          !dyn_cast<ClassTemplatePartialSpecializationDecl>(From)) {
+        auto classRequested = dyn_cast<CXXRecordDecl>(From);
+        
+        if (!classRequested->getDeclName().isIdentifier()) {
+          return nullptr;
+        }
+        if (classRequested->getName().empty()) {
+          return nullptr;
+        }
+        std::vector<NamedDecl *> decls;
+        if (!clangAst->findByModules(
+                From->getDeclContext(),
+                ConstString(classRequested->getName()),
+                decls)) {
+          return nullptr;
+        }
+        for (const auto &decl : decls) {
+          if (decl == From) {
+            return nullptr;
+          }
+        }
+        for (const auto& decl: decls) {
+          if(!(dyn_cast<CXXRecordDecl>(decl) &&
+              !dyn_cast<ClassTemplateSpecializationDecl>(decl) &&
+              !dyn_cast<ClassTemplateDecl>(decl) &&
+              !dyn_cast<ClassTemplatePartialSpecializationDecl>(
+                  decl))) {
+            continue;
+          }
+          if (dyn_cast<CXXRecordDecl>(decl)->isCompleteDefinition()) {
+            auto new_decl = clangAst->m_original.CopyDecl(decl);
+            if (nullptr != new_decl) {
+              RegisterImportedDecl(From, new_decl);
+            }
+            return new_decl;
+          }
+        }
+      }
+    }
+  }
+  return nullptr;
+}
+
+llvm::Expected<clang::Decl *>
+lldb_private::ClangASTImporter::ASTImporterDelegate::handleTemplate(
+    clang::Decl *From) {
+  if (m_std_handler && m_std_handler->m_sema) {
+    auto externalSource =
+        m_std_handler->m_sema->getASTContext().getExternalSource();
+    if (auto clangAst =
+            dyn_cast<lldb_private::ClangASTSource::ClangASTSourceProxy>(
+                externalSource)) {
+
       auto td = dyn_cast<ClassTemplateSpecializationDecl>(From);
 
       if (!td)
@@ -918,7 +979,7 @@ ClangASTImporter::ASTImporterDelegate::handleStdHandler(clang::Decl *From) {
       return new_decl;
     }
   }
-  return nullptr;
+return nullptr;
 }
 
 llvm::Expected<Decl *>
@@ -987,12 +1048,12 @@ void ClangASTImporter::ASTImporterDelegate::ImportDefinitionTo(
   /*
   if (to_objc_interface)
       to_objc_interface->startDefinition();
+  */
 
   CXXRecordDecl *to_cxx_record = dyn_cast<CXXRecordDecl>(to);
-
   if (to_cxx_record)
       to_cxx_record->startDefinition();
-  */
+  
 
   Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 

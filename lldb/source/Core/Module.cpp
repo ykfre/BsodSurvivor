@@ -1338,6 +1338,12 @@ void Module::FindFunctionSymbols(ConstString name,
                      name.AsCString(), name_type_mask);
   if (Symtab *symtab = GetSymtab())
     symtab->FindFunctionSymbols(name, name_type_mask, sc_list);
+  auto objFile = GetObjectFile();
+  if (objFile) {
+    auto symtab = objFile->GetSymtab();
+    if (symtab)
+      symtab->FindFunctionSymbols(name, name_type_mask, sc_list);
+  }
 }
 
 void Module::FindSymbolsWithNameAndType(ConstString name,

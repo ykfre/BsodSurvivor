@@ -2310,13 +2310,14 @@ Target *Target::GetTargetFromContexts(const ExecutionContext *exe_ctx_ptr,
   return target;
 }
 
+extern bool g_is_lldb_execution;
 ExpressionResults Target::EvaluateExpression(
     llvm::StringRef expr, ExecutionContextScope *exe_scope,
     lldb::ValueObjectSP &result_valobj_sp,
     const EvaluateExpressionOptions &options, std::string *fixed_expression,
     ValueObject *ctx_obj) {
   result_valobj_sp.reset();
-
+  g_is_lldb_execution = true;
   ExpressionResults execution_results = eExpressionSetupError;
 
   if (expr.empty())

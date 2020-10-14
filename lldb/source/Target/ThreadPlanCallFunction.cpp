@@ -29,9 +29,9 @@
 using namespace lldb;
 using namespace lldb_private;
 
-void *g_bpAddress = nullptr;
+thread_local void *t_bpAddress = nullptr;
 
-thread_local std::function<void()> g_callAllocateStack;
+thread_local llvm::Optional<std::function<bool()>> t_callAllocateStack;
 
 // ThreadPlanCallFunction: Plan to call a single function
 bool ThreadPlanCallFunction::ConstructorSetup(
@@ -60,10 +60,17 @@ bool ThreadPlanCallFunction::ConstructorSetup(
               m_constructor_errors.GetData());
     return false;
   }
-  g_callAllocateStack();
-  constexpr int ALLOCATED_SPACE_IN_STACK_BY_US = 160;
+  size_t allocatedSpaceInStackByUs = 0;
+  if (t_callAllocateStack) {
+    if (!t_callAllocateStack.getValue()()) {
+      LLDB_LOGF(log, "Failed allocate space in stack");
+      return false;
+    }
+    allocatedSpaceInStackByUs = 160;
+  }
+  
   m_function_sp = thread.GetRegisterContext()->GetSP() +
-                  ALLOCATED_SPACE_IN_STACK_BY_US - abi->GetRedZoneSize();
+                  allocatedSpaceInStackByUs - abi->GetRedZoneSize();
   // If we can't read memory at the point of the process where we are planning
   // to put our function, we're not going to get any further...
   Status error;
@@ -77,7 +84,7 @@ bool ThreadPlanCallFunction::ConstructorSetup(
     return false;
   }
 
-  if (nullptr == g_bpAddress) {
+  if (nullptr == t_bpAddress) {
     llvm::Expected<Address> start_address = GetTarget().GetEntryPointAddress();
     if (!start_address) {
       m_constructor_errors.Printf(
@@ -88,7 +95,7 @@ bool ThreadPlanCallFunction::ConstructorSetup(
     }
       m_start_addr = *start_address;
   } else {
-    m_start_addr = lldb_private::Address((size_t)g_bpAddress);
+    m_start_addr = lldb_private::Address((size_t)t_bpAddress);
   }
 
   start_load_addr = m_start_addr.GetLoadAddress(&GetTarget());

@@ -2768,9 +2768,14 @@ ExpectedDecl ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
         example.getWatnedDecls(Importer.getFromContext());
 
     for (const auto &decl : decls) {
-      if (!(isa<FunctionDecl>(decl) &&
-                (decl->getNameAsString().find("operator new") != -1) ||
-            decl->getNameAsString().find("operator delete") != -1))
+
+      if (!(isa<FunctionDecl>(decl) &&(
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator==") !=-1 ||
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator!=") !=-1 ||
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator<") !=-1 ||
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator>") !=-1 ||
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator new") !=-1 ||
+          llvm::dyn_cast < FunctionDecl>(decl)->getNameAsString().find("operator delete") !=-1)))
         {
         continue;
       }
