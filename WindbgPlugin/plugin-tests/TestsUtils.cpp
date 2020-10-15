@@ -43,6 +43,7 @@ void executeCommand(
         (void *)nullptr,
         (void *)GetModuleHandleA(EXECUTABLE_TESTS_DLL.c_str()));
     g_config.breakFunctionName = "FunctionToBreak";
+    g_config.callDestructorsFunctionName = "CallDestructors";
     g_config.executableModuleName = EXECUTABLE_TESTS_DLL;
     g_config.allocateSpaceInStackFunctionName = "allocateSpaceInStack";
     std::string executablePath;

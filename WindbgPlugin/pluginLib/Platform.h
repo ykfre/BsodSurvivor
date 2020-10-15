@@ -34,6 +34,7 @@ public:
   std::function<size_t(void* funcAddr, const std::vector<size_t> &args)> runFunc;
   std::optional<std::function<bool()>> callAllocateSpaceInStack;
   void *getFunctionToBreakAddress();
+  void *getCallDestructorsFunction();
 };
 
 inline thread_local std::shared_ptr<Platform> t_platform;

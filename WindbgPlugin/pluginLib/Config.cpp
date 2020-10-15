@@ -126,6 +126,10 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
   if (!parse("modulesNames", root, modulesNames)) {
     return false;
   }
+  if (!parse("callDestructorsFunctionName", root,
+             callDestructorsFunctionName)) {
+    return false;
+  }
   return true;
 }
 

@@ -88,8 +88,13 @@ callDestructors(lldb_private::Thread &thread,
     if (!return_error.Success()) {
       return return_error;
     }
+    std::vector<void *> destructorsFunctions;
     while (currentState != -1 && unwindMap[currentState].action) {
       auto funcAddr = baseStartAddr + unwindMap[currentState].action;
+      destructorsFunctions.push_back((void *)funcAddr);
+      currentState = unwindMap[currentState].toState;
+    }
+    if (!destructorsFunctions.empty()) {
       lldb_private::EvaluateExpressionOptions options;
       options.SetDebug(false);
       options.SetIgnoreBreakpoints(false);
@@ -97,16 +102,22 @@ callDestructors(lldb_private::Thread &thread,
       options.SetKeepInMemory(false);
       options.SetTryAllThreads(false);
       options.SetStopOthers(true);
-      std::vector<uint64_t> args;
-      args.push_back(0);
-      args.push_back(youngestContext.GetSP());
-      lldb_private::Log *log(
-          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
-      if (log) {
-        LLDB_LOGF(log, "calling desturctor %p", funcAddr);
+      struct StructToPass {
+        size_t rsp;
+        size_t numOfDestructors;
+        // void *destructors[];
+      };
+      auto structToPass = (StructToPass *)t_platform->allocateMemory(
+          sizeof(void *) * destructorsFunctions.size() + sizeof(StructToPass));
+      structToPass->rsp = youngestContext.GetSP();
+      structToPass->numOfDestructors = destructorsFunctions.size();
+      for (size_t i = 0; i < structToPass->numOfDestructors; i++) {
+        ((void**)((char *)structToPass + sizeof(StructToPass)))[i] =  destructorsFunctions[i];
       }
-      t_platform->runFunc((void *)funcAddr, args);
-      currentState = unwindMap[currentState].toState;
+      std::vector<uint64_t> args;
+      args.push_back((uint64_t)structToPass);
+      t_platform->runFunc(t_platform->getCallDestructorsFunction(), args);
+      t_platform->deallocateMemory(structToPass);
     }
   }
   return return_error;
@@ -120,8 +131,7 @@ returnFromCurrentFrame(lldb_private::Thread &thread,
 
   lldb_private::MyRegisterContext youngestContext(thread, 0);
   for (uint32_t i = 0; i < frameNumsToReturn; i++) {
-    lldb_private::MyRegisterContext olderFrameContext(
-        thread, 1);
+    lldb_private::MyRegisterContext olderFrameContext(thread, 1);
     lldb::DataBufferSP olderFrameRegisters;
     olderFrameContext.ReadAllRegisterValues(olderFrameRegisters);
     if (shouldRunDestructors) {

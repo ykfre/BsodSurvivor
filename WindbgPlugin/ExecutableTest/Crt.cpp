@@ -17,6 +17,17 @@ extern "C" API void FunctionToBreak() {
   }
 }
 
+struct StructToPass {
+  size_t rsp;
+  size_t numOfDestructors;
+  void **destructors;
+};
+extern "C" API void CallDestructors(StructToPass *structToPass) {
+  for (size_t i = 0; i< structToPass->numOfDestructors; i++) {
+    ((void (*)(size_t, size_t))((&structToPass->destructors)[i]))(0, structToPass->rsp);
+  }
+}
+
 __declspec(dllexport) extern "C" void my_4283271732885569984(
     const void *address) {
   //delete[] address;

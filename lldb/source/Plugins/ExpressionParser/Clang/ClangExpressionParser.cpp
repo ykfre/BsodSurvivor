@@ -942,7 +942,6 @@ bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Ta
     int i = 0;
     for (const auto &section : coff->get()->sections()) {
       i++;
-      bool hasName = section.getName().operator bool();
       auto name = section.getName();
       if (section.getName() && (section.getName().get() == ".command")) {
         auto contents = section.getContents();

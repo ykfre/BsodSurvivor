@@ -10,6 +10,7 @@ struct Config
   std::string executablePath;
   std::string executableModuleName;
   std::string breakFunctionName;
+  std::string callDestructorsFunctionName;
   std::string allocateSpaceInStackFunctionName;
   std::vector<std::string> modulesNames;
 };
