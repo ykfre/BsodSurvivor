@@ -52,6 +52,8 @@ TEST_F(ExpressionTests, inlineInClassTest) {
   executeExpression(t);
   t.join();
 }
+
+
 TEST_F(ExpressionTests, LambdaTest) {
   std::thread t(test::expression::lambdaSanity);
   executeExpression(t);
@@ -101,6 +103,18 @@ TEST_F(ExpressionTests, windowsApiTest) {
 TEST_F(StlExpressionTests, expectedTest) {
   std::thread t(test::expression::expectedTest);
   executeExpression(t);
+  executeExpression(t);
+  t.join();
+}
+
+TEST_F(ExpressionTests, allStl) {
+  std::thread t(test::expression::allStl);
+  executeExpression(t);
+  t.join();
+}
+
+TEST_F(StlExpressionTests, mixStlWithDwarfData) {
+  std::thread t(test::expression::mixStlWithDwarfData);
   executeExpression(t);
   t.join();
 }

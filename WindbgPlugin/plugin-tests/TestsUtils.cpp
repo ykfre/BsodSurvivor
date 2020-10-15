@@ -55,8 +55,7 @@ void executeCommand(
     CommonCommandArgs args;
     args.selectedFrameIndex = 0;
     for (const auto &moduleName :
-         std::vector<std::string>{"ntdll.dll", "kernel32.dll", "kernelbase.dll",
-                                  "vcruntime140.dll","ucrtbase.dll",g_config.executableModuleName})
+         std::vector<std::string>{"ntdll.dll", "kernel32.dll", "kernelbase.dll","ucrtbase.dll",g_config.executableModuleName})
       args.modules.push_back(getModuleData(moduleName));
     if (!command(args)) {
       throw std::runtime_error("failed to run command");

@@ -31,8 +31,10 @@ private:
 };
 
 API void localVariableSanity() {
+  int b = 9;
+  int c = 6;
   int var = 4;
-  RUN_EXPR("var++");
+  RUN_EXPR("var++;c;b;");
   failTestIfFalse(var == 5);
 
   RUN_EXPR("var++");

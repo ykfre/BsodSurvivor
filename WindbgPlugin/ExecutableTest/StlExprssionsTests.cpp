@@ -58,7 +58,7 @@ API void expectedTest() {
                      "FAIL_TEST_IF_FALSE(2 == a.error());"
                      "FAIL_TEST_IF_FALSE(3 == a.value_or(3));";
   RUN_EXPR(expr);
-  failTestIfFalse(a.error() ==2 );
+  failTestIfFalse(a.error() == 2);
   ClassWithDestructor s(1);
   s == s;
   std::string expr2 = "std::expected<ClassWithDestructor, int> m(1);"
@@ -69,12 +69,11 @@ API void expectedTest() {
   failTestIfFalse(g_counter != 0);
 }
 
-std::shared_ptr<int> returnShared() {
-  return std::make_shared<int>(44);
-}
+std::shared_ptr<int> returnShared() { return std::make_shared<int>(44); }
 API void sharedMemoryTest() {
 
   returnShared();
+  
   std::string expr2 =
       "std::shared_ptr<ClassWithDestructor>ms(new ClassWithDestructor(2));"
       "FAIL_TEST_IF_FALSE(2==ms->m_r);"
@@ -86,24 +85,18 @@ API void sharedMemoryTest() {
   "ms = returnShared();";
   RUN_EXPR(expr2);
   failTestIfFalse(g_counter != 0);
+  
+
   printf("%d", 5);
   std::shared_ptr<int> a;
+  {
+      auto fs = a;
+    bool b = fs == fs;
+  }
   std::string expr = ""
-                     ""
-                     "a.reset();"
-                     "auto f = a;"
-                     "FAIL_TEST_IF_FALSE(a==f);"
-                     "FAIL_TEST_IF_FALSE(nullptr == a);"
-                     "FAIL_TEST_IF_FALSE(nullptr == a.get());"
-                     "a.reset(new int(5));"
-                     "FAIL_TEST_IF_FALSE((bool)a);"
-                     "FAIL_TEST_IF_FALSE(*a == 5);;"
-                     "printf(\"value is %d\\n\", a.use_count());"
-                     "printf(\"value is %d\\n\", *a);"
-      "printf(\"value is %p\\n\", a.get())";
+                     "a.reset(new int(5));";
   RUN_EXPR(expr);
-  auto d =a.use_count();
-  failTestIfFalse(*a == 5);
+  auto d = a.use_count();
 }
 
 API void uniquePtrTest() {
@@ -143,7 +136,7 @@ API void windowsApiTest() {
   PROCESS_INFORMATION p;
   p = p;
   std::string expr = ""
-                     
+
                      ""
                      ""
                      "PROCESS_INFORMATION w = {};\n"
@@ -159,6 +152,34 @@ API void windowsApiTest() {
   failTestIfFalse(p.hThread == GetCurrentThread());
 }
 
+
+struct MyStruct {
+  int a;
+};
+
+API void mixStlWithDwarfData() {
+  MyStruct str;
+  str.a = str.a;
+  std::string expr2 =
+      "test::expression::MyStruct s;"
+      ""
+      "auto f = std::make_shared<test::expression::MyStruct>();"
+      "f = f;"
+      "";
+  RUN_EXPR(expr2);
+}
+
+API void allStl() {
+  MyStruct str;
+  str.a = str.a;
+  std::string expr2 = "std::shared_ptr<int> f;"
+                      "std::optional<int> m;"
+                      "tl::make_unexpected(2);;"
+                      "std::unique_ptr<int> sk;"
+                      "";
+  RUN_EXPR(expr2);
+}
+
 } // namespace expression
 } // namespace test
 
@@ -167,11 +188,11 @@ ClassWithDestructor::ClassWithDestructor(int r) { m_r = r; }
 ClassWithDestructor::ClassWithDestructor(const ClassWithDestructor &other) {
   m_r = other.m_r;
 }
-bool ClassWithDestructor::operator==(const ClassWithDestructor &other)const{
+bool ClassWithDestructor::operator==(const ClassWithDestructor &other) const {
   return m_r == m_r;
 };
 
-bool ClassWithDestructor::operator!=(const ClassWithDestructor &other)const {
+bool ClassWithDestructor::operator!=(const ClassWithDestructor &other) const {
   return !(*this == other);
 };
 
@@ -184,3 +205,4 @@ ClassWithDestructor::operator=(const ClassWithDestructor &other) {
 ClassWithDestructor::~ClassWithDestructor() {
   test::expression::g_counter += m_r;
 }
+

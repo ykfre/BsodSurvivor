@@ -1159,28 +1159,78 @@ bool IRExecutionUnit::CommitOneAllocation(lldb::ProcessSP &process_sp,
 }
 
 bool IRExecutionUnit::CommitAllocations(lldb::ProcessSP &process_sp) {
-  bool ret = true;
 
   lldb_private::Status err;
+  size_t neededSize = 0;
 
-  for (AllocationRecord &record : m_records) {
-    ret = CommitOneAllocation(process_sp, err, record);
-
-    if (!ret) {
-      break;
+  auto shouldIgnoreSection = [](AllocationRecord &record) {
+    switch (record.m_sect_type) {
+    case lldb::eSectionTypeInvalid:
+    case lldb::eSectionTypeDWARFDebugAbbrev:
+    case lldb::eSectionTypeDWARFDebugAddr:
+    case lldb::eSectionTypeDWARFDebugAranges:
+    case lldb::eSectionTypeDWARFDebugCuIndex:
+    case lldb::eSectionTypeDWARFDebugFrame:
+    case lldb::eSectionTypeDWARFDebugInfo:
+    case lldb::eSectionTypeDWARFDebugLine:
+    case lldb::eSectionTypeDWARFDebugLoc:
+    case lldb::eSectionTypeDWARFDebugLocLists:
+    case lldb::eSectionTypeDWARFDebugMacInfo:
+    case lldb::eSectionTypeDWARFDebugPubNames:
+    case lldb::eSectionTypeDWARFDebugPubTypes:
+    case lldb::eSectionTypeDWARFDebugRanges:
+    case lldb::eSectionTypeDWARFDebugStr:
+    case lldb::eSectionTypeDWARFDebugStrOffsets:
+    case lldb::eSectionTypeDWARFAppleNames:
+    case lldb::eSectionTypeDWARFAppleTypes:
+    case lldb::eSectionTypeDWARFAppleNamespaces:
+    case lldb::eSectionTypeDWARFAppleObjC:
+    case lldb::eSectionTypeDWARFGNUDebugAltLink: {
+      return true;
     }
-  }
+    default:
+      return false;
+    }
+  };
 
-  if (!ret) {
-    for (AllocationRecord &record : m_records) {
-      if (record.m_process_address != LLDB_INVALID_ADDRESS) {
-        Free(record.m_process_address, err);
-        record.m_process_address = LLDB_INVALID_ADDRESS;
+  std::map<uint64_t, uint64_t> offsets;
+  for (size_t i = 0; i < m_records.size();i++) {
+
+    if (shouldIgnoreSection(m_records[i])) {
+      continue;
+    }
+
+    if (neededSize % m_records.at(i).m_alignment != 0) {
+      neededSize = neededSize / m_records.at(i).m_alignment *
+                       m_records.at(i).m_alignment +
+                   m_records.at(i).m_alignment;
+    }
+
+    offsets[i] = neededSize;
+    neededSize = neededSize + m_records.at(i).m_size;
+
+      if (neededSize % m_records.at(i).m_alignment != 0) {
+      neededSize = neededSize / m_records.at(i).m_alignment *
+                         m_records.at(i).m_alignment +
+                     m_records.at(i).m_alignment;
       }
     }
+  auto allocatedAddr =
+      Malloc(neededSize, 1,
+             lldb::ePermissionsExecutable | lldb::ePermissionsWritable |
+                 lldb::ePermissionsReadable,
+             eAllocationPolicyProcessOnly, false, err);
+  if (!err.Success()) {
+
+    return false;
   }
 
-  return ret;
+  for (size_t i = 0; i < m_records.size(); i++) {
+    if (!shouldIgnoreSection(m_records[i])) {
+      m_records[i].m_process_address = allocatedAddr + offsets[i];
+    }
+  }
+  return true;
 }
 
 void IRExecutionUnit::ReportAllocations(llvm::ExecutionEngine &engine) {

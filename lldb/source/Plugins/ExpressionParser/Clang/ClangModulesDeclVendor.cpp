@@ -396,8 +396,7 @@ public:
     }
 
     std::vector<clang::NamedDecl*> getWatnedDecls(clang::ASTContext& AST) {
-        if (!s_is_cached_decls) {
-            s_is_cached_decls = true;
+        if (s_cached_decls.empty()) {
             TraverseAST(AST);
         }
 
@@ -523,16 +522,12 @@ public:
   }
   std::string m_wantedDeclName;
   clang::DeclContext *m_context = nullptr;
-  thread_local static bool s_is_cached_decls;
   thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
 };
 
-thread_local bool ExampleVisitor::s_is_cached_decls = false;
-thread_local std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls{};
-
+thread_local std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls;
 void clearClangModulesDeclVendorImplCache() {
-  ExampleVisitor::s_is_cached_decls = false;
-  ExampleVisitor::s_cached_decls.clear();
+  //ExampleVisitor::s_cached_decls.clear();
 }
 
 uint32_t ClangModulesDeclVendorImpl::FindDecls(

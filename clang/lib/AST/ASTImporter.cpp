@@ -82,34 +82,26 @@ public:
     m_wantedDeclName = wantedDeclName;
   }
   std::vector<clang::NamedDecl *> getWatnedDecls(clang::ASTContext &AST) {
-    if (!s_is_cached_decls) {
-      s_is_cached_decls = true;
       TraverseAST(AST);
-    }
     std::vector<clang::NamedDecl *> wanted_decls;
-    for (const auto &decl : s_cached_decls) {
+      for (const auto &decl : m_cached_decls) {
       wanted_decls.push_back(decl);
     }
     return wanted_decls;
   }
   bool TraverseDecl(clang::Decl *decl) {
     if (decl && llvm::dyn_cast<clang::NamedDecl>(decl)) {
-      s_cached_decls.push_back(llvm::dyn_cast<clang::NamedDecl>(decl));
+      m_cached_decls.push_back(llvm::dyn_cast<clang::NamedDecl>(decl));
     }
     return clang::RecursiveASTVisitor<ExampleVisitor2>::TraverseDecl(decl);
   }
   std::string m_wantedDeclName;
-  thread_local static bool s_is_cached_decls;
-  thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
+  std::vector<clang::NamedDecl *> m_cached_decls;
 };
-
-thread_local bool ExampleVisitor2::s_is_cached_decls = false;
-thread_local std::vector<clang::NamedDecl *> ExampleVisitor2::s_cached_decls{};
 
 
 void clearAstImporterCache() {
-  ExampleVisitor2::s_is_cached_decls = false;
-  ExampleVisitor2::s_cached_decls.clear();
+  
 }
 
 namespace clang {

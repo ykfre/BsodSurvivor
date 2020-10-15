@@ -516,7 +516,7 @@ public:
 [[noreturn]] inline void _Throw_bad_weak_ptr() { _THROW(bad_weak_ptr{}); }
 
 // CLASS _Ref_count_base
-class __declspec(novtable)
+class 
     _Ref_count_base { // common code for reference counting
 private:
 #ifdef _M_CEE_PURE
