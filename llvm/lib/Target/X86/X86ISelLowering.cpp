@@ -3994,16 +3994,14 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     CCValAssign &VA = ArgLocs[I];
     EVT RegVT = VA.getLocVT();
     SDValue Arg = OutVals[OutIndex];
-    if (CI) {
-      auto debugLoc = CI->getDebugLoc();
-      Arg.getNode()->setDebugLoc(debugLoc);
-   }
     bool isByVal = Flags.isByVal();
 
     // Promote the value if needed.
     switch (VA.getLocInfo()) {
-    default: llvm_unreachable("Unknown loc info!");
-    case CCValAssign::Full: break;
+    default:
+      llvm_unreachable("Unknown loc info!");
+    case CCValAssign::Full:
+      break;
     case CCValAssign::SExt:
       Arg = DAG.getNode(ISD::SIGN_EXTEND, dl, RegVT, Arg);
       break;
@@ -4052,7 +4050,7 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       break;
     }
     }
-
+        
     if (VA.needsCustom()) {
       assert(VA.getValVT() == MVT::v64i1 &&
              "Currently the only custom case is when we split v64i1 to 2 regs");

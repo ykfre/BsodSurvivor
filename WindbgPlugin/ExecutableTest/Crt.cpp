@@ -7,7 +7,7 @@ API bool g_shouldPauseExecute = 1;
 API bool g_notifyBp;
 API std::string g_expr;
 
-void print(const char* m) {
+extern "C" __declspec(dllexport)void print(const char* m) {
   std::cout << "expression failed:" << std::endl;
 	std::cout << m << std::endl; }
 

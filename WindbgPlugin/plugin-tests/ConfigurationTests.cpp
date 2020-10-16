@@ -8,6 +8,7 @@ class ConfigurationTests : public testing::Test {};
 std::string JSON_DATA = "{"
                         "\"executablePath\" : \"a.exe\","
                         " \"executableModuleName\" : \"module\","
+                        " \"callDestructorsFunctionName\" : \"callDestructorsFunctionName\","
                         " \"breakFunctionName\" : \"breakFunctionName\","
                         "\"allocateSpaceInStackFunctionName\" : " "\"allocateSpaceInStackFunctionName\","
                         "\"modulesNames\" : [ \"a\", \"b\" ]"

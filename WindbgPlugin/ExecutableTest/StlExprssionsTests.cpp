@@ -60,6 +60,8 @@ API void expectedTest() {
   RUN_EXPR(expr);
   failTestIfFalse(a.error() == 2);
   ClassWithDestructor s(1);
+  ClassWithDestructor n = s;
+  s = s;
   s == s;
   std::string expr2 = "std::expected<ClassWithDestructor, int> m(1);"
                       "m=ClassWithDestructor(1); "
@@ -94,9 +96,21 @@ API void sharedMemoryTest() {
     bool b = fs == fs;
   }
   std::string expr = ""
-                     "a.reset(new int(5));";
+                     "a.reset();"
+                     "auto f = a;"
+                     "FAIL_TEST_IF_FALSE(a==f);"
+                     "FAIL_TEST_IF_FALSE(nullptr == a);"
+                     "FAIL_TEST_IF_FALSE(nullptr == a.get());"
+                     "a.reset(new int(5));"
+                     "FAIL_TEST_IF_FALSE((bool)a);"
+                     "FAIL_TEST_IF_FALSE(*a == 5);;"
+                     "printf(\"value is %d\\n\", a.use_count());"
+                     "printf(\"value is %d\\n\", *a);"
+                     "printf(\"value is %p\\n\", a.get())";
+  "a.reset(new int(5));";
   RUN_EXPR(expr);
   auto d = a.use_count();
+  failTestIfFalse(*a == 5);
 }
 
 API void uniquePtrTest() {
@@ -182,27 +196,4 @@ API void allStl() {
 
 } // namespace expression
 } // namespace test
-
-ClassWithDestructor::ClassWithDestructor(int r) { m_r = r; }
-
-ClassWithDestructor::ClassWithDestructor(const ClassWithDestructor &other) {
-  m_r = other.m_r;
-}
-bool ClassWithDestructor::operator==(const ClassWithDestructor &other) const {
-  return m_r == m_r;
-};
-
-bool ClassWithDestructor::operator!=(const ClassWithDestructor &other) const {
-  return !(*this == other);
-};
-
-ClassWithDestructor &
-ClassWithDestructor::operator=(const ClassWithDestructor &other) {
-  m_r = other.m_r;
-  return *this;
-}
-
-ClassWithDestructor::~ClassWithDestructor() {
-  test::expression::g_counter += m_r;
-}
 
