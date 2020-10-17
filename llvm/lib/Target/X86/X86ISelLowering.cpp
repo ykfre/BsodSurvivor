@@ -3995,7 +3995,17 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     EVT RegVT = VA.getLocVT();
     SDValue Arg = OutVals[OutIndex];
     bool isByVal = Flags.isByVal();
-
+    
+    if (CI && !Arg.getNode()->getDebugLoc() &&
+        !CI->getDebugLoc().isImplicitCode()) {
+      auto debugLoc = CI->getDebugLoc();
+      Arg.getNode()->setDebugLoc(debugLoc);
+    }
+    if (II && !Arg.getNode()->getDebugLoc() && !II->getDebugLoc().isImplicitCode()) {
+      auto debugLoc = II->getDebugLoc();
+      Arg.getNode()->setDebugLoc(debugLoc);
+    }
+    
     // Promote the value if needed.
     switch (VA.getLocInfo()) {
     default:
