@@ -419,21 +419,8 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
                              ArgStringList &CmdArgs) {
   const llvm::Triple &Triple = TC.getTriple();
 
-  if (KernelOrKext) {
-    // -mkernel and -fapple-kext imply no exceptions, so claim exception related
-    // arguments now to avoid warnings about unused arguments.
-    Args.ClaimAllArgs(options::OPT_fexceptions);
-    Args.ClaimAllArgs(options::OPT_fno_exceptions);
-    Args.ClaimAllArgs(options::OPT_fobjc_exceptions);
-    Args.ClaimAllArgs(options::OPT_fno_objc_exceptions);
-    Args.ClaimAllArgs(options::OPT_fcxx_exceptions);
-    Args.ClaimAllArgs(options::OPT_fno_cxx_exceptions);
-    return;
-  }
-
   // See if the user explicitly enabled exceptions.
-  bool EH = Args.hasFlag(options::OPT_fexceptions, options::OPT_fno_exceptions,
-                         false);
+  bool EH = true;
 
   // Obj-C exceptions are enabled by default, regardless of -fexceptions. This
   // is not necessarily sensible, but follows GCC.
@@ -452,10 +439,7 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
     Arg *ExceptionArg = Args.getLastArg(
         options::OPT_fcxx_exceptions, options::OPT_fno_cxx_exceptions,
         options::OPT_fexceptions, options::OPT_fno_exceptions);
-    if (ExceptionArg)
-      CXXExceptionsEnabled =
-          ExceptionArg->getOption().matches(options::OPT_fcxx_exceptions) ||
-          ExceptionArg->getOption().matches(options::OPT_fexceptions);
+    CXXExceptionsEnabled = true;
 
     if (CXXExceptionsEnabled) {
       CmdArgs.push_back("-fcxx-exceptions");
@@ -463,11 +447,6 @@ static void addExceptionArgs(const ArgList &Args, types::ID InputType,
       EH = true;
     }
   }
-
-  // OPT_fignore_exceptions means exception could still be thrown,
-  // but no clean up or catch would happen in current module.
-  // So we do not set EH to false.
-  Args.AddLastArg(CmdArgs, options::OPT_fignore_exceptions);
 
   if (EH)
     CmdArgs.push_back("-fexceptions");
@@ -6576,14 +6555,8 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
   }
 
   const Driver &D = getToolChain().getDriver();
-  EHFlags EH = parseClangCLEHFlags(D, Args);
-  if (!isNVPTX && (EH.Synch || EH.Asynch)) {
-    if (types::isCXX(InputType))
-      CmdArgs.push_back("-fcxx-exceptions");
-    CmdArgs.push_back("-fexceptions");
-  }
-  if (types::isCXX(InputType) && EH.Synch && EH.NoUnwindC)
-    CmdArgs.push_back("-fexternc-nounwind");
+  CmdArgs.push_back("-fcxx-exceptions");
+  CmdArgs.push_back("-fexceptions");
 
   // /EP should expand to -E -P.
   if (Args.hasArg(options::OPT__SLASH_EP)) {
