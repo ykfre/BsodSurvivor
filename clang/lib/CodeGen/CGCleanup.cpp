@@ -777,12 +777,6 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     // emit it directly.
     if (HasFallthrough && !HasPrebranchedFallthrough &&
         !HasFixups && !HasExistingBranches) {
-      // mark EHa scope end for fall-through flow
-      if (IsEHa && getInvokeDest())
-        if (Personality.isMSVCXXPersonality())
-          EmitSehCppScopeEnd();
-        else
-          EmitSehTryScopeEnd();
       destroyOptimisticNormalEntry(*this, Scope);
       EHStack.popCleanup();
 
