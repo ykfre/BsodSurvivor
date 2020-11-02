@@ -2723,6 +2723,11 @@ public:
   void EmitCXXTemporary(const CXXTemporary *Temporary, QualType TempType,
                         Address Ptr);
 
+  void CodeGenFunction::EmitSehCppScopeBegin();
+  void CodeGenFunction::EmitSehCppScopeEnd();
+  void CodeGenFunction::EmitSehTryScopeBegin();
+  void CodeGenFunction::EmitSehTryScopeEnd();
+
   llvm::Value *EmitLifetimeStart(uint64_t Size, llvm::Value *Addr);
   void EmitLifetimeEnd(llvm::Value *Size, llvm::Value *Addr);
 
@@ -3073,6 +3078,7 @@ public:
   void EmitSEHLeaveStmt(const SEHLeaveStmt &S);
   void EnterSEHTryStmt(const SEHTryStmt &S);
   void ExitSEHTryStmt(const SEHTryStmt &S);
+  void VolatilizeTryBlocks(llvm::BasicBlock* BB, llvm::SmallPtrSet<llvm::BasicBlock*, 10>& V);
 
   void pushSEHCleanup(CleanupKind kind,
                       llvm::Function *FinallyFunc);

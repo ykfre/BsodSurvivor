@@ -190,6 +190,13 @@ public:
                                           ->getFirstInsertionPt().getNonConst();
   }
 
+  /// Returns the first potential -EHa faulty instruction
+  const Instruction * getFirstFaultyInst() const;
+  Instruction * getFirstFaultyInst() {
+    return const_cast<Instruction*>(
+      static_cast<const BasicBlock*>(this)->getFirstFaultyInst());
+  }
+
   /// Return a const iterator range over the instructions in the block, skipping
   /// any debug instructions.
   iterator_range<filter_iterator<BasicBlock::const_iterator,

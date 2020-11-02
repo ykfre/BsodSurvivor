@@ -2003,8 +2003,15 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   const VarDecl &D = *emission.Variable;
 
   // Check the type for a cleanup.
-  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext()))
+  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext())) {
     emitAutoVarTypeCleanup(emission, dtorKind);
+
+    // <tentzen>: Under -EHa, Invoke llvm.eha.scope.begin() right after
+    //      Ctor is emitted and EHStack.pushCleanup
+    bool IsEHa = getLangOpts().EHAsynch;
+    if (IsEHa && dtorKind == QualType::DK_cxx_destructor)
+      EmitSehCppScopeBegin();
+  }
 
   // In GC mode, honor objc_precise_lifetime.
   if (getLangOpts().getGC() != LangOptions::NonGC &&

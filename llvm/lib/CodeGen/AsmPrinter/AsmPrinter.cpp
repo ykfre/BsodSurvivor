@@ -1095,7 +1095,7 @@ void AsmPrinter::emitFunctionBody() {
   // Print out code for the function.
   bool HasAnyRealCode = false;
   int NumInstsInFunction = 0;
-
+  bool IsEHa = MMI->getModule()->getModuleFlag("eh-asynch");
   for (auto &MBB : *MF) {
     // Print a label for the basic block.
     emitBasicBlockStart(MBB);
@@ -1131,9 +1131,23 @@ void AsmPrinter::emitFunctionBody() {
         emitFrameAlloc(MI);
         break;
       case TargetOpcode::ANNOTATION_LABEL:
-      case TargetOpcode::EH_LABEL:
       case TargetOpcode::GC_LABEL:
         OutStreamer->emitLabel(MI.getOperand(0).getMCSymbol());
+        break;
+      case TargetOpcode::EH_LABEL:
+        OutStreamer->emitLabel(MI.getOperand(0).getMCSymbol());
+        // For IsEHa, insert a Nop if followed by a trap inst
+        //   Or the exception won't be caught.
+        //   (see MCConstantExpr::create(1,..) in WinException.cpp)
+        //  Ignore SDiv/UDiv bcause a DIV with Const-0 divisor
+        //    must have being turned into an UndefValue.
+        //  Div with variable opnds must be led by at least a Load
+        {
+          auto MI2 = std::next(MI.getIterator());
+          if (IsEHa && MI2 != MBB.end()
+                    && (MI2->mayLoadOrStore() || MI2->mayRaiseFPException()))
+            emitNops(1);
+        }
         break;
       case TargetOpcode::INLINEASM:
       case TargetOpcode::INLINEASM_BR:

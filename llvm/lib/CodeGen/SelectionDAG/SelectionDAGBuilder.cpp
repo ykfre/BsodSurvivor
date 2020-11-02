@@ -2784,6 +2784,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
   // catchswitch for successors.
   MachineBasicBlock *Return = FuncInfo.MBBMap[I.getSuccessor(0)];
   const BasicBlock *EHPadBB = I.getSuccessor(1);
+  MachineBasicBlock* CleanupMBB = FuncInfo.MBBMap[EHPadBB];
 
   // Deopt bundles are lowered in LowerCallSiteWithDeoptBundle, and we don't
   // have to do anything here to lower funclet bundles.
@@ -2804,6 +2805,12 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
       llvm_unreachable("Cannot invoke this intrinsic");
     case Intrinsic::donothing:
       // Ignore invokes to @llvm.donothing: jump directly to the next BB.
+    case Intrinsic::seh_try_begin:
+    case Intrinsic::eha_scope_begin:
+    case Intrinsic::seh_try_end:
+    case Intrinsic::eha_scope_end:
+      if (CleanupMBB) // a CleanupPad, referenced by EH table
+        CleanupMBB->setHasAddressTaken(); // so dtor-funclet not removed by opts
       break;
     case Intrinsic::experimental_patchpoint_void:
     case Intrinsic::experimental_patchpoint_i64:
@@ -6641,6 +6648,10 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
       lowerCallToExternalSymbol(I, FunctionName);
     return;
   case Intrinsic::donothing:
+  case Intrinsic::seh_try_begin:
+  case Intrinsic::eha_scope_begin:
+  case Intrinsic::seh_try_end:
+  case Intrinsic::eha_scope_end:
     // ignore
     return;
   case Intrinsic::experimental_stackmap:
