@@ -1988,6 +1988,7 @@ void CodeGenFunction::emitAutoVarTypeCleanup(
   bool useEHCleanup = (cleanupKind & EHCleanup);
   EHStack.pushCleanup<DestroyObject>(cleanupKind, addr, type, destroyer,
                                      useEHCleanup);
+  EmitSehCppScopeBegin();
 }
 
 void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
@@ -2009,8 +2010,7 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
     // <tentzen>: Under -EHa, Invoke llvm.eha.scope.begin() right after
     //      Ctor is emitted and EHStack.pushCleanup
     bool IsEHa = getLangOpts().EHAsynch;
-    if (IsEHa && dtorKind == QualType::DK_cxx_destructor)
-      EmitSehCppScopeBegin();
+
   }
 
   // In GC mode, honor objc_precise_lifetime.
@@ -2086,6 +2086,7 @@ void CodeGenFunction::pushDestroy(CleanupKind cleanupKind, Address addr,
                                   bool useEHCleanupForArray) {
   pushFullExprCleanup<DestroyObject>(cleanupKind, addr, type,
                                      destroyer, useEHCleanupForArray);
+  EmitSehCppScopeBegin();
 }
 
 void CodeGenFunction::pushStackRestore(CleanupKind Kind, Address SPMem) {
@@ -2107,6 +2108,7 @@ void CodeGenFunction::pushLifetimeExtendedDestroy(
   // end of the full-expression.
   pushCleanupAfterFullExpr<DestroyObject>(
       cleanupKind, addr, type, destroyer, useEHCleanupForArray);
+  EmitSehCppScopeBegin();
 }
 
 /// emitDestroy - Immediately perform the destruction of the given

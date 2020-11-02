@@ -764,7 +764,6 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     cleanupFlags.setIsNormalCleanupKind();
   if (Scope.isEHCleanup())
     cleanupFlags.setIsEHCleanupKind();
-
   if (!RequiresNormalCleanup) {
     destroyOptimisticNormalEntry(*this, Scope);
     EHStack.popCleanup();
@@ -778,6 +777,12 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     if (HasFallthrough && !HasPrebranchedFallthrough &&
         !HasFixups && !HasExistingBranches) {
       destroyOptimisticNormalEntry(*this, Scope);
+      if (RequiresEHCleanup) {
+        if (Personality.isMSVCXXPersonality())
+          EmitSehCppScopeEnd();
+        else
+          EmitSehTryScopeEnd();
+      }
       EHStack.popCleanup();
 
       EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
@@ -810,12 +815,15 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
       // should already be branched to it.
       EmitBlock(NormalEntry);
 
-      // intercept normal cleanup to mark EHa scope end
-      if (IsEHa)
-        if (Personality.isMSVCXXPersonality())
-          EmitSehCppScopeEnd();
-        else
-          EmitSehTryScopeEnd();
+      if (RequiresEHCleanup) {
+        // intercept normal cleanup to mark EHa scope end
+        if (IsEHa)
+          if (Personality.isMSVCXXPersonality())
+            EmitSehCppScopeEnd();
+          else
+            EmitSehTryScopeEnd();
+      }
+      
       // III.  Figure out where we're going and build the cleanup
       // epilogue.
 
@@ -1026,6 +1034,8 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
 
     SimplifyCleanupEntry(*this, EHEntry);
   }
+
+
 }
 
 /// isObviouslyBranchWithoutCleanups - Return true if a branch to the
@@ -1293,7 +1303,7 @@ void CodeGenFunction::EmitCXXTemporary(const CXXTemporary *Temporary,
 
 // EmitRuntimeCallOrInvoke() does not work bcause "funclet" not set
 //   in OperandBundle properly for noThrow intrinsic (see CGCall.cpp)
-static void EmitSehEHaScope(CodeGenFunction& CGF,
+static llvm::InvokeInst* EmitSehEHaScope(CodeGenFunction& CGF,
   llvm::FunctionCallee& SehCppScope)
 {
   llvm::BasicBlock* InvokeDest = CGF.getInvokeDest();
@@ -1304,8 +1314,9 @@ static void EmitSehEHaScope(CodeGenFunction& CGF,
     CGF.getBundlesForFunclet(SehCppScope.getCallee());
   if (CGF.CurrentFuncletPad)
     BundleList.emplace_back("funclet", CGF.CurrentFuncletPad);
-  CGF.Builder.CreateInvoke(SehCppScope, Cont, InvokeDest, None, BundleList);
+  auto invoke = CGF.Builder.CreateInvoke(SehCppScope, Cont, InvokeDest, None, BundleList);
   CGF.EmitBlock(Cont);
+  return invoke;
 }
 
 // Invoke a llvm.eha.scope.begin at the beginning of a CPP scope for -EHa
