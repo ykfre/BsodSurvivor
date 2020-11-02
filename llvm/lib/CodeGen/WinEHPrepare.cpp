@@ -236,7 +236,7 @@ void llvm::calculateCXXStateForBlocks(const BasicBlock* BB, int State,
     State = EHInfo.CxxUnwindMap[State].ToState;  // Retrive next State
   }
   else if (isa<InvokeInst>(TI)) {
-    const Value* Callee(cast<InvokeInst>(TI)->getCalledValue());
+    const Value* Callee(cast<InvokeInst>(TI)->getCalledFunction());
     const Function* Fn = dyn_cast<Function>(Callee);
     if (Fn && Fn->isIntrinsic() &&
       (Fn->getIntrinsicID() == Intrinsic::eha_scope_begin ||
@@ -293,7 +293,7 @@ void llvm::calculateSEHStateForBlocks(const BasicBlock* BB, int State,
     State = EHInfo.SEHUnwindMap[State].ToState;  // Retrive next State
   }
   else if (isa<InvokeInst>(TI)) {
-    const Value* Callee(cast<InvokeInst>(TI)->getCalledValue());
+    const Value *Callee(cast<InvokeInst>(TI)->getCalledFunction());
     const Function* Fn = dyn_cast<Function>(Callee);
     if (Fn && Fn->isIntrinsic() && Fn->getIntrinsicID() == Intrinsic::seh_try_begin)
       // Retrive the new State from seh_try_begin
