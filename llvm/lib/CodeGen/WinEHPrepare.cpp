@@ -223,7 +223,6 @@ void llvm::calculateCXXStateForBlocks(const BasicBlock* BB, int State,
 {
   if (EHInfo.BlockToStateMap.count(BB) && EHInfo.BlockToStateMap[BB] <= State)
     return;  // skip already visited or EHPad
-
   const llvm::Instruction* I = BB->getFirstNonPHI();
   const llvm::Instruction* TI = BB->getTerminator();
   if (I->isEHPad())
@@ -245,9 +244,15 @@ void llvm::calculateCXXStateForBlocks(const BasicBlock* BB, int State,
       State = EHInfo.InvokeStateMap[cast<InvokeInst>(TI)];
     else if (Fn && Fn->isIntrinsic() &&
       (Fn->getIntrinsicID() == Intrinsic::eha_scope_end ||
-        Fn->getIntrinsicID() == Intrinsic::seh_try_end))
+        Fn->getIntrinsicID() == Intrinsic::seh_try_end)) {
+      // Handle the case of emitting too much of seh.try.end which is probably
+      // for now base class destructor.
+      if (State < 0) {
+        return;
+      }
       // end of current state, retrive new state from UnwindMap
       State = EHInfo.CxxUnwindMap[State].ToState;
+    }
   }
   // Continue traveling successors recursively
   for (auto* SuccBB : successors(BB)) {
@@ -299,8 +304,12 @@ void llvm::calculateSEHStateForBlocks(const BasicBlock* BB, int State,
       // Retrive the new State from seh_try_begin
       State = EHInfo.InvokeStateMap[cast<InvokeInst>(TI)];
     else if (Fn && Fn->isIntrinsic() && Fn->getIntrinsicID() == Intrinsic::seh_try_end)
-      // end of current state, retrive new state from UnwindMap
-      State = EHInfo.SEHUnwindMap[State].ToState;
+        // Handle the case of emitting too much of seh.try.end which is probably for now base class destructor.
+        if (State < 0) {
+        return;
+      }
+    // end of current state, retrive new state from UnwindMap
+    State = EHInfo.SEHUnwindMap[State].ToState;
   }
   // Continue traveling successors recursively
   for (auto* SuccBB : successors(BB)) {
