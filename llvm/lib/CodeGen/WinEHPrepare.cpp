@@ -303,13 +303,16 @@ void llvm::calculateSEHStateForBlocks(const BasicBlock* BB, int State,
     if (Fn && Fn->isIntrinsic() && Fn->getIntrinsicID() == Intrinsic::seh_try_begin)
       // Retrive the new State from seh_try_begin
       State = EHInfo.InvokeStateMap[cast<InvokeInst>(TI)];
-    else if (Fn && Fn->isIntrinsic() && Fn->getIntrinsicID() == Intrinsic::seh_try_end)
-        // Handle the case of emitting too much of seh.try.end which is probably for now base class destructor.
-        if (State < 0) {
+    else if (Fn && Fn->isIntrinsic() &&
+             Fn->getIntrinsicID() == Intrinsic::seh_try_end) {
+      // Handle the case of emitting too much of seh.try.end which is probably
+      // for now base class destructor.
+      if (State < 0) {
         return;
       }
-    // end of current state, retrive new state from UnwindMap
-    State = EHInfo.SEHUnwindMap[State].ToState;
+      // end of current state, retrive new state from UnwindMap
+      State = EHInfo.SEHUnwindMap[State].ToState;
+    }
   }
   // Continue traveling successors recursively
   for (auto* SuccBB : successors(BB)) {
