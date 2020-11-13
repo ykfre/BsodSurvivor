@@ -778,10 +778,12 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
         !HasFixups && !HasExistingBranches) {
       destroyOptimisticNormalEntry(*this, Scope);
       if (RequiresEHCleanup) {
-        if (Personality.isMSVCXXPersonality())
-          EmitSehCppScopeEnd();
-        else
-          EmitSehTryScopeEnd();
+        if (!EHStack.empty()) {
+          if (Personality.isMSVCXXPersonality())
+            EmitSehCppScopeEnd();
+          else
+            EmitSehTryScopeEnd();
+        }
       }
       EHStack.popCleanup();
 
@@ -817,11 +819,14 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
 
       if (RequiresEHCleanup) {
         // intercept normal cleanup to mark EHa scope end
-        if (IsEHa)
-          if (Personality.isMSVCXXPersonality())
-            EmitSehCppScopeEnd();
-          else
-            EmitSehTryScopeEnd();
+        if (IsEHa) {
+          if (!EHStack.empty()) {
+            if (Personality.isMSVCXXPersonality())
+              EmitSehCppScopeEnd();
+            else
+              EmitSehTryScopeEnd();
+          }
+        }
       }
       
       // III.  Figure out where we're going and build the cleanup
@@ -1307,8 +1312,11 @@ static llvm::InvokeInst* EmitSehEHaScope(CodeGenFunction& CGF,
   llvm::FunctionCallee& SehCppScope)
 {
   llvm::BasicBlock* InvokeDest = CGF.getInvokeDest();
+  if (!InvokeDest) {
+    return nullptr;
+  }
   llvm::BasicBlock* BB = CGF.Builder.GetInsertBlock();
-  assert(BB && InvokeDest);
+  assert(BB);
   llvm::BasicBlock* Cont = CGF.createBasicBlock("invoke.cont");
   SmallVector<llvm::OperandBundleDef, 1> BundleList =
     CGF.getBundlesForFunclet(SehCppScope.getCallee());
