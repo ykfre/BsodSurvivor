@@ -88,20 +88,22 @@
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClExecutable>C:\code\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
     <ClangClAdditionalOptions>-gdwarf -Xclang -femit-all-decls</ClangClAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClExecutable>C:\code\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
     <ClangClAdditionalOptions>-gdwarf -Xclang -femit-all-decls</ClangClAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClExecutable>C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
     <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
+    <LldLinkExecutable>C:\code\llvm-project\temp\Release\bin\lld-link.exe</LldLinkExecutable>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClangClExecutable>C:\temp2\llvm-project\temp\Release\bin\clang-cl.exe</ClangClExecutable>
     <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
+    <LldLinkExecutable>C:\code\llvm-project\temp\Release\bin\lld-link.exe</LldLinkExecutable>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -110,6 +112,7 @@
       <PreprocessorDefinitions>EXPORTS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -126,6 +129,7 @@
       <PreprocessorDefinitions>EXPORTS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <ExceptionHandling>Async</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -143,7 +147,8 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
-      <ExceptionHandling>false</ExceptionHandling>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -164,7 +169,8 @@
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
       <WholeProgramOptimization>false</WholeProgramOptimization>
-      <ExceptionHandling>false</ExceptionHandling>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -177,8 +183,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AssertUtils.cpp" />
+    <ClCompile Include="blink\First.cpp" />
+    <ClCompile Include="blink\Second.cpp" />
     <ClCompile Include="ClassWithDestructor.cpp" />
     <ClCompile Include="Crt.cpp" />
+    <ClCompile Include="Crt2.cpp" />
     <ClCompile Include="ExpressionTests.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="ReturnFromFrameTests.cpp" />
@@ -316,6 +325,11 @@
   <ItemGroup>
     <None Include="a.def" />
     <None Include="stl\listing.inc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ExternalDll\ExternalDll.vcxproj">
+      <Project>{eea989b2-f02d-4235-a12f-37c051683c49}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

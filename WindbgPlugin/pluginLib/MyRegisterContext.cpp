@@ -392,7 +392,7 @@ bool MyRegisterContext::ReadRegister(const RegisterInfo *reg_info,
   }
   if (m_regNameToValue.find(regName) == m_regNameToValue.end()) {
     m_regNameToValue[regName] =
-        t_platform->getRegisterValue(regName, m_concrete_frame_idx);
+        g_platform->getCurrentThread()->getRegisterValue(regName, m_concrete_frame_idx);
   }
   switch (reg) {
   case lldb_rax_x86_64:
@@ -534,190 +534,190 @@ bool MyRegisterContext::WriteRegister(const RegisterInfo *reg_info,
     __debugbreak();
   }
   std::bitset<128> value;
-
+  auto thread = g_platform->getCurrentThread();
   switch (reg_info->kinds[eRegisterKindLLDB]) {
   case lldb_rax_x86_64:
     m_regNameToValue["rax"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rax", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rax", reg_value.GetAsUInt64());
     break;
   case lldb_rbx_x86_64:
     m_regNameToValue["rbx"] = reg_value.GetAsUInt64();
 
-    t_platform->setRegisterValue("Rbx", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rbx", reg_value.GetAsUInt64());
     break;
   case lldb_rcx_x86_64:
     m_regNameToValue["rcx"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rcx", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rcx", reg_value.GetAsUInt64());
     break;
   case lldb_rdx_x86_64:
     m_regNameToValue["rdx"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rdx", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rdx", reg_value.GetAsUInt64());
     break;
   case lldb_rdi_x86_64:
     m_regNameToValue["rdi"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rdi", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rdi", reg_value.GetAsUInt64());
 
     break;
   case lldb_rsi_x86_64:
     m_regNameToValue["rsi"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rsi", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rsi", reg_value.GetAsUInt64());
 
     break;
   case lldb_r8_x86_64:
     m_regNameToValue["r8"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R8", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R8", reg_value.GetAsUInt64());
 
     break;
   case lldb_r9_x86_64:
     m_regNameToValue["r9"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R9", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R9", reg_value.GetAsUInt64());
 
     break;
   case lldb_r10_x86_64:
     m_regNameToValue["r10"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R10", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R10", reg_value.GetAsUInt64());
 
     break;
   case lldb_r11_x86_64:
     m_regNameToValue["r11"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R11", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R11", reg_value.GetAsUInt64());
 
     break;
   case lldb_r12_x86_64:
     m_regNameToValue["r12"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R12", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R12", reg_value.GetAsUInt64());
 
     break;
   case lldb_r13_x86_64:
     m_regNameToValue["r13"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R13", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R13", reg_value.GetAsUInt64());
 
     break;
   case lldb_r14_x86_64:
     m_regNameToValue["r14"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R14", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R14", reg_value.GetAsUInt64());
 
     break;
   case lldb_r15_x86_64:
     m_regNameToValue["r15"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("R15", reg_value.GetAsUInt64());
+    thread->setRegisterValue("R15", reg_value.GetAsUInt64());
 
     break;
   case lldb_rbp_x86_64:
     m_regNameToValue["rbp"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("RBP", reg_value.GetAsUInt64());
+    thread->setRegisterValue("RBP", reg_value.GetAsUInt64());
 
     break;
   case lldb_rsp_x86_64:
     m_regNameToValue["rsp"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rsp", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rsp", reg_value.GetAsUInt64());
 
     break;
   case lldb_rip_x86_64:
     m_regNameToValue["rip"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("Rip", reg_value.GetAsUInt64());
+    thread->setRegisterValue("Rip", reg_value.GetAsUInt64());
 
     break;
   case lldb_rflags_x86_64:
     m_regNameToValue["eflags"] = reg_value.GetAsUInt64();
-    t_platform->setRegisterValue("EFlags", reg_value.GetAsUInt64());
+    thread->setRegisterValue("EFlags", reg_value.GetAsUInt64());
 
     break;
   case lldb_xmm0_x86_64:
     memcpy(&m_regNameToValue["xmm0"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm0", value);
+    thread->setRegisterValue("Xmm0", value);
 
     break;
   case lldb_xmm1_x86_64:
     memcpy(&m_regNameToValue["xmm1"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm1", value);
+    thread->setRegisterValue("Xmm1", value);
     break;
   case lldb_xmm2_x86_64:
     memcpy(&m_regNameToValue["xmm2"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm2", value);
+    thread->setRegisterValue("Xmm2", value);
     break;
   case lldb_xmm3_x86_64:
 
     memcpy(&value, reg_value.GetBytes(), 16);
     memcpy(&m_regNameToValue["xmm3"], reg_value.GetBytes(), 16);
-    t_platform->setRegisterValue("Xmm3", value);
+    thread->setRegisterValue("Xmm3", value);
     break;
   case lldb_xmm4_x86_64:
     memcpy(&value, reg_value.GetBytes(), 16);
     memcpy(&m_regNameToValue["xmm4"], reg_value.GetBytes(), 16);
-    t_platform->setRegisterValue("Xmm4", value);
+    thread->setRegisterValue("Xmm4", value);
     break;
   case lldb_xmm5_x86_64:
     memcpy(&m_regNameToValue["xmm5"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm5", value);
+    thread->setRegisterValue("Xmm5", value);
     break;
   case lldb_xmm6_x86_64:
     memcpy(&m_regNameToValue["xmm6"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm6", value);
+    thread->setRegisterValue("Xmm6", value);
     break;
   case lldb_xmm7_x86_64:
     memcpy(&m_regNameToValue["xmm7"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm7", value);
+    thread->setRegisterValue("Xmm7", value);
     break;
   case lldb_xmm8_x86_64:
     memcpy(&m_regNameToValue["xmm8"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm8", value);
+    thread->setRegisterValue("Xmm8", value);
     break;
   case lldb_xmm9_x86_64:
     memcpy(&m_regNameToValue["xmm9"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm9", value);
+    thread->setRegisterValue("Xmm9", value);
     break;
   case lldb_xmm10_x86_64:
     memcpy(&m_regNameToValue["xmm10"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm10", value);
+    thread->setRegisterValue("Xmm10", value);
     break;
   case lldb_xmm11_x86_64:
     memcpy(&m_regNameToValue["xmm11"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm11", value);
+    thread->setRegisterValue("Xmm11", value);
     break;
   case lldb_xmm12_x86_64:
     memcpy(&m_regNameToValue["xmm12"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm12", value);
+    thread->setRegisterValue("Xmm12", value);
     break;
   case lldb_xmm13_x86_64:
     memcpy(&m_regNameToValue["xmm13"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm13", value);
+    thread->setRegisterValue("Xmm13", value);
     break;
   case lldb_xmm14_x86_64:
     memcpy(&m_regNameToValue["xmm14"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm14", value);
+    thread->setRegisterValue("Xmm14", value);
     break;
   case lldb_xmm15_x86_64:
     memcpy(&m_regNameToValue["xmm15"], reg_value.GetBytes(), 16);
     memcpy(&value, reg_value.GetBytes(), 16);
 
-    t_platform->setRegisterValue("Xmm15", value);
+    thread->setRegisterValue("Xmm15", value);
     break;
   }
 

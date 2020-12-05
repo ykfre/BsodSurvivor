@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
-
+#include "Config.h"
+#include "Platform.h"
 #include <Windows.h>
 #include "TestsUtils.h"
 #include "UserModePlatform.h"
@@ -9,16 +10,18 @@
 #include "Commands.h"
 
 
-class ExpressionTests : public testing::Test {
+class ExpressionTests : public TestUtils {
 public:
-  void SetUp() override { test::expression::g_counter = 0; }
+  void SetUp() override {
+    test::expression::g_counter = 0;
+    TestUtils::SetUp();
+  }
     void executeExpression(std::thread& t, int selectedFrameIndex =0) {
     waitForBpNotification();
     SuspendThread(t.native_handle());
     executeCommand(t, [&](CommonCommandArgs &args) {
-      t_platform = std::make_shared<UserModePlatform>(
-          (void *)t.native_handle(),
-          (void *)GetModuleHandleA(EXECUTABLE_TESTS_DLL.c_str()));
+      g_platform->setCurrentThread(
+          g_threadFactory->create(GetThreadId(t.native_handle())));
       args.selectedFrameIndex = selectedFrameIndex;
       return commands::executeExpression(args, g_expr);
     });

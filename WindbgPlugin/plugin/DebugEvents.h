@@ -1,5 +1,7 @@
 #pragma once
+#pragma warning(push, 0)
 #include <engextcpp.hpp>
+#pragma warning(pop)
 
 
 class DebugEvents : public IDebugEventCallbacks {

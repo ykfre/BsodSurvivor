@@ -3,9 +3,10 @@
 #include "CommonCommandArgs.h"
 #include "DebugEvents.h"
 #include "Event.h"
-#include "Module.h"
 #include "StringOutputCallbacks.h"
+#pragma warning(push, 0)
 #include <engextcpp.hpp>
+#pragma warning(pop)
 #include <map>
 #include <memory>
 #include <mutex>
@@ -24,13 +25,11 @@ public:
   EXT_COMMAND_METHOD(execute);
 
   void log(const std::string &output);
-  HRESULT initializeGlobals();
+  HRESULT initializeThreadGlobals();
   HRESULT Initialize() override;
 
-  std::vector<Module> getModules();
-
   std::map<size_t, int> m_bpAndCounters;
-
+  std::shared_ptr<size_t> m_event;
   inline static thread_local std::shared_ptr<IDebugClient5> t_debugClient5;
   inline static thread_local std::shared_ptr<IDebugClient> t_debugClient;
   inline static thread_local std::shared_ptr<IDebugControl> t_control;
@@ -41,15 +40,17 @@ public:
 
   inline static thread_local std::shared_ptr<IDebugRegisters2> t_registers2;
   inline static thread_local std::shared_ptr<IDebugDataSpaces> t_debug;
-
+  bool addFilePathToHook(const std::string& filePath, const std::string& fileData);
+  bool shouldAddFilePathToHook(const std::string &filePath);
   bool isKernelDebugger();
   inline static thread_local StringOutputCallbacks t_output;
+
 
 private:
   void
   executeCommand(const std::function<bool(CommonCommandArgs &args)> &command);
-
   DebugEvents m_debugEvents;
+  std::shared_ptr<void*> m_hook;
 };
 
 inline EXT_CLASS g_ExtInstance;

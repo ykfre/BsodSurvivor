@@ -1,0 +1,66 @@
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package LinkCommand;
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc Compile (LinkCommandRequest) returns (LinkCommandReply) {}
+  rpc ShouldSendPathData (ShouldSendPathDataRequest) returns (ShouldSendPathDataReply) {}
+  rpc SendPathData (SendPathDataRequest) returns (SendPathDataReply) {}
+  
+}
+
+message LinkCommandRequest {
+  string clangFilePath = 1;
+  string ldPath = 2;
+  string masmPath = 3;
+  string compilationFlags=4;
+  string linkerFlags=5;
+  string filePath=6;
+  
+  string objCopyPath=7;
+}
+
+
+
+// The response message containing the greetings
+message LinkCommandReply {
+  bool success=1;
+  string message = 2;
+}
+
+
+// The response message containing the greetings
+message ShouldSendPathDataRequest {
+  string path=1;
+}
+
+// The response message containing the greetings
+message ShouldSendPathDataReply {
+  bool should=1;
+}
+
+// The response message containing the greetings
+message SendPathDataRequest {
+  string path=1;
+  string data=2;
+}
+
+// The response message containing the greetings
+message SendPathDataReply {
+}

@@ -46,11 +46,15 @@ API void sanity(bool shouldCallDestructor) {
   }
 }
 
+void throwMaybe() { auto a = new int(5); }
+
 API void noDestructorsToCallTest() {
   auto a = []() {
     {
       M m;
       m.a = 5;
+      throwMaybe();
+      throwMaybe();
     }
     BP();
     M m;
@@ -164,16 +168,15 @@ API void scopeInScope4() {
   failTestIfFalse(g_counter == 5);
 }
 
-API void scopeInScope5() {
+API void bpAfterFirstDestructor() {
   []() {
     M m{1};
-    {
-      M r{4};
-      BP();
-      M j{3};
-    }
+    m.a = m.a;
+    BP();
+    M r{4};
+
   }();
-  failTestIfFalse(g_counter == 5);
+  failTestIfFalse(g_counter == 1);
 }
 
 API void multipleDestructorsTests() {

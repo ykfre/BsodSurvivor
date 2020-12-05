@@ -1,8 +1,8 @@
+#include "Platform.h"
 #include "Config.h"
 #include "FunctionRunManager.h"
 #include "TestsUtils.h"
 #include "gtest/gtest.h"
-#include <Windows.h>
 
 class ConfigurationTests : public testing::Test {};
 std::string JSON_DATA = "{"

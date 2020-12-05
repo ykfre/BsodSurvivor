@@ -1,18 +1,20 @@
 #include "WindbgPlatform.h"
 #include <algorithm>
+#pragma warning(push, 0)
 #include "ExtClass.h"
-#include <engextcpp.hpp>
-#include "Utils.h"
-#include "Logger.h"
+#pragma warning(pop, 0)
 #include "FunctionRunManager.h"
+#include "Logger.h"
+#include "Utils.h"
+#include "blink/blink.h"
+#include <engextcpp.hpp>
 #include <sstream>
-
 
 void WindbgPlatform::addBp(void *addr) {
   PDEBUG_BREAKPOINT bp = nullptr;
   ULONG breakPointsNum = 0;
   g_ExtInstance.t_control->GetNumberBreakpoints(&breakPointsNum);
-  for (size_t i = 0; i < breakPointsNum; i++) {
+  for (uint32_t i = 0; i < breakPointsNum; i++) {
     g_ExtInstance.t_control->GetBreakpointByIndex(i, &bp);
     ULONG64 offset = 0;
     bp->GetOffset(&offset);
@@ -21,25 +23,36 @@ void WindbgPlatform::addBp(void *addr) {
     }
   }
   g_ExtInstance.t_control->AddBreakpoint(DEBUG_BREAKPOINT_CODE, DEBUG_ANY_ID,
-                                        &bp);
+                                         &bp);
   bp->AddFlags(DEBUG_BREAKPOINT_ENABLED | DEBUG_BREAKPOINT_ADDER_ONLY);
   bp->SetOffset(size_t(addr));
   g_ExtInstance.m_bpAndCounters[(size_t)addr] += 1;
 }
 
+WindbgPlatform::WindbgPlatform() {
+  g_blink.m_onLoadModule.push_back(
+      [this](const std::shared_ptr<LoadedDll> &dll) {
+        onLoadDynamicModule(dll);
+      });
+
+  g_blink.m_onUnloadModule.push_back(
+      [this](const std::shared_ptr<LoadedDll> &dll) {
+        onUnLoadDynamicModule(dll);
+      });
+}
+
 void *WindbgPlatform::allocateMemory(size_t size) {
 
-  if (g_ExtInstance.isKernelDebugger()) {
+  if (!g_ExtInstance.isKernelDebugger()) {
     std::stringstream command;
     g_ExtInstance.t_output.clear();
     command << ".dvalloc " << std::hex << size;
     if (!SUCCEEDED(g_ExtInstance.t_control->Execute(
-            DEBUG_OUTCTL_THIS_CLIENT,
-                                      command.str().c_str(), 0))) {
+            DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0))) {
       return nullptr;
     }
-    int index = g_ExtInstance.t_output.m_text.rfind(" ");
-    if (index == -1) {
+    size_t index = g_ExtInstance.t_output.m_text.rfind(" ");
+    if (index == (size_t)-1) {
       return nullptr;
     }
     std::string text = g_ExtInstance.t_output.m_text.substr(index + 1);
@@ -52,10 +65,9 @@ void *WindbgPlatform::allocateMemory(size_t size) {
     return (void *)address;
   } else {
     constexpr int NonPagedPool = 0;
-    void* mallocAddr = nullptr;
-    auto mallocFound = findSymbol("nt", "ExAllocatePool", mallocAddr);
-    abortIfFalse(mallocFound, "not found allocate function");
-    if (!mallocFound) {
+    void *mallocAddr = g_blink.getSymbol("ExAllocatePool");
+    abortIfFalse(mallocAddr, "not found allocate function");
+    if (!mallocAddr) {
       return nullptr;
     }
     auto allocated_addr = runFunc(mallocAddr, {NonPagedPool, size});
@@ -67,19 +79,17 @@ void WindbgPlatform::deallocateMemory(void *address) {
   if (g_ExtInstance.isKernelDebugger()) {
     std::stringstream command;
     command << ".dvfree 0x" << std::hex << (size_t)address << " 0";
-    auto result = 
-        g_ExtInstance.t_control->Execute(DEBUG_OUTCTL_THIS_CLIENT,
-                                                  command.str().c_str(), 0);
+    auto result = g_ExtInstance.t_control->Execute(DEBUG_OUTCTL_THIS_CLIENT,
+                                                   command.str().c_str(), 0);
     abortIfFalse(SUCCEEDED(result), "deallocate failed");
   } else {
-    void *freeAddr = nullptr;
-    bool freeAddrFound = findSymbol("nt", "ExFreePool", freeAddr);
-    abortIfFalse(freeAddrFound, "not found deallocate function");
-    t_platform->runFunc((void *)freeAddr, {(size_t)address});
+    void *freeAddr = g_blink.getSymbol("ExFreePool");
+    abortIfFalse(freeAddr, "not found deallocate function");
+    g_platform->runFunc((void *)freeAddr, {(size_t)address});
   }
 }
 
-int WindbgPlatform::getThreadId() {
+int WindbgThread::getThreadId() {
   return getRegisterValue("$tid", 0).to_ulong();
 }
 
@@ -96,13 +106,12 @@ std::vector<std::string> WindbgPlatform::getNeededSymbolNames() {
   return Platform::getNeededSymbolNames();
 }
 
-
-std::bitset<128> WindbgPlatform::getRegisterValue(const std::string &registerName,
-                                             int frameIndex) {
+std::bitset<128> WindbgThread::getRegisterValue(const std::string &registerName,
+                                                int frameIndex) {
 
   abortIfFalse(SUCCEEDED(g_ExtInstance.t_control->Execute(
                    DEBUG_OUTCTL_THIS_CLIENT, "rm 0x839 ", 0)),
-      "rm failed");
+               "rm failed");
   g_ExtInstance.t_output.clear();
   abortIfFalse(
       SUCCEEDED(g_ExtInstance.t_control->Execute(
@@ -120,11 +129,11 @@ std::bitset<128> WindbgPlatform::getRegisterValue(const std::string &registerNam
   if (!SUCCEEDED(result)) {
     result = g_ExtInstance.t_registers2->GetPseudoIndexByName(
         registerNameLower.c_str(), &index);
-    abortIfFalse(result, "failed get index value " + registerNameLower);
+    abortIfFalse(SUCCEEDED(result),
+                 "failed get index value " + registerNameLower);
 
     g_ExtInstance.t_registers2->GetPseudoValues(DEBUG_REGSRC_FRAME, 1, nullptr,
-                                                index,
-                                  &value);
+                                                index, &value);
     abortIfFalse(SUCCEEDED(result), "failed get index value " + registerName);
     std::bitset<128> Returnvalue;
     int registerSize = 8;
@@ -134,19 +143,19 @@ std::bitset<128> WindbgPlatform::getRegisterValue(const std::string &registerNam
     memcpy(&Returnvalue, value.RawBytes, registerSize);
     abortIfFalse(SUCCEEDED((g_ExtInstance.t_control->Execute(
                      DEBUG_OUTCTL_THIS_CLIENT, "rm 0x2 ", 0))),
-        "rm 2 failed");
+                 "rm 2 failed");
 
     return Returnvalue;
   }
   abortIfFalse(SUCCEEDED((g_ExtInstance.t_control->Execute(
                    DEBUG_OUTCTL_THIS_CLIENT, "rm 0x2 ", 0))),
-      "rm 2 failed");
+               "rm 2 failed");
   return getRegistersFromOutput(g_ExtInstance.t_output.m_text)
       .at(registerNameLower);
 }
 
-void WindbgPlatform::setRegisterValue(const std::string &registerName,
-                                 const std::bitset<128>& value) {
+void WindbgThread::setRegisterValue(const std::string &registerName,
+                                    const std::bitset<128> &value) {
 
   DEBUG_VALUE debugValue;
   std::string registerNameLower = getCorrectRegisterName(registerName);
@@ -167,8 +176,7 @@ void WindbgPlatform::setRegisterValue(const std::string &registerName,
     abortIfFalse(SUCCEEDED(result),
                  "failed set index name " + registerNameLower);
     g_ExtInstance.t_registers2->SetPseudoValues(DEBUG_REGSRC_FRAME, 1, nullptr,
-                                                index,
-                                  &debugValue);
+                                                index, &debugValue);
   } else {
     debugValue.Type = type;
     result = g_ExtInstance.t_registers2->SetValue(index, &debugValue);
@@ -176,7 +184,7 @@ void WindbgPlatform::setRegisterValue(const std::string &registerName,
   abortIfFalse(SUCCEEDED(result), "failed set index name " + registerNameLower);
 }
 
-void WindbgPlatform::resumeThread() {
+void WindbgThread::resumeThread() {
   auto result = g_ExtInstance.t_control->Execute(DEBUG_OUTPUT_NORMAL, "g", 0);
 
   abortIfFalse(SUCCEEDED(result), "resuming failed");
@@ -184,21 +192,22 @@ void WindbgPlatform::resumeThread() {
 
 size_t WindbgPlatform::readMemory(void *addr, void *buf, size_t size) {
   ULONG bytesRead = 0;
-  g_ExtInstance.t_debug->ReadVirtual((size_t)addr, buf, size, &bytesRead);
+  g_ExtInstance.t_debug->ReadVirtual((size_t)addr, buf, (uint32_t)size,
+                                     &bytesRead);
   return size;
 }
 
 size_t WindbgPlatform::writeMemory(void *addr, const void *buf, size_t size) {
   ULONG bytesRead = 0;
-  if (!SUCCEEDED(g_ExtInstance.t_debug->WriteVirtual((size_t)addr, (void *)buf,
-                                                     size, &bytesRead))) {
+  if (!SUCCEEDED(g_ExtInstance.t_debug->WriteVirtual(
+          (size_t)addr, (void *)buf, (uint32_t)size, &bytesRead))) {
     return 0;
   }
   return bytesRead;
 }
 
 std::string
-WindbgPlatform::getCorrectRegisterName(const std::string &registerName) {
+WindbgThread::getCorrectRegisterName(const std::string &registerName) {
   std::string registerNameLower = registerName;
 
   std::transform(registerNameLower.begin(), registerNameLower.end(),
@@ -211,7 +220,7 @@ WindbgPlatform::getCorrectRegisterName(const std::string &registerName) {
 }
 
 std::map<std::string, std::bitset<128>>
-WindbgPlatform::getRegistersFromOutput(const std::string &windbgOutput) {
+WindbgThread::getRegistersFromOutput(const std::string &windbgOutput) {
   std::map<std::string, std::bitset<128>> result;
   auto lines = splitString(windbgOutput, "\n");
   for (const auto &line : lines) {
@@ -254,13 +263,78 @@ WindbgPlatform::getRegistersFromOutput(const std::string &windbgOutput) {
   return result;
 }
 
+std::vector<std::shared_ptr<LoadedDll>> WindbgPlatform::getModules() {
+  ULONG moudlesNum = 0;
+  ULONG unloadedModuleNum = 0;
+  g_ExtInstance.t_symbols3->GetNumberModules(&moudlesNum, &unloadedModuleNum);
+  std::vector<std::shared_ptr<LoadedDll>> modules;
+  for (int i = 0; i < static_cast<int>(moudlesNum); i++) {
+    ULONG64 moduleStart = 0;
+    g_ExtInstance.t_symbols->GetModuleByIndex(i, &moduleStart);
+    std::string moduleName;
+    const int MAX_NAME = 1024;
+    moduleName.resize(MAX_NAME);
+    ULONG nameSize;
+    if (!SUCCEEDED(g_ExtInstance.t_symbols3->GetModuleNameString(
+            DEBUG_MODNAME_MODULE, DEBUG_ANY_ID, moduleStart,
+            (char *)moduleName.c_str(), MAX_NAME, &nameSize))) {
+      continue;
+    }
+    moduleName.resize(nameSize);
+    moduleName = std::string(moduleName.c_str());
 
-bool
-WindbgPlatform::runThreadPlan() {
+    std::transform(moduleName.begin(), moduleName.end(), moduleName.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    DEBUG_MODULE_PARAMETERS modParams = {};
+    if (!SUCCEEDED(g_ExtInstance.t_symbols->GetModuleParameters(
+            1, &moduleStart, 0, &modParams))) {
+      continue;
+    }
+    modules.push_back(
+        std::make_shared<LoadedDll>(moduleName, (void *)moduleStart,
+                                    LoadedDll::LoadedDynamically::NOT_DYNAMIC));
+  }
+  return modules;
+}
+
+bool WindbgPlatform::runThreadPlan() {
   writeLog("after parsing command");
   addBp(getFunctionToBreakAddress());
-  auto event = g_functionRunManager.registerForBpHittedForTid(getThreadId());
-  resumeThread();
-  g_functionRunManager.waitForFunctionToEnd(event, getThreadId());
+  auto thread = getCurrentThread();
+  auto event =
+      g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
+  thread->resumeThread();
+  g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
+
   return true;
+}
+
+void WindbgPlatform::onLoadDynamicModule(
+    const std::shared_ptr<LoadedDll> &dll) {
+  std::stringstream command;
+  command << ".reload /f " << dll->getName() << "=" << std::hex
+          << dll->getStartAddress();
+  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
+      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
+  assert(res);
+}
+
+void WindbgPlatform::onUnLoadDynamicModule(
+    const std::shared_ptr<LoadedDll> &dll) {
+  auto thread = g_threadFactory->create(0);
+  std::stringstream command;
+  command << ".reload /u " << dll->getName();
+  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
+      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
+  assert(res);
+}
+
+bool WindbgThread::initialize() {
+  return SUCCEEDED(g_ExtInstance.initializeThreadGlobals());
+}
+
+std::shared_ptr<PlatformThread> WindbgThreadFactory::create(int tid) {
+  auto thread = std::make_shared<WindbgThread>();
+  thread->initialize();
+  return thread;
 }

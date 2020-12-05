@@ -17,7 +17,7 @@ API void scopeInScope();
 API void scopeInScope2();
 API void scopeInScope3();
 API void scopeInScope4();
-API void scopeInScope5();
+API void bpAfterFirstDestructor();
 API void multipleDestructorsTests();
 API void noOperationAfterConstructor();
 API void sanity(bool shouldCallDestructor);

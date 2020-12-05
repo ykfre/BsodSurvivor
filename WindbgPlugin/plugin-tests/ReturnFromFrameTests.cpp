@@ -1,26 +1,26 @@
 
 #include "Commands.h"
 #include "gtest/gtest.h"
-
+#include "Config.h"
 #include "Commands.h"
 #include "Crt.h"
 #include "ReturnFromFrameTests.h"
 #include "TestsUtils.h"
 #include "UserModePlatform.h"
-class ReturnFromFrameTests : public testing::Test {
+class ReturnFromFrameTests : public TestUtils {
 public:
   void SetUp() override {
     tests::returnFromFrame ::g_frameTwoMet = false;
     tests::returnFromFrame::g_counter = 0;
+    TestUtils::SetUp();
   }
   void returnFromFrame(std::thread &t, bool shouldCallDestructor,
                        int untilFrameIndex = 1) {
     waitForBpNotification();
     SuspendThread(t.native_handle());
     executeCommand(t, [&](CommonCommandArgs &args) {
-      t_platform = std::make_shared<UserModePlatform>(
-          (void *)t.native_handle(),
-          (void *)GetModuleHandleA(EXECUTABLE_TESTS_DLL.c_str()));
+      g_platform->setCurrentThread(
+          g_threadFactory->create(GetThreadId(t.native_handle())));
       args.selectedFrameIndex = 0;
       return commands::returnFromFrame(args, untilFrameIndex,
                                        shouldCallDestructor);
@@ -89,11 +89,12 @@ TEST_F(ReturnFromFrameTests, scopeInScope4) {
   t.join();
 }
 
-TEST_F(ReturnFromFrameTests, scopeInScope5) {
-  std::thread t(tests::returnFromFrame::scopeInScope5);
+TEST_F(ReturnFromFrameTests, bpAfterFirstDestructor) {
+  std::thread t(tests::returnFromFrame::bpAfterFirstDestructor);
   returnFromFrame(t, true, 1);
   t.join();
 }
+
 TEST_F(ReturnFromFrameTests, noOperationAfterConstructor) {
   std::thread t(tests::returnFromFrame::noOperationAfterConstructor);
   returnFromFrame(t, true, 1);

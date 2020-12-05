@@ -2,6 +2,9 @@
 #include "Config.h"
 #include "FunctionRunManager.h"
 #include "Utils.h"
+#include "Logger.h"
+#include "blink/blink.h"
+
 
 std::vector<std::string> Platform::getNeededSymbolNames() {
   return std::vector<std::string>{g_config.breakFunctionName,
@@ -11,16 +14,25 @@ std::vector<std::string> Platform::getNeededSymbolNames() {
 
 void *Platform::getFunctionToBreakAddress() {
   void *functionToBreakAddress = nullptr;
-  auto result = findSymbol(g_config.executableModuleName,
-                           g_config.breakFunctionName, functionToBreakAddress);
-  abortIfFalse(result, "not found a bp function");
+  functionToBreakAddress = g_blink.getSymbol(g_config.breakFunctionName);
+  abortIfFalse(functionToBreakAddress, "not found a bp function");
   return functionToBreakAddress;
 }
 
 void *Platform::getCallDestructorsFunction() {
-  void *function = nullptr;
-  auto result = findSymbol(g_config.executableModuleName,
-                           g_config.callDestructorsFunctionName, function);
-  abortIfFalse(result, "not found call destructors function");
+  void *function =
+      g_blink.getSymbol(g_config.callDestructorsFunctionName);
+  abortIfFalse(function, "not found call destructors function");
   return function;
+}
+
+bool Platform::verifyPreConditions() {
+  for (const auto &symbol : g_platform->getNeededSymbolNames()) {
+    void *outAddr = nullptr;
+    if (!g_blink.getSymbol(symbol)) {
+      writeLog("failed to find symbol " + symbol);
+      return false;
+    }
+  }
+  return true;
 }

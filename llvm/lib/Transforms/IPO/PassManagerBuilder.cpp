@@ -476,12 +476,67 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(createControlHeightReductionLegacyPass());
 }
 
+struct Hello : public ModulePass {
+public:
+  static char ID;
+  Hello() : ModulePass(ID) {}
+  bool runOnModule(Module &M) override {
+    bool isChanged = false;
+    auto f = M.getOrInsertFunction("fsfd", llvm::Type::getVoidTy(M.getContext()))
+                 .getCallee();
+    auto func = dyn_cast<llvm::Function>(f);
+    func->setAttributes(llvm::AttributeList{});
+    for (auto &FF : M) {
+        if (FF.getName().find("fsfd") != -1)
+        {
+        continue;
+      }
+      for (auto &B : FF) {
+        for (llvm::BasicBlock::iterator J = B.begin(), JE = B.end(); J != JE;
+             ++J) {
+          if (isa<llvm::LoadInst>(J) ||
+              isa<llvm::StoreInst>(J)) {
+            Instruction *newInst = CallInst::Create(func, "");
+            B.getInstList().insertAfter(J, newInst);          
+          }
+        }
+      }
+    }
+    for (auto &f : M) {
+      auto symbolName = f.getName();
+      if (symbolName.startswith("__jmp_")) {
+        continue;
+      }
+      if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage) {
+        continue;
+      }
+      if (f.isDLLImportDependent()) {
+        continue;
+      }
+
+      if (f.getName() == "__CxxFrameHandler3") {
+        continue;
+      }
+      isChanged = true;
+      auto FDecl = Function::Create(
+          f.getFunctionType(), GlobalValue::ExternalLinkage,
+          f.getAddressSpace(), ("__jmp_" + f.getName()).str(), &M);
+      FDecl->setAttributes(f.getAttributes());
+      FDecl->setCallingConv(f.getCallingConv());
+      f.replaceNonMetadataUsesWith(FDecl);
+    }
+
+    return isChanged;
+  }
+};
+char Hello::ID = 4;
+
 void PassManagerBuilder::populateModulePassManager(
     legacy::PassManagerBase &MPM) {
   // Whether this is a default or *LTO pre-link pipeline. The FullLTO post-link
   // is handled separately, so just check this is not the ThinLTO post-link.
   bool DefaultOrPreLinkPipeline = !PerformThinLTO;
-
+  MPM.add(new Hello());
   if (!PGOSampleUse.empty()) {
     MPM.add(createPruneEHPass());
     // In ThinLTO mode, when flattened profile is used, all the available

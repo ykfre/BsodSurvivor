@@ -13,6 +13,7 @@ struct Config
   std::string callDestructorsFunctionName;
   std::string allocateSpaceInStackFunctionName;
   std::vector<std::string> modulesNames;
+  size_t serverPort = 0;
 };
 
 inline Config g_config;

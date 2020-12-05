@@ -1389,7 +1389,7 @@ bool AttributeList::hasAttributes(unsigned Index) const {
 }
 
 bool AttributeList::hasFnAttribute(Attribute::AttrKind Kind) const {
-  return false;
+  return pImpl && pImpl->hasFnAttribute(Kind);
 }
 
 bool AttributeList::hasFnAttribute(StringRef Kind) const {

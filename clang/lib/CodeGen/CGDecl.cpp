@@ -1924,9 +1924,7 @@ void CodeGenFunction::EmitExprAsInit(const Expr *init, const ValueDecl *D,
 
 extern bool g_is_lldb_execution;
 void CodeGenFunction::addCallToTempSehFunc() {
-  if (g_is_lldb_execution) {
-    return;
-  }
+
   llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, /*isVarArg=*/false);
   llvm::Constant *C = CGM.GetOrCreateLLVMFunction(
       "fsf", FTy, GlobalDecl(), /*ForVTable=*/false,

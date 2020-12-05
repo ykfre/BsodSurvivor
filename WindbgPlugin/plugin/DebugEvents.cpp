@@ -4,6 +4,7 @@
 
 #include "FunctionRunManager.h"
 #include "DebugEvents.h"
+#include "blink/blink.h"
 
 // Exceptions include breaks which cannot
 // be mapped to an existing breakpoint
@@ -55,6 +56,9 @@
 
  STDMETHODIMP_(HRESULT __stdcall) DebugEvents::UnloadModule(
     PCSTR ImageBaseName, ULONG64 BaseOffset) noexcept {
+  if (g_blink.getDllToChange() && (void*)BaseOffset == g_blink.getDllToChange()->getStartAddress()) {
+     g_blink.resetDllToChange();
+  }
   return 0;
 }
 
@@ -147,7 +151,8 @@ HRESULT DebugEvents::Breakpoint(_In_ PDEBUG_BREAKPOINT Bp) noexcept {
       if (g_ExtInstance.m_bpAndCounters.find(bpOffset) !=
           g_ExtInstance.m_bpAndCounters.end()) {
         if (g_ExtInstance.m_bpAndCounters[bpOffset] > 0) {
-          g_functionRunManager.notifyFunctionEnded(t_platform->getThreadId());
+          auto thread = g_threadFactory->create(0);
+          g_functionRunManager.notifyFunctionEnded(thread->getThreadId());
         }
       }
     }

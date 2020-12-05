@@ -1,18 +1,14 @@
+#include "Config.h"
+#include "UserModePlatform.h"
+#include "FunctionRunManager.h"
 #include "eh_data.h"
 #include <Windows.h>
 #include <algorithm>
-#include <stdexcept>
-
-#include "FunctionRunManager.h"
-#include "UserModePlatform.h"
+#include <filesystem>
 #include <optional>
+#include <psapi.h>
 #include <stdexcept>
 #include <vector>
-
-UserModePlatform::UserModePlatform(void *threadHandle, void *currentModule) {
-  m_threadHandle = threadHandle;
-  m_currentModule = currentModule;
-}
 
 void *UserModePlatform::allocateMemory(size_t size) {
   char *data = new char[size];
@@ -21,11 +17,11 @@ void *UserModePlatform::allocateMemory(size_t size) {
   return data;
 }
 
-void UserModePlatform::deallocateMemory(void *data) { }
+void UserModePlatform::deallocateMemory(void *data) {}
 
 void UserModePlatform::addBp(void *addr) {}
 
-int UserModePlatform::getThreadId() { return GetThreadId(m_threadHandle); };
+int UserModeThread::getThreadId() { return GetThreadId(m_threadHandle); };
 
 size_t UserModePlatform::readMemory(void *addr, void *buf, size_t size) {
   memcpy(buf, (void *)addr, size);
@@ -37,28 +33,61 @@ size_t UserModePlatform::writeMemory(void *addr, const void *buf, size_t size) {
   return size;
 }
 
-void UserModePlatform::resumeThread() { ResumeThread(m_threadHandle); }
+void UserModeThread::resumeThread() { ResumeThread(m_threadHandle); }
 
-void UserModePlatform::suspendThread() { SuspendThread(m_threadHandle); }
+UserModeThread::UserModeThread(void *threadHandle, void *moduleHandle) {
+  m_threadHandle = threadHandle;
+  m_module = moduleHandle;
+}
+
+bool UserModeThread::initialize() { return true; }
+
+void UserModeThread::suspendThread() { SuspendThread(m_threadHandle); }
 
 bool UserModePlatform::runThreadPlan() {
-  auto event = g_functionRunManager.registerForBpHittedForTid(getThreadId());
-  resumeThread();
-  g_functionRunManager.waitForFunctionToEnd(event, t_platform->getThreadId());
+  auto thread = getCurrentThread();
+  auto event =
+      g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
+  thread->resumeThread();
+  g_functionRunManager.waitForFunctionToEnd(event,
+                                            getCurrentThread()->getThreadId());
 
   Sleep(100);
-  suspendThread();
+  thread->suspendThread();
   return true;
 }
 
+std::vector<std::shared_ptr<LoadedDll>> UserModePlatform::getModules() {
+  auto process = GetCurrentProcess();
+  HMODULE hMods[1024];
+  DWORD cbNeeded = 0;
+  std::vector<std::shared_ptr<LoadedDll>> modules;
+  if (EnumProcessModules(process, hMods, sizeof(hMods), &cbNeeded)) {
+
+    for (int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+      char szModName[MAX_PATH];
+
+      // Get the full path to the module's file.
+
+      if (GetModuleFileNameExA(process, hMods[i], szModName,
+                               sizeof(szModName))) {
+        modules.push_back(std::make_shared<LoadedDll>(
+            std::filesystem::path(szModName).filename().string(),
+            (void *)hMods[i], LoadedDll::LoadedDynamically::NOT_DYNAMIC));
+      }
+    }
+  }
+  return modules;
+}
+
 std::bitset<128>
-UserModePlatform::getRegisterValue(const std::string &registerName,
-                                   int frameIndex) {
+UserModeThread::getRegisterValue(const std::string &registerName,
+                                 int frameIndex) {
   std::bitset<128> value;
   CONTEXT context;
   context.ContextFlags = CONTEXT_ALL;
   GetThreadContext(m_threadHandle, &context);
-  auto runTimeInfoTable = getRunTimeTable((size_t)m_currentModule);
+  auto runTimeInfoTable = getRunTimeTable((size_t)m_module);
   void *establisherFrame = nullptr;
   for (int i = 0; i < frameIndex; i++) {
 
@@ -71,7 +100,7 @@ UserModePlatform::getRegisterValue(const std::string &registerName,
     }
     auto runTimeInfo = runTimeInfoOptional.value();
     void *handlerData = nullptr;
-    RtlVirtualUnwind(UNW_FLAG_NHANDLER, (size_t)m_currentModule, context.Rip,
+    RtlVirtualUnwind(UNW_FLAG_NHANDLER, (size_t)m_module, context.Rip,
                      (PRUNTIME_FUNCTION)&runTimeInfo, &context, &handlerData,
                      (PDWORD64)&establisherFrame, nullptr);
   }
@@ -153,8 +182,8 @@ UserModePlatform::getRegisterValue(const std::string &registerName,
   return value;
 }
 
-void UserModePlatform::setRegisterValue(const std::string &registerName,
-                                        const std::bitset<128> &value) {
+void UserModeThread::setRegisterValue(const std::string &registerName,
+                                      const std::bitset<128> &value) {
   CONTEXT context;
   context.ContextFlags = CONTEXT_ALL;
   GetThreadContext(m_threadHandle, &context);
@@ -198,7 +227,7 @@ void UserModePlatform::setRegisterValue(const std::string &registerName,
   } else if (registerNameLower == "rip") {
     context.Rip = (DWORD64)value.to_ullong();
   } else if (registerNameLower == "eflags") {
-    context.EFlags = value.to_ullong();
+    context.EFlags = value.to_ulong();
   } else if (registerNameLower == "xmm0") {
     memcpy(&context.Xmm0, &value, 16);
   } else if (registerNameLower == "xmm1") {
@@ -236,3 +265,12 @@ void UserModePlatform::setRegisterValue(const std::string &registerName,
   }
   SetThreadContext(m_threadHandle, &context);
 }
+
+std::shared_ptr<PlatformThread> UserModeThreadFactory::create(int tid) {
+  auto thread = std::make_shared<UserModeThread>(
+      OpenThread(THREAD_ALL_ACCESS, false, tid),
+      GetModuleHandleA(g_config.executableModuleName.c_str()));
+  thread->initialize();
+  return thread;
+}
+

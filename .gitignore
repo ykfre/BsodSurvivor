@@ -86,3 +86,5 @@ autoconf/autom4te.cache
 /**/*googletest/samples/**
 /**/*googlemock/samples/**
 /**/*.id0
+/temp2/**
+/**/*.CopyComplete

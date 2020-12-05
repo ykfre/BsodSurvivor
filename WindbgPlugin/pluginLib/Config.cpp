@@ -119,6 +119,10 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
     return false;
   }
 
+  if (!parse("serverPort", root, serverPort)) {
+    return false;
+  }
+
   if (!parse("allocateSpaceInStackFunctionName", root,
              allocateSpaceInStackFunctionName)) {
     return false;
@@ -133,11 +137,11 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
   return true;
 }
 
-bool Config::load(const std::string& filePath) {
+bool Config::load(const std::string &filePath) {
   auto data = readFile(filePath);
   if (!data) {
-    writeLog("failed to read config");
+    writeLog("failed to read config " + filePath);
     return false;
   }
-  return loadFromString(data.value());
+  return loadFromString(std::string{data.value().begin(), data.value().end()});
 }

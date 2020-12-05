@@ -9,6 +9,7 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Logging.h"
+#include <ehdata.h>
 #pragma warning(pop)
 
 lldb_private::Status
@@ -18,6 +19,9 @@ callDestructors(lldb_private::Thread &thread,
   lldb_private::Status return_error;
   lldb_private::MyRegisterContext youngestContext(thread, frameNum);
   auto module = getContainingModule(executionContext, youngestContext.GetPC());
+  if (!module) {
+    return return_error;
+  }
   auto objFile = module.getValue()->GetObjectFile();
   auto baseStartAddr =
       objFile->GetBaseAddress().GetLoadAddress(executionContext.GetTargetPtr());
@@ -43,7 +47,8 @@ callDestructors(lldb_private::Thread &thread,
     int moreCountOfCodesNum = ((unwindInfo.CountOfCodes + 1) & ~1) - 1;
     UnwindInfoContinue unwindInfoEnd;
     executionContext.GetProcessPtr()->ReadMemory(
-        baseStartAddr + runTimeInfo->UnwindInfoAddress + +sizeof(UNWIND_INFO) +
+        baseStartAddr + runTimeInfo->UnwindInfoAddress +
+            +sizeof(UNWIND_INFO) +
             moreCountOfCodesNum * sizeof(UNWIND_CODE),
         &unwindInfoEnd, sizeof(unwindInfoEnd), return_error);
     if (!return_error.Success()) {
@@ -59,7 +64,7 @@ callDestructors(lldb_private::Thread &thread,
     if (funcInfo.magicNumber != 0x19930522) {
       return return_error;
     }
-    std::vector<IptoStateMapEntry> ipoEntries(funcInfo.nIPMapEntries);
+    std::vector<IptoStateMapEntry2> ipoEntries(funcInfo.nIPMapEntries);
     executionContext.GetProcessPtr()->ReadMemory(
         baseStartAddr + funcInfo.dispIPtoStateMap, (void *)ipoEntries.data(),
         ipoEntries.size() * sizeof(IptoStateMapEntry), return_error);
@@ -107,7 +112,7 @@ callDestructors(lldb_private::Thread &thread,
         size_t numOfDestructors;
         // void *destructors[];
       };
-      auto structToPass = (StructToPass *)t_platform->allocateMemory(
+      auto structToPass = (StructToPass *)g_platform->allocateMemory(
           sizeof(void *) * destructorsFunctions.size() + sizeof(StructToPass));
       structToPass->rsp = youngestContext.GetSP();
       structToPass->numOfDestructors = destructorsFunctions.size();
@@ -116,8 +121,8 @@ callDestructors(lldb_private::Thread &thread,
       }
       std::vector<uint64_t> args;
       args.push_back((uint64_t)structToPass);
-      t_platform->runFunc(t_platform->getCallDestructorsFunction(), args);
-      t_platform->deallocateMemory(structToPass);
+      g_platform->runFunc(g_platform->getCallDestructorsFunction(), args);
+      g_platform->deallocateMemory(structToPass);
     }
   }
   return return_error;

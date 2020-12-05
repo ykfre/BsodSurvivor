@@ -122,6 +122,14 @@ X86Subtarget::classifyLocalReference(const GlobalValue *GV) const {
 
 unsigned char X86Subtarget::classifyGlobalReference(const GlobalValue *GV,
                                                     const Module &M) const {
+  
+  if (GV && !GV->hasInternalLinkage()) {
+    if (!dyn_cast_or_null<Function>(GV) && !GV->isThreadDependent() &&
+       !GV->isThreadLocal()) {
+      return X86II::MO_DLLIMPORT;
+    }
+  }
+  
   // The static large model never uses stubs.
   if (TM.getCodeModel() == CodeModel::Large && !isPositionIndependent())
     return X86II::MO_NO_FLAG;

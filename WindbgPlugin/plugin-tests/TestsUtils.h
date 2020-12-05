@@ -3,11 +3,13 @@
 #include <string>
 #include <thread>
 #include <functional>
-
+#include <gtest/gtest.h>
 #include "CommonCommandArgs.h"
-const std::string EXECUTABLE_TESTS_DLL = "ExecutableTest.dll";
 
-ModuleData getModuleData(const std::string &moduleName);
+class TestUtils : public testing::Test {
+public:
+  void SetUp() override;
+};
 
 void executeCommand(
     std::thread &thread,

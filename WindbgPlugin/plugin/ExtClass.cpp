@@ -4,42 +4,58 @@
 #include "CommonCommandArgs.h"
 #include "Config.h"
 #include "FunctionRunManager.h"
-#include "Module.h"
 #include "Utils.h"
 #include "WindbgLogger.h"
 #include "WindbgPlatform.h"
+#include "blink/Server.h"
+#include "blink/blink.h"
+#include <Windows.h>
 #include <algorithm>
+#include <codecvt>
+#include <easyhook/easyhook.h>
+#include <filesystem>
 #include <iostream>
+#include <locale>
 #include <sstream>
 #include <string>
-#include <strstream>
-
 #pragma warning(pop)
+
+void releaseHook(void **arg) {
+  if (arg) {
+    if (((HOOK_TRACE_INFO *)arg)->Link) {
+      LhUninstallHook((HOOK_TRACE_INFO *)arg);
+    }
+  }
+}
 
 template <typename T> void release(T *arg) {
   if (arg) {
     arg->Release();
   }
 }
+
 template <typename T> std::shared_ptr<T> createUnknown(T *arg) {
   return std::shared_ptr<T>(arg, release<T>);
 }
+
 ExtExtension *g_ExtInstancePtr = &g_ExtInstance;
 
 void EXT_CLASS::Uninitialize() {}
 
 void EXT_CLASS::log(const std::string &output) {
-  t_control->Output(DEBUG_OUTPUT_NORMAL, (output + "\n").c_str());
+  if (t_control) {
+    t_control->Output(DEBUG_OUTPUT_NORMAL, (output + "\n").c_str());
+  }
 }
 
-HRESULT EXT_CLASS::initializeGlobals() {
+HRESULT EXT_CLASS::initializeThreadGlobals() {
   IDebugClient5 *debugClient5 = nullptr;
   ::HRESULT hr = ::DebugCreate(__uuidof(::IDebugClient5),
                                reinterpret_cast<void **>(&debugClient5));
   if (FAILED(hr)) {
     return hr;
   }
-  t_debugClient5.reset(debugClient5);
+  t_debugClient5 = createUnknown(debugClient5);
 
   IDebugClient *debugClient = nullptr;
   auto result = t_debugClient5->CreateClient(&debugClient);
@@ -60,7 +76,7 @@ HRESULT EXT_CLASS::initializeGlobals() {
   if (!SUCCEEDED(result)) {
     return result;
   }
-  t_symbols.reset(symbols);
+  t_symbols = createUnknown(symbols);
 
   IDebugSymbols3 *symbols3 = nullptr;
   result = t_debugClient->QueryInterface(__uuidof(IDebugSymbols3),
@@ -98,16 +114,47 @@ HRESULT EXT_CLASS::initializeGlobals() {
   return 0;
 }
 
+void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess, _In_ DWORD dwShareMode,
+                     _In_opt_ LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                     _In_ DWORD dwCreationDisposition,
+                     _In_ DWORD dwFlagsAndAttributes,
+                     _In_opt_ HANDLE hTemplateFile) {
+  std::wstring fileNameString;
+  if (fileName) {
+    fileNameString = fileName;
+    auto absolutePath = std::filesystem::absolute(fileName).string();
+    std::lock_guard lock(*g_blink.m_originalFileToNewFileMutex);
+    if (g_blink.m_originalFileToNewFile.end() !=
+        g_blink.m_originalFileToNewFile.find(absolutePath)) {
+      std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+      fileNameString = converter.from_bytes(g_blink.m_originalFileToNewFile[absolutePath]);
+    }
+  }
+
+  return CreateFileW(fileNameString.c_str(), dwDesiredAccess, dwShareMode,
+                     lpSecurityAttributes, dwCreationDisposition,
+                     dwFlagsAndAttributes, hTemplateFile);
+}
+
 HRESULT EXT_CLASS::Initialize() {
+  g_platform = std::make_shared<WindbgPlatform>();
+  g_threadFactory = std::make_shared<WindbgThreadFactory>();
   g_logger = std::make_shared<WindbgLogger>();
 
-  if (!g_config.load()) {
-    return -1;
-  }
   commands::initializeLLdbGlobals();
-  HRESULT result = initializeGlobals();
+  HRESULT result = initializeThreadGlobals();
   if (!SUCCEEDED(result)) {
     log("failed to initialize windbg globals");
+    return -1;
+  }
+  auto currentModule = GetModuleHandleA(nullptr);
+  std::string modulePath;
+  modulePath.resize(MAX_PATH);
+  auto modulePathSize = GetModuleFileNameA(
+      currentModule, (char *)modulePath.c_str(), modulePath.size());
+  modulePath.resize(modulePathSize + 1);
+  auto dir = std::filesystem::path(modulePath).parent_path();
+  if (!g_config.load(dir.string() + "\\config.json")) {
     return -1;
   }
   ExtensionApis.nSize = sizeof(ExtensionApis);
@@ -119,79 +166,73 @@ HRESULT EXT_CLASS::Initialize() {
   if (!SUCCEEDED(result)) {
     return result;
   }
-  return 0;
-}
 
-std::vector<Module> EXT_CLASS::getModules() {
-  ULONG moudlesNum = 0;
-  ULONG unloadedModuleNum = 0;
-  t_symbols3->GetNumberModules(&moudlesNum, &unloadedModuleNum);
-  std::vector<Module> modules;
-  for (int i = 0; i < moudlesNum; i++) {
-    ULONG64 moduleStart = 0;
-    t_symbols->GetModuleByIndex(i, &moduleStart);
-    std::string moduleName;
-    const int MAX_NAME = 1024;
-    moduleName.resize(MAX_NAME);
-    ULONG nameSize;
-    if (!SUCCEEDED(t_symbols3->GetModuleNameString(
-            DEBUG_MODNAME_MODULE, DEBUG_ANY_ID, moduleStart,
-            (char *)moduleName.c_str(), MAX_NAME, &nameSize))) {
-      continue;
-    }
-    moduleName.resize(nameSize);
-    moduleName = std::string(moduleName.c_str());
-
-    std::transform(moduleName.begin(), moduleName.end(), moduleName.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    DEBUG_MODULE_PARAMETERS modParams = {};
-    if (!SUCCEEDED(
-            t_symbols->GetModuleParameters(1, &moduleStart, 0, &modParams))) {
-      continue;
-    }
-    modules.push_back({moduleName, moduleStart, modParams.Size});
+  auto hook = new HOOK_TRACE_INFO();
+  auto hookRes =
+      LhInstallHook(GetProcAddress(GetModuleHandleA("kernel32"), "CreateFileW"),
+                    createFileHook, nullptr, hook);
+  m_hook = std::shared_ptr<void *>((void **)hook, releaseHook);
+  if (FAILED(hookRes)) {
+    writeLog("failed to put hook on create file");
+    return -1;
   }
-  return modules;
+  ULONG ACLEntries[1] = {0};
+  hookRes = LhSetExclusiveACL(ACLEntries, 0, hook);
+  if (FAILED(hookRes)) {
+    writeLog("failed to put hook on create file");
+    return -1;
+  }
+
+  m_event = std::shared_ptr<size_t>(
+      (size_t *)CreateEventA(nullptr, false, false, "lldb-windbg"),
+      [](size_t *handle) {
+        if (handle) {
+          CloseHandle(handle);
+        }
+      });
+  if (!m_event) {
+    writeLog("failed to create lldb-windbg event");
+    return -1;
+  }
+  auto server = createServer(g_config.serverPort);
+  if (!server.server) {
+    writeLog("failed to load rpc server, becaues port is in use: " +
+             std::to_string(g_config.serverPort));
+  }
+  std::thread t([server]() { server.server->Wait(); });
+  t.detach();
+  return 0;
 }
 
 void EXT_CLASS::executeCommand(
     const std::function<bool(CommonCommandArgs &)> &command) {
   std::thread t([this, command]() {
-    if (!SUCCEEDED(initializeGlobals())) {
-      return;
+    if (!g_platform->verifyPreConditions()) {
+      log("failed initialize thread globals");
     }
+    g_platform->setCurrentThread(g_threadFactory->create(0));
     log("sarting command");
     CommonCommandArgs commonArgs;
-    t_platform = std::make_shared<WindbgPlatform>();
+    auto thread = g_platform->getCurrentThread();
     commonArgs.selectedFrameIndex =
-        t_platform->getRegisterValue("$frame", 0).to_ulong();
-    auto modules = getModules();
-    for (auto &module : modules) {
-      std::vector<std::string> validModulesNames = g_config.modulesNames;
-      if (std::find(validModulesNames.begin(), validModulesNames.end(),
-                    module.moduleName) == validModulesNames.end()) {
-        continue;
-      }
-      auto moduleBuf = module.read();
-      commonArgs.modules.push_back(
-          {module.moduleName, moduleBuf, module.startAddr});
-    }
+        thread->getRegisterValue("$frame", 0).to_ulong();
+    auto modules = g_blink.getAllDlls();
 
-    t_platform->callAllocateSpaceInStack = [] {
-      void *allocateSpaceInStackFuncAddress = nullptr;
-      if (!t_platform->findSymbol(g_config.executableModuleName,
-                                  g_config.allocateSpaceInStackFunctionName,
-                                  allocateSpaceInStackFuncAddress)) {
+    g_platform->callAllocateSpaceInStack = [] {
+      auto thread = g_platform->getCurrentThread();
+      void *allocateSpaceInStackFuncAddress =
+          g_blink.getSymbol(g_config.allocateSpaceInStackFunctionName);
+      if (!allocateSpaceInStackFuncAddress) {
         return false;
       }
 
-      t_platform->setRegisterValue("rip",
-                                   (size_t)allocateSpaceInStackFuncAddress);
-      t_platform->addBp(
+      thread->setRegisterValue("rip", (size_t)allocateSpaceInStackFuncAddress);
+      g_platform->addBp(
           reinterpret_cast<char *>(allocateSpaceInStackFuncAddress) + 12);
-      g_functionRunManager.registerForBpHittedForTid(t_platform->getThreadId());
-      t_platform->resumeThread();
-      g_functionRunManager.waitForFunctionToEnd(t_platform->getThreadId());
+      auto event =
+          g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
+      thread->resumeThread();
+      g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
       return true;
     };
     bool res = command(commonArgs);
@@ -219,7 +260,9 @@ EXT_COMMAND(execute, "Execute command", "") {
       log("failed to read script file: " + scriptFilePath);
       return false;
     }
-    return commands::executeExpression(args, expression.value());
+    return commands::executeExpression(
+        args,
+        std::string{expression.value().begin(), expression.value().end()});
   });
 }
 
@@ -239,8 +282,10 @@ EXT_COMMAND(returntoframewithout,
             "return to the current frame without calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
+
+    auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
-        args, t_platform->getRegisterValue("$frame", 0).to_ulong(), false);
+        args, thread->getRegisterValue("$frame", 0).to_ulong(), false);
   });
 }
 
@@ -248,7 +293,8 @@ EXT_COMMAND(returntoframewith,
             "return to the current frame with calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
+    auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
-        args, t_platform->getRegisterValue("$frame", 0).to_ulong(), true);
+        args, thread->getRegisterValue("$frame", 0).to_ulong(), true);
   });
 }

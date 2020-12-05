@@ -1,3 +1,4 @@
+#include "Platform.h"
 #include "FunctionRunManager.h"
 #include "TestsUtils.h"
 #include "gtest/gtest.h"

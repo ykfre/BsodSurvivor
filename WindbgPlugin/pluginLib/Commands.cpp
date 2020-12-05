@@ -69,6 +69,7 @@
 #include "Plugins/UnwindAssembly/x86/UnwindAssembly-x86.h"
 #include "Plugins\DynamicLoader\Windows-DYLD/DynamicLoaderWindowsDYLD.h"
 #include "ReturnFromFrame.h"
+#include "blink/blink.h"
 #include "Utils.h"
 #include "lldb/API/SBDebugger.h"
 #include "lldb/Host/HostInfoBase.h"
@@ -106,42 +107,6 @@ extern void clearClangModulesDeclVendorImplCache();
 extern void clearAstImporterCache();
 
 namespace commands {
-bool GetTripleForProcess(const lldb_private::FileSpec &executable,
-                         llvm::Triple &triple) {
-  // Open the PE File as a binary file, and parse just enough information to
-  // determine the machine type.
-  auto imageBinaryP = lldb_private::FileSystem::Instance().Open(
-      executable, lldb_private::File::eOpenOptionRead,
-      lldb::eFilePermissionsUserRead);
-  if (!imageBinaryP)
-    return llvm::errorToBool(imageBinaryP.takeError());
-  lldb_private::File &imageBinary = *imageBinaryP.get();
-  imageBinary.SeekFromStart(0x3c);
-  int32_t peOffset = 0;
-  uint32_t peHead = 0;
-  uint16_t machineType = 0;
-  size_t readSize = sizeof(peOffset);
-  imageBinary.Read(&peOffset, readSize);
-  imageBinary.SeekFromStart(peOffset);
-  imageBinary.Read(&peHead, readSize);
-  if (peHead != 0x00004550) // "PE\0\0", little-endian
-    return false;           // Status: Can't find PE header
-  readSize = 2;
-  imageBinary.Read(&machineType, readSize);
-  triple.setVendor(llvm::Triple::PC);
-  triple.setOS(llvm::Triple::Win32);
-  triple.setArch(llvm::Triple::UnknownArch);
-  if (machineType == 0x8664)
-    triple.setArch(llvm::Triple::x86_64);
-  else if (machineType == 0x14c)
-    triple.setArch(llvm::Triple::x86);
-  else if (machineType == 0x1c4)
-    triple.setArch(llvm::Triple::arm);
-  else if (machineType == 0xaa64)
-    triple.setArch(llvm::Triple::aarch64);
-
-  return true;
-}
 
 class UserIDResolver2 : public lldb_private::UserIDResolver {
   llvm::Optional<std::string> DoGetUserName(id_t uid) {
@@ -156,9 +121,10 @@ class UserIDResolver2 : public lldb_private::UserIDResolver {
 
 class Process2 : public lldb_private::Process {
 public:
-  static std::shared_ptr<Process2> create(lldb::TargetSP target_sp,
-                                          lldb::ListenerSP listener_sp,
-                                          const CommonCommandArgs &args) {
+  static std::shared_ptr<Process2>
+  create(lldb::TargetSP target_sp, lldb::ListenerSP listener_sp,
+         const CommonCommandArgs &args,
+         std::vector<std::shared_ptr<LoadedDll>> &modules) {
     auto process = std::make_shared<Process2>(target_sp, listener_sp, args);
 
     process->SetPublicState(lldb::eStateStopped, false);
@@ -168,37 +134,26 @@ public:
         lldb_private::DynamicLoaderWindowsDYLD::CreateInstance(process.get(),
                                                                true);
     bool foundOurModule = false;
-    for (const auto &module : args.modules) {
-      llvm::SmallString<128> TmpModel;
-      llvm::sys::path::system_temp_directory(true, TmpModel);
-      llvm::sys::path::append(TmpModel, module.moduleName + "%%%%%.dll");
-      auto tempFile = llvm::sys::fs::TempFile::create(TmpModel);
-
-      std::string modulePath = tempFile.get().TmpName;
-      tempFile.get().keep();
-      lldb_private::FileSpec fileSpec(modulePath);
-      llvm::Triple triple;
-      GetTripleForProcess(fileSpec, triple);
-      {
-        std::ofstream f(modulePath, std::ios::binary);
-        f.write(module.buffer.data(), module.buffer.size());
-      }
-      auto currentModuleSp = lldb::ModuleSP(
-          new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
+    for (const auto &module : modules) {
       lldb_private::FileSpec exeFileSpec(g_config.executablePath);
+      auto architecture =
+          module->getLLdbModule()->GetArchitecture().GetTriple();
       auto exeModule = lldb::ModuleSP(new lldb_private::Module(
-          exeFileSpec, lldb_private::ArchSpec(triple)));
-      if (nullptr == currentModuleSp->GetObjectFile() ||
+          exeFileSpec,
+          lldb_private::ArchSpec(architecture)));
+      if (nullptr == module->getLLdbModule()->GetObjectFile() ||
           nullptr == exeModule->GetObjectFile()) {
         continue;
       }
-      if (((ObjectFilePECOFF *)currentModuleSp->GetObjectFile())->GetUUID() ==
+      auto currentModuleSp = module->getLLdbModule();
+      if (((ObjectFilePECOFF *)module->getLLdbModule()->GetObjectFile())
+              ->GetUUID() ==
           ((ObjectFilePECOFF *)exeModule->GetObjectFile())->GetUUID()) {
         currentModuleSp = exeModule;
         foundOurModule = true;
       }
       dynamic_loader->OnLoadModule(currentModuleSp, lldb_private::ModuleSpec(),
-                                   (size_t)module.startAddr);
+                                   (size_t)module->getStartAddress());
       auto &images = process->GetTarget().GetImages();
       images.Append(currentModuleSp);
     }
@@ -211,7 +166,7 @@ public:
     return process;
   }
 
-  void Suspend() { t_platform->suspendThread(); }
+  void Suspend() { g_platform->getCurrentThread()->suspendThread(); }
 
   lldb::ExpressionResults
   RunThreadPlan(lldb_private::ExecutionContext &exe_ctx,
@@ -220,7 +175,7 @@ public:
                 lldb_private::DiagnosticManager &diagnostic_manager) {
     UNREFERENCED_PARAMETER(diagnostic_manager);
     UNREFERENCED_PARAMETER(options);
-    if (t_platform->runThreadPlan()) {
+    if (g_platform->runThreadPlan()) {
       return lldb::ExpressionResults::eExpressionCompleted;
     }
     return lldb::ExpressionResults::eExpressionSetupError;
@@ -257,7 +212,7 @@ public:
                       lldb_private::Status &error) override {
     UNREFERENCED_PARAMETER(error);
 
-    t_platform->readMemory((void *)addr, buf, size);
+    g_platform->readMemory((void *)addr, buf, size);
     return size;
   };
 
@@ -269,14 +224,14 @@ public:
   size_t DoWriteMemory(lldb::addr_t vm_addr, const void *buf, size_t size,
                        lldb_private::Status &error) override {
     UNREFERENCED_PARAMETER(error);
-    t_platform->writeMemory((void *)vm_addr, (void *)buf, size);
+    g_platform->writeMemory((void *)vm_addr, (void *)buf, size);
     return size;
   }
 
   lldb::addr_t DoAllocateMemory(size_t size, uint32_t permissions,
                                 lldb_private::Status &error) override {
     UNREFERENCED_PARAMETER(permissions);
-    void *memory = t_platform->allocateMemory(size);
+    void *memory = g_platform->allocateMemory(size);
     if (nullptr == memory) {
       error.SetErrorString("not enough memory");
     }
@@ -284,13 +239,13 @@ public:
   }
 
   lldb_private::Status DoDeallocateMemory(lldb::addr_t ptr) override {
-    t_platform->deallocateMemory((void *)ptr);
+    g_platform->deallocateMemory((void *)ptr);
     return lldb_private::Status();
   };
 
   lldb_private::Status DoResume() override {
     lldb_private::Status error;
-    t_platform->resumeThread();
+    g_platform->getCurrentThread()->resumeThread();
     return error;
   }
 
@@ -338,13 +293,7 @@ public:
                                        // create a new target, else
                                        // use existing one
          lldb_private::Status &error) {
-    UNREFERENCED_PARAMETER(debugger);
-    UNREFERENCED_PARAMETER(attach_info);
-    error.Clear();
-    auto listener = lldb_private::Listener::MakeListener("listen");
-    auto process =
-        Process2::create(lldb::TargetSP(target), listener, m_CommonCommandArgs);
-    return process;
+    return lldb::ProcessSP();
   }
 
   void CalculateTrapHandlerSymbolNames() override{};
@@ -397,9 +346,11 @@ class StackFrame2 : public lldb_private::StackFrame {
 
 class MyCtx : public lldb_private::ExecutionContextScope {
 public:
-  MyCtx(const lldb::TargetSP target, const CommonCommandArgs &args) {
+  MyCtx(const lldb::TargetSP target, const CommonCommandArgs &args,
+        std::vector<std::shared_ptr<LoadedDll>> &modules) {
     m_target = target;
     m_CommonCommandArgs = args;
+    m_modules = modules;
   }
 
   lldb::TargetSP CalculateTarget() { return m_target; }
@@ -407,8 +358,8 @@ public:
   lldb::ProcessSP CalculateProcess() override {
     if (!m_process.get()) {
       auto listener = lldb_private::Listener::MakeListener("listen");
-      m_process =
-          Process2::create(CalculateTarget(), listener, m_CommonCommandArgs);
+      m_process = Process2::create(CalculateTarget(), listener,
+                                   m_CommonCommandArgs, m_modules);
       if (!m_process.get()) {
         return m_process;
       }
@@ -421,8 +372,13 @@ public:
 
   lldb::ThreadSP CalculateThread() override {
     if (!m_thread.get()) {
-      m_thread = lldb::ThreadSP(new Thread2(
-          m_CommonCommandArgs, *CalculateProcess(), t_platform->getThreadId()));
+      auto process = CalculateProcess();
+      if (!process) {
+        return m_thread;
+      }
+      m_thread = lldb::ThreadSP(
+          new Thread2(m_CommonCommandArgs, *CalculateProcess(),
+                      g_platform->getCurrentThread()->getThreadId()));
     }
     return m_thread;
   };
@@ -446,6 +402,7 @@ private:
   std::shared_ptr<lldb_private::Address> m_addr;
   std::shared_ptr<lldb_private::LineEntry> m_lineEntry;
   lldb::ThreadSP m_thread;
+  std::vector<std::shared_ptr<LoadedDll>> m_modules;
   lldb::ProcessSP m_process;
 
   lldb::StackFrameSP m_frame;
@@ -502,7 +459,6 @@ void initializeLLdbGlobals() {
   llvm::MCJIT::Register();
 }
 
-
 struct CommonCommandInitializerValues {
   lldb::DebuggerSP debugger;
   std::shared_ptr<MyCtx> exeCtxScope;
@@ -510,7 +466,8 @@ struct CommonCommandInitializerValues {
 };
 
 llvm::Optional<CommonCommandInitializerValues>
-commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs) {
+commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
+                            std::vector<std::shared_ptr<LoadedDll>> &modules) {
   lldb_private::Platform::SetHostPlatform(
       lldb::PlatformSP(new Platform2(true, commonCommandArgs)));
   CommonCommandInitializerValues commonCommandInitializerValues;
@@ -549,14 +506,14 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs) {
   commonCommandInitializerValues.targetSp->SetArchitecture(
       lldb_private::ArchSpec(triple));
   commonCommandInitializerValues.exeCtxScope = std::make_shared<MyCtx>(
-      commonCommandInitializerValues.targetSp, commonCommandArgs);
+      commonCommandInitializerValues.targetSp, commonCommandArgs, modules);
   commonCommandInitializerValues.exeCtxScope->CalculateThread()
       ->SetSelectedFrameByIndex(commonCommandArgs.selectedFrameIndex);
 
   commonCommandInitializerValues.targetSp->GetProcessSP() =
       commonCommandInitializerValues.exeCtxScope->CalculateProcess();
   commonCommandInitializerValues.exeCtxScope->CalculateStackFrame();
-  t_platform->runFunc = [commonCommandInitializerValues](
+  g_platform->runFunc = [commonCommandInitializerValues](
                             void *addr, const std::vector<size_t> &args) {
     auto thread = commonCommandInitializerValues.exeCtxScope->CalculateThread();
     lldb_private::Status error;
@@ -576,45 +533,23 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs) {
     thread->RunFunc((size_t)addr, args, returnValue, error, options, exeCtx);
     return returnValue;
   };
-  t_platform->findSymbol = [commonCommandInitializerValues,
-                            commonCommandArgs](const std::string &moduleName,
-                                               const std::string &functionName,
-                                               void *&outAddr) {
-    auto process =
-        commonCommandInitializerValues.exeCtxScope->CalculateProcess();
-    auto images = process->GetTarget().GetImages();
 
-    lldb_private::SymbolContextList sc;
-    images.FindFunctionSymbols(lldb_private::ConstString(functionName),
-                               lldb::eFunctionNameTypeAuto, sc);
-    if (sc.GetSize() == 0) {
-      writeLog(("failed to find symbol " + functionName).c_str());
-      return false;
-    }
-    auto symAddress = sc[0].symbol->GetAddress().GetLoadAddress(
-        commonCommandInitializerValues.targetSp.get());
-    outAddr = (void *)symAddress;
-    return true;
-  };
-
-  for (const auto &symbol : t_platform->getNeededSymbolNames()) {
-    void *outAddr = nullptr;
-    if (!t_platform->findSymbol("", symbol, outAddr)) {
-      return llvm::NoneType();
-    }
-  }
-  t_bpAddress = t_platform->getFunctionToBreakAddress();
-  if (t_platform->callAllocateSpaceInStack) {
-    t_callAllocateStack = t_platform->callAllocateSpaceInStack.value();
+  t_bpAddress = g_platform->getFunctionToBreakAddress();
+  if (g_platform->callAllocateSpaceInStack) {
+    t_callAllocateStack = g_platform->callAllocateSpaceInStack.value();
   }
   return commonCommandInitializerValues;
 }
 
 bool executeExpression(CommonCommandArgs &commonCommandArgs,
                        const std::string &expression) {
+  auto modules = g_blink.getOrdinaryDlls();
+  if (g_blink.getDllToChange()) {
+    modules.push_back(g_blink.getDllToChange());
+  }
   llvm::Optional<CommonCommandInitializerValues>
       commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs);
+          commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
@@ -651,9 +586,10 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
   if (untilFrameIndex == 0) {
     return true;
   }
+  std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
   llvm::Optional<CommonCommandInitializerValues>
       commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs);
+          commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }

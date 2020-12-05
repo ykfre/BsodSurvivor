@@ -3995,13 +3995,12 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     EVT RegVT = VA.getLocVT();
     SDValue Arg = OutVals[OutIndex];
     bool isByVal = Flags.isByVal();
-    
-    if (CI && !Arg.getNode()->getDebugLoc() &&
-        !CI->getDebugLoc().isImplicitCode()) {
+
+    if (CI && !Arg.getNode()->getDebugLoc()) {
       auto debugLoc = CI->getDebugLoc();
       Arg.getNode()->setDebugLoc(debugLoc);
     }
-    if (II && !Arg.getNode()->getDebugLoc() && !II->getDebugLoc().isImplicitCode()) {
+    if (II && !Arg.getNode()->getDebugLoc()) {
       auto debugLoc = II->getDebugLoc();
       Arg.getNode()->setDebugLoc(debugLoc);
     }

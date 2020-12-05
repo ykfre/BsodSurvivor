@@ -13,17 +13,15 @@
 #include <functional>
 #include <thread>
 #include "Config.h"
-#include "Module.h"
 #include "ExpressionTests.h"
+#include "blink/Server.h"
 
 
-void notifyFunctionEnded() {
-  g_functionRunManager.notifyFunctionEnded(GetThreadId(GetCurrentThread()));
-}
 
 int main(int argc, char** argv) {
   g_logger = std::make_shared<ConsoleLogger>();
-  g_notifyFunctionEnded = notifyFunctionEnded;
+  g_platform = std::make_shared<UserModePlatform>();
+  g_threadFactory = std::make_shared<UserModeThreadFactory>();
   commands::initializeLLdbGlobals();
 
   ::testing::InitGoogleTest(&argc, argv);
