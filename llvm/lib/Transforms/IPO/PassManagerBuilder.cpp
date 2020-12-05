@@ -482,12 +482,12 @@ public:
   Hello() : ModulePass(ID) {}
   bool runOnModule(Module &M) override {
     bool isChanged = false;
-    auto f = M.getOrInsertFunction("fsfd", llvm::Type::getVoidTy(M.getContext()))
+    auto f = M.getOrInsertFunction("myCallBeforeSetLoad", llvm::Type::getVoidTy(M.getContext()))
                  .getCallee();
     auto func = dyn_cast<llvm::Function>(f);
     func->setAttributes(llvm::AttributeList{});
     for (auto &FF : M) {
-        if (FF.getName().find("fsfd") != -1)
+        if (FF.getName().find("myCallBeforeSetLoad") != -1)
         {
         continue;
       }

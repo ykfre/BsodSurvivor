@@ -330,6 +330,9 @@ private:
   /// instruction selected, false if no code should be emitted for it.
   bool PrepareEHLandingPad();
 
+  // Mark and Report IPToState for each Block under IsEHa
+  void ReportIPToStateForBlocks(MachineFunction * Fn);
+
   /// Perform instruction selection on all basic blocks in the function.
   void SelectAllBasicBlocks(const Function &Fn);
 

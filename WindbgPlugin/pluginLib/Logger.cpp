@@ -7,7 +7,9 @@ void ConsoleLogger::write(const std::string &message) {
 }
 
 void writeLog(const std::string &message) {
-  g_logger->write(message+"\n");
+  if (g_logger) {
+    g_logger->write(message + "\n");
+  }
 }
 
 void logCallback(const char *message, void *batton) {

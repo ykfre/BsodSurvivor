@@ -1,1 +1,1 @@
-extern "C" void fsfd() {}
+extern "C" void myCallBeforeSetLoad() {}

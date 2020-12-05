@@ -14,8 +14,7 @@ API extern std::string g_expr;
   g_shouldPauseExecute = true;                                                 \
   g_notifyBp = true;                                                           \
   while (g_shouldPauseExecute) {                                               \
-  }                                                                            \
-  g_shouldPauseExecute = true;
+  }                                                                            
 
 #define RUN_EXPR(expr)                                                         \
   g_expr =                                                                     \

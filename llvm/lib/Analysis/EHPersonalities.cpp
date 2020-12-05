@@ -11,6 +11,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -71,7 +72,11 @@ bool llvm::canSimplifyInvokeNoUnwind(const Function *F) {
   // We can't simplify any invokes to nounwind functions if the personality
   // function wants to catch asynch exceptions.  The nounwind attribute only
   // implies that the function does not throw synchronous exceptions.
-  return !isAsynchronousEHPersonality(Personality);
+  
+  // Cannot simplify CXX Personality under EHa
+  llvm::Module *M = (llvm::Module*) F->getParent();
+  bool EHa = M->getModuleFlag("eh-asynch");
+  return !isAsynchronousEHPersonality(Personality) && !EHa;
 }
 
 DenseMap<BasicBlock *, ColorVector> llvm::colorEHFunclets(Function &F) {

@@ -2782,8 +2782,10 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.Exceptions = Args.hasArg(OPT_fexceptions);
   Opts.IgnoreExceptions = Args.hasArg(OPT_fignore_exceptions);
   Opts.ObjCExceptions = Args.hasArg(OPT_fobjc_exceptions);
+
   if (!g_is_lldb_execution) {
-    Opts.CXXExceptions = true;
+    Opts.CXXExceptions = Args.hasArg(OPT_fcxx_exceptions);
+    Opts.EHAsynch = Args.hasArg(OPT_feh_asynch);
   }
 
   // -ffixed-point

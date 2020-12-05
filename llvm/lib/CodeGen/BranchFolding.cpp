@@ -120,11 +120,8 @@ char &llvm::BranchFolderPassID = BranchFolderPass::ID;
 
 INITIALIZE_PASS(BranchFolderPass, DEBUG_TYPE,
                 "Control Flow Optimizer", false, false)
-
+#include <sstream>
 bool BranchFolderPass::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
-    return false;
-
   TargetPassConfig *PassConfig = &getAnalysis<TargetPassConfig>();
   // TailMerge can create jump into if branches that make CFG irreducible for
   // HW that requires structurized CFG.
@@ -1211,7 +1208,7 @@ bool BranchFolder::OptimizeBranches(MachineFunction &MF) {
     MadeChange |= OptimizeBlock(MBB);
 
     // If it is dead, remove it.
-    if (MBB->pred_empty()) {
+    if (MBB->pred_empty() && !MBB->hasAddressTaken()) {
       RemoveDeadBlock(MBB);
       MadeChange = true;
       ++NumDeadBlocks;

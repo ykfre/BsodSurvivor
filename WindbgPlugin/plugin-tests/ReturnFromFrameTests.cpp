@@ -26,7 +26,6 @@ public:
                                        shouldCallDestructor);
     });
     ResumeThread(t.native_handle());
-    g_shouldPauseExecute = true;
   }
 };
 

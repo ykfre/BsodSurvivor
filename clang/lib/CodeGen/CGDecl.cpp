@@ -1922,21 +1922,6 @@ void CodeGenFunction::EmitExprAsInit(const Expr *init, const ValueDecl *D,
   llvm_unreachable("bad evaluation kind");
 }
 
-extern bool g_is_lldb_execution;
-void CodeGenFunction::addCallToTempSehFunc() {
-
-  llvm::FunctionType *FTy = llvm::FunctionType::get(VoidTy, /*isVarArg=*/false);
-  llvm::Constant *C = CGM.GetOrCreateLLVMFunction(
-      "fsf", FTy, GlobalDecl(), /*ForVTable=*/false,
-      /*DontDefer=*/false, /*IsThunk=*/false, llvm::AttributeList{});
-
-  if (auto *F = dyn_cast<llvm::Function>(C)) {
-    F->setAttributes(llvm::AttributeList{});
-    llvm::ArrayRef<llvm::Value *> Args;
-    EmitCallOrInvoke(F, Args);
-  }
-}
-
 /// Enter a destroy cleanup for the given local variable.
 void CodeGenFunction::emitAutoVarTypeCleanup(
                             const CodeGenFunction::AutoVarEmission &emission,
@@ -2003,7 +1988,7 @@ void CodeGenFunction::emitAutoVarTypeCleanup(
   bool useEHCleanup = (cleanupKind & EHCleanup);
   EHStack.pushCleanup<DestroyObject>(cleanupKind, addr, type, destroyer,
                                      useEHCleanup);
-  addCallToTempSehFunc();
+  EmitSehCppScopeBegin();
 }
 
 void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
@@ -2019,8 +2004,14 @@ void CodeGenFunction::EmitAutoVarCleanups(const AutoVarEmission &emission) {
   const VarDecl &D = *emission.Variable;
 
   // Check the type for a cleanup.
-  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext()))
+  if (QualType::DestructionKind dtorKind = D.needsDestruction(getContext())) {
     emitAutoVarTypeCleanup(emission, dtorKind);
+
+    // <tentzen>: Under -EHa, Invoke llvm.eha.scope.begin() right after
+    //      Ctor is emitted and EHStack.pushCleanup
+    bool IsEHa = getLangOpts().EHAsynch;
+
+  }
 
   // In GC mode, honor objc_precise_lifetime.
   if (getLangOpts().getGC() != LangOptions::NonGC &&
@@ -2095,12 +2086,11 @@ void CodeGenFunction::pushDestroy(CleanupKind cleanupKind, Address addr,
                                   bool useEHCleanupForArray) {
   pushFullExprCleanup<DestroyObject>(cleanupKind, addr, type,
                                      destroyer, useEHCleanupForArray);
-  addCallToTempSehFunc();
+  EmitSehCppScopeBegin();
 }
 
 void CodeGenFunction::pushStackRestore(CleanupKind Kind, Address SPMem) {
   EHStack.pushCleanup<CallStackRestore>(Kind, SPMem);
-  addCallToTempSehFunc();
 }
 
 void CodeGenFunction::pushLifetimeExtendedDestroy(
@@ -2118,7 +2108,7 @@ void CodeGenFunction::pushLifetimeExtendedDestroy(
   // end of the full-expression.
   pushCleanupAfterFullExpr<DestroyObject>(
       cleanupKind, addr, type, destroyer, useEHCleanupForArray);
-  addCallToTempSehFunc();
+  EmitSehCppScopeBegin();
 }
 
 /// emitDestroy - Immediately perform the destruction of the given
