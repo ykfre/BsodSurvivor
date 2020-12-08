@@ -30,15 +30,6 @@ void WindbgPlatform::addBp(void *addr) {
 }
 
 WindbgPlatform::WindbgPlatform() {
-  g_blink.m_onLoadModule.push_back(
-      [this](const std::shared_ptr<LoadedDll> &dll) {
-        onLoadDynamicModule(dll);
-      });
-
-  g_blink.m_onUnloadModule.push_back(
-      [this](const std::shared_ptr<LoadedDll> &dll) {
-        onUnLoadDynamicModule(dll);
-      });
 }
 
 void *WindbgPlatform::allocateMemory(size_t size) {
@@ -307,26 +298,6 @@ bool WindbgPlatform::runThreadPlan() {
   g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
 
   return true;
-}
-
-void WindbgPlatform::onLoadDynamicModule(
-    const std::shared_ptr<LoadedDll> &dll) {
-  std::stringstream command;
-  command << ".reload /f " << dll->getName() << "=" << std::hex
-          << dll->getStartAddress();
-  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
-      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
-  assert(res);
-}
-
-void WindbgPlatform::onUnLoadDynamicModule(
-    const std::shared_ptr<LoadedDll> &dll) {
-  auto thread = g_threadFactory->create(0);
-  std::stringstream command;
-  command << ".reload /u " << dll->getName();
-  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
-      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
-  assert(res);
 }
 
 bool WindbgThread::initialize() {

@@ -526,9 +526,6 @@ public:
 };
 
 thread_local std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls;
-void clearClangModulesDeclVendorImplCache() {
-  //ExampleVisitor::s_cached_decls.clear();
-}
 
 uint32_t ClangModulesDeclVendorImpl::FindDecls(
     clang::DeclContext *context, ConstString name, bool append,

@@ -7,13 +7,11 @@
 #pragma warning(push, 0)
 #include <engextcpp.hpp>
 #pragma warning(pop)
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <functional>
 #include <vector>
-
-
 
 class EXT_CLASS : public ExtExtension {
 public:
@@ -23,11 +21,18 @@ public:
   EXT_COMMAND_METHOD(returntoframewithout);
   EXT_COMMAND_METHOD(returntoframewith);
   EXT_COMMAND_METHOD(execute);
+  EXT_COMMAND_METHOD(reloadblinkmodules);
 
   void log(const std::string &output);
   HRESULT initializeThreadGlobals();
   HRESULT Initialize() override;
 
+  void onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
+  void onUnLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
+  bool addFilePathToHook(const std::string &filePath,
+                         const std::string &fileData);
+  bool shouldAddFilePathToHook(const std::string &filePath);
+  bool isKernelDebugger();
   std::map<size_t, int> m_bpAndCounters;
   std::shared_ptr<size_t> m_event;
   inline static thread_local std::shared_ptr<IDebugClient5> t_debugClient5;
@@ -40,17 +45,13 @@ public:
 
   inline static thread_local std::shared_ptr<IDebugRegisters2> t_registers2;
   inline static thread_local std::shared_ptr<IDebugDataSpaces> t_debug;
-  bool addFilePathToHook(const std::string& filePath, const std::string& fileData);
-  bool shouldAddFilePathToHook(const std::string &filePath);
-  bool isKernelDebugger();
   inline static thread_local StringOutputCallbacks t_output;
-
 
 private:
   void
   executeCommand(const std::function<bool(CommonCommandArgs &args)> &command);
   DebugEvents m_debugEvents;
-  std::shared_ptr<void*> m_hook;
+  std::shared_ptr<void *> m_hook;
 };
 
 inline EXT_CLASS g_ExtInstance;

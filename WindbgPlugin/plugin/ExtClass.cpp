@@ -48,7 +48,27 @@ void EXT_CLASS::log(const std::string &output) {
   }
 }
 
+void EXT_CLASS::onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll) {
+  writeLog("loading module to windbg modules");
+  std::stringstream command;
+  command << ".reload /f " << dll->getName() << "=" << std::hex
+          << dll->getStartAddress();
+  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
+      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
+  assert(res);
+}
+
+void EXT_CLASS::onUnLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll) {
+  auto thread = g_threadFactory->create(0);
+  std::stringstream command;
+  command << ".reload /u " << dll->getName();
+  auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
+      DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
+  assert(res);
+}
+
 HRESULT EXT_CLASS::initializeThreadGlobals() {
+  t_logger = std::make_shared<WindbgLogger>();
   IDebugClient5 *debugClient5 = nullptr;
   ::HRESULT hr = ::DebugCreate(__uuidof(::IDebugClient5),
                                reinterpret_cast<void **>(&debugClient5));
@@ -114,7 +134,8 @@ HRESULT EXT_CLASS::initializeThreadGlobals() {
   return 0;
 }
 
-void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess, _In_ DWORD dwShareMode,
+void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess,
+                     _In_ DWORD dwShareMode,
                      _In_opt_ LPSECURITY_ATTRIBUTES lpSecurityAttributes,
                      _In_ DWORD dwCreationDisposition,
                      _In_ DWORD dwFlagsAndAttributes,
@@ -127,7 +148,8 @@ void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess, _In_ DWORD d
     if (g_blink.m_originalFileToNewFile.end() !=
         g_blink.m_originalFileToNewFile.find(absolutePath)) {
       std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-      fileNameString = converter.from_bytes(g_blink.m_originalFileToNewFile[absolutePath]);
+      fileNameString =
+          converter.from_bytes(g_blink.m_originalFileToNewFile[absolutePath]);
     }
   }
 
@@ -137,9 +159,17 @@ void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess, _In_ DWORD d
 }
 
 HRESULT EXT_CLASS::Initialize() {
+  g_blink.m_onLoadModule.push_back(
+      [this](const std::shared_ptr<LoadedDll> &dll) {
+        onLoadDynamicModule(dll);
+      });
+
+  g_blink.m_onUnloadModule.push_back(
+      [this](const std::shared_ptr<LoadedDll> &dll) {
+        onUnLoadDynamicModule(dll);
+      });
   g_platform = std::make_shared<WindbgPlatform>();
   g_threadFactory = std::make_shared<WindbgThreadFactory>();
-  g_logger = std::make_shared<WindbgLogger>();
 
   commands::initializeLLdbGlobals();
   HRESULT result = initializeThreadGlobals();
@@ -211,7 +241,6 @@ void EXT_CLASS::executeCommand(
       log("failed initialize thread globals");
     }
     g_platform->setCurrentThread(g_threadFactory->create(0));
-    log("sarting command");
     CommonCommandArgs commonArgs;
     auto thread = g_platform->getCurrentThread();
     commonArgs.selectedFrameIndex =
@@ -235,12 +264,7 @@ void EXT_CLASS::executeCommand(
       g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
       return true;
     };
-    bool res = command(commonArgs);
-    std::string stringResult = "successfully";
-    if (!res) {
-      stringResult = "unsuccessfully";
-    }
-    log("finished execute " + stringResult);
+    command(commonArgs);
   });
   t.detach();
 }
@@ -251,9 +275,12 @@ bool EXT_CLASS::isKernelDebugger() {
   t_control->GetDebuggeeType(&Class, &Qualifier);
   return DEBUG_CLASS_KERNEL == Class;
 }
-
-EXT_COMMAND(execute, "Execute command", "") {
-  std::string scriptFilePath = "C:\\Users\\idowe\\Desktop\\temp\\b.txt";
+#include <iostream>
+EXT_COMMAND(execute, "Execute command",
+            "{;s;expressionFilePath;the file path of the expression}") {
+  auto scriptFilePathPointer = GetUnnamedArgStr(0);
+  std::string scriptFilePath = scriptFilePathPointer;
+  std::cout << scriptFilePath;
   executeCommand([this, scriptFilePath](CommonCommandArgs &args) {
     auto expression = readFile(scriptFilePath);
     if (!expression) {
@@ -297,4 +324,11 @@ EXT_COMMAND(returntoframewith,
     return commands::returnFromFrame(
         args, thread->getRegisterValue("$frame", 0).to_ulong(), true);
   });
+}
+
+EXT_COMMAND(reloadblinkmodules, "reload blink modules", "") {
+  g_platform->setCurrentThread(g_threadFactory->create(0));
+  for (const auto &module : g_blink.getDynamicDlls()) {
+    g_ExtInstance.onLoadDynamicModule(module);
+  }
 }

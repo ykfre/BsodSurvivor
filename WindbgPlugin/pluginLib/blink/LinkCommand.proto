@@ -19,8 +19,8 @@ package LinkCommand;
 // The greeting service definition.
 service Greeter {
   // Sends a greeting
-  rpc Compile (LinkCommandRequest) returns (LinkCommandReply) {}
-  rpc ShouldSendPathData (ShouldSendPathDataRequest) returns (ShouldSendPathDataReply) {}
+  rpc Compile (LinkCommandRequest) returns (stream LinkCommandReply) {}
+  rpc ShouldSendPathData (ShouldSendPathDataRequest) returns ( ShouldSendPathDataReply) {}
   rpc SendPathData (SendPathDataRequest) returns (SendPathDataReply) {}
   
 }
@@ -32,7 +32,6 @@ message LinkCommandRequest {
   string compilationFlags=4;
   string linkerFlags=5;
   string filePath=6;
-  
   string objCopyPath=7;
 }
 
@@ -41,7 +40,8 @@ message LinkCommandRequest {
 // The response message containing the greetings
 message LinkCommandReply {
   bool success=1;
-  string message = 2;
+  bool isLogging=2;
+  string message = 3;
 }
 
 

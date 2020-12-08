@@ -99,11 +99,6 @@ public:
   std::vector<clang::NamedDecl *> m_cached_decls;
 };
 
-
-void clearAstImporterCache() {
-  
-}
-
 namespace clang {
 
   using llvm::make_error;

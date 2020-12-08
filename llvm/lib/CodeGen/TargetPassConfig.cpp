@@ -894,7 +894,7 @@ static cl::opt<RegisterRegAlloc::FunctionPassCtor, false,
                RegisterPassParser<RegisterRegAlloc>>
     RegAlloc("regalloc", cl::Hidden, cl::init(&useDefaultRegisterAllocator),
              cl::desc("Register allocator to use"));
-
+#include <iostream>
 /// BranchFolderPass - Wrap branch folder in a machine function pass.
 class RemoveSetLoadFunctionPass : public MachineFunctionPass {
 public:
@@ -907,12 +907,14 @@ public:
     for (auto &b : MF) {
       std::vector<MachineInstr *> instrsToRemove;
       for (auto &inst : b) {
-
-        std::string s;
-        raw_string_ostream stream(s);
-        inst.print(stream);
-        if (s.find("myCallBeforeSetLoad") != -1) {
-          instrsToRemove.push_back(&inst);
+        for (const auto &operand : inst.operands()) {
+          if (operand.isGlobal()) {
+            auto symbolName = operand.getGlobal()->getName();
+            if (std::string(symbolName).find("myCallBeforeSetLoad") != -1) {
+              instrsToRemove.push_back(&inst);
+              break;
+            }
+          }
         }
       }
       for (auto &inst : instrsToRemove) {

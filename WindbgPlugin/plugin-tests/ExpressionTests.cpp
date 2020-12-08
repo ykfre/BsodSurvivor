@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include "TestsUtils.h"
 #include "UserModePlatform.h"
+#include "Logger.h"
 #include "Crt.h"
 #include "ExpressionTests.h"
 #include "StlExprssionsTests.h"
@@ -22,8 +23,11 @@ public:
     executeCommand(t, [&](CommonCommandArgs &args) {
       g_platform->setCurrentThread(
           g_threadFactory->create(GetThreadId(t.native_handle())));
+      t_logger = std::make_shared<ConsoleLogger>();
+
       args.selectedFrameIndex = selectedFrameIndex;
-      return commands::executeExpression(args, g_expr);
+      auto expr = g_expr;
+      return commands::executeExpression(args, expr);
     });
     ResumeThread(t.native_handle());
   }

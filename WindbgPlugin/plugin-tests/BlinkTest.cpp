@@ -79,7 +79,7 @@ return ;
 class BlinkTests : public TestUtils {
 public:
   void SetUp() override {
-    g_blink = Blink();
+    //g_blink = Blink (For now we don't do this as this will fuck up the executable (as it means unloadint blink modules if exists)
     TestUtils::SetUp();
   }
 
@@ -97,6 +97,34 @@ public:
     return request;
   }
 };
+
+TEST_F(BlinkTests, moduleDoesNotExist) {
+  g_config.modulesNames.push_back("some not found module");
+  auto result = g_blink.initDllsIfNeeded();
+  ASSERT_FALSE(result.m_success);
+}
+
+TEST_F(BlinkTests, didNotSucceedToFindSymbol) {
+  auto oldDynamic = g_blink.getDynamicDlls();
+  auto request = getLinkCommandRequest();
+  writeToFile(request.filepath(),
+              std::vector<char>{DONT_SUCCESSFULLY_LINK_CPP.begin(),
+                                DONT_SUCCESSFULLY_LINK_CPP.end()});
+  auto result = g_blink.link(&request);
+  ASSERT_FALSE(result.m_success);
+  ASSERT_EQ(oldDynamic, g_blink.getDynamicDlls());
+}
+
+TEST_F(BlinkTests, BAD_COMPILATION_CPP) {
+  auto oldDynamic = g_blink.getDynamicDlls();
+  auto request = getLinkCommandRequest();
+  writeToFile(request.filepath(), std::vector<char>{BAD_COMPILATION_CPP.begin(),
+                                                    BAD_COMPILATION_CPP.end()});
+  auto result = g_blink.link(&request);
+  ASSERT_FALSE(result.m_success);
+  ASSERT_EQ(oldDynamic, g_blink.getDynamicDlls());
+}
+
 
 TEST_F(BlinkTests, sanity) {
   auto request = getLinkCommandRequest();
@@ -141,29 +169,3 @@ TEST_F(BlinkTests, sanity) {
   }
 }
 
-TEST_F(BlinkTests, moduleDoesNotExist) {
-  g_config.modulesNames.push_back("some not found module");
-  auto result = g_blink.initDllsIfNeeded();
-  ASSERT_FALSE(result.m_success);
-}
-
-TEST_F(BlinkTests, didNotSucceedToFindSymbol) {
-  auto oldDynamic = g_blink.getDynamicDlls();
-  auto request = getLinkCommandRequest();
-  writeToFile(request.filepath(),
-              std::vector<char>{DONT_SUCCESSFULLY_LINK_CPP.begin(),
-                                DONT_SUCCESSFULLY_LINK_CPP.end()});
-  auto result = g_blink.link(&request);
-  ASSERT_FALSE(result.m_success);
-  ASSERT_EQ(oldDynamic, g_blink.getDynamicDlls());
-}
-
-TEST_F(BlinkTests, BAD_COMPILATION_CPP) {
-  auto oldDynamic = g_blink.getDynamicDlls();
-  auto request = getLinkCommandRequest();
-  writeToFile(request.filepath(), std::vector<char>{BAD_COMPILATION_CPP.begin(),
-                                                    BAD_COMPILATION_CPP.end()});
-  auto result = g_blink.link(&request);
-  ASSERT_FALSE(result.m_success);
-  ASSERT_EQ(oldDynamic, g_blink.getDynamicDlls());
-}

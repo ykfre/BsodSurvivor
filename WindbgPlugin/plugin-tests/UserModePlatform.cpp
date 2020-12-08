@@ -17,7 +17,7 @@ void *UserModePlatform::allocateMemory(size_t size) {
   return data;
 }
 
-void UserModePlatform::deallocateMemory(void *data) {}
+void UserModePlatform::deallocateMemory(void *data) { delete []data; }
 
 void UserModePlatform::addBp(void *addr) {}
 

@@ -17,4 +17,7 @@ EXPORTS
 
     returnwithout
     returnwith
+    returntoframewithout
+    returntoframewith
+    reloadblinkmodules
     execute

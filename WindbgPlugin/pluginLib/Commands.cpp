@@ -99,12 +99,8 @@
 
 #pragma warning(pop)
 
-size_t g_lastRip = 0;
 extern thread_local void *t_bpAddress;
 extern thread_local llvm::Optional<std::function<bool()>> t_callAllocateStack;
-
-extern void clearClangModulesDeclVendorImplCache();
-extern void clearAstImporterCache();
 
 namespace commands {
 
@@ -239,7 +235,6 @@ public:
   }
 
   lldb_private::Status DoDeallocateMemory(lldb::addr_t ptr) override {
-    g_platform->deallocateMemory((void *)ptr);
     return lldb_private::Status();
   };
 
@@ -479,12 +474,13 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
           llvm::sys::fs::OF_Text)) {
     return llvm::NoneType();
   }
-  commonCommandArgs.logCallback = logCallback;
+
+  // Keep it for now for debugging puproses only.
   auto error_stream = std::make_shared<llvm::raw_fd_ostream>(FD, true, true);
   commonCommandInitializerValues.debugger->SetLoggingCallback(
-      commonCommandArgs.logCallback, nullptr);
+      logCallback, nullptr);
   if (!commonCommandInitializerValues.debugger->EnableLog(
-          "lldb", {"default"}, "", 0, *error_stream)) {
+          "lldb", {""}, "", 0, *error_stream)) {
     return llvm::NoneType();
   }
 
@@ -543,6 +539,8 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
 
 bool executeExpression(CommonCommandArgs &commonCommandArgs,
                        const std::string &expression) {
+  writeLog("sarting executing expression");
+
   auto modules = g_blink.getOrdinaryDlls();
   if (g_blink.getDllToChange()) {
     modules.push_back(g_blink.getDllToChange());
@@ -556,11 +554,6 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
   lldb_private::MyRegisterContext registersContext(
       *commonCommandInitializerValues->exeCtxScope->CalculateThread(),
       commonCommandArgs.selectedFrameIndex);
-  if (g_lastRip != registersContext.GetPC()) {
-    clearClangModulesDeclVendorImplCache();
-    clearAstImporterCache();
-    g_lastRip = registersContext.GetPC();
-  }
 
   lldb_private::EvaluateExpressionOptions options;
   options.SetUnwindOnError(false);
@@ -578,11 +571,24 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
       commonCommandInitializerValues->targetSp->EvaluateExpression(
           expression, commonCommandInitializerValues->exeCtxScope.get(), value,
           options);
+  std::string finishedString =
+      lldb::eExpressionCompleted == result
+          ? "finished executing expression successfully"
+          : "failed to execute expression";
+  writeLog(finishedString);
+
+  if (lldb::eExpressionCompleted != result) {
+    if (value->GetError().AsCString()) {
+      auto errorsStr = value->GetError().AsCString();
+      writeLog(errorsStr);
+    }
+  }
   return lldb::eExpressionCompleted == result;
 }
 
 bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
                      size_t untilFrameIndex, bool shouldCallDestructors) {
+  writeLog("start returning from frame");
   if (untilFrameIndex == 0) {
     return true;
   }
@@ -599,6 +605,10 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
   auto error = returnFromCurrentFrame(
       *commonCommandInitializerValues->exeCtxScope->CalculateThread(), exe_ctx2,
       shouldCallDestructors, (int32_t)untilFrameIndex);
+  std::string returnFromFrameStr = error.Success()
+                                       ? "returned from frame successfully"
+                                       : "failed to return from frmae";
+  writeLog(returnFromFrameStr);
   return error.Success();
 }
 } // namespace commands

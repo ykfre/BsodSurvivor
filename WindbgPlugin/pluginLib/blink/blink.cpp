@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string>
 #include <vector>
+#include "Logger.h"
 
 #include "LoadDllFromMemory.h"
 #include "utils.h"
@@ -265,9 +266,9 @@ Result Blink::link(const LinkCommandRequest *request,
   auto asmFilePath = getUniqueTempFilePath("a.asm");
   static_cast<void>(writeToFile(
       asmFilePath, std::vector<char>{defData.begin(), defData.end()}));
-  auto objFilePath = getUniqueTempFilePath("m.obj");
+  auto objFilePath = getUniqueTempFilePath("cpp.obj");
   static_cast<void>(writeToFile(objFilePath, objFileData));
-  auto asmFileObjFilePath = getUniqueTempFilePath("a.obj");
+  auto asmFileObjFilePath = getUniqueTempFilePath("asm.obj");
   std::string processOutput;
   auto asmCommand = request->masmpath() + " /c /nologo /Zi /Fo" +
                     asmFileObjFilePath + " /W3 /errorReport:prompt  /Ta" +
@@ -278,15 +279,17 @@ Result Blink::link(const LinkCommandRequest *request,
   }
 
   std::string ldLinkPath = request->ldpath();
-  auto dllPath = getUniqueTempFilePath("myDll.dll");
+  auto dllPath = getUniqueTempFilePath(request->filepath()+".dll");
   auto ldProcessCommand =
       ldLinkPath + " " + asmFileObjFilePath + " " + objFilePath +
       R"( /dll /debug:full /force:unresolved )" + request->linkerflags() +
       " /NODEFAULTLIB /noentry /out:" + dllPath;
+  writeLog("starting to link " + ldProcessCommand);
   if (!createProcess(ldProcessCommand, processOutput)) {
     return Result("failed to create process " + ldProcessCommand + "\n" +
                   processOutput);
   }
+  writeLog("link finished");
 
   std::unordered_map<std::string, Symbol> neededSymbols{};
   for (const auto &symbolName : symbolsToNull) {
@@ -298,6 +301,9 @@ Result Blink::link(const LinkCommandRequest *request,
   if (!dllData) {
     return Result("failed to read " + dllPath);
   }
+
+  writeLog("loading dll to memory");
+
   std::shared_ptr<LoadedDll> loadedDll;
   auto result =
       loadDllFromMemory(std::filesystem::path(dllPath).filename().string(),
@@ -305,6 +311,8 @@ Result Blink::link(const LinkCommandRequest *request,
   if (!result.m_success) {
     return result;
   }
+  writeLog("finished loading dll to memory");
+  writeLog("updating previous modules with new symbols");
   auto newSymbols = loadedDll->getSymbols();
   for (const auto &symbolsInModule : getSymbolsToChangeInOldObjects()) {
     for (const auto &oldSymbol : symbolsInModule) {
@@ -503,6 +511,7 @@ Blink::Blink() {
 }
 
 Result Blink::link(const LinkCommandRequest *request) {
+  writeLog("blink starting");
   auto result = initDllsIfNeeded();
   if (!result.m_success) {
     return result;
@@ -517,12 +526,15 @@ Result Blink::link(const LinkCommandRequest *request) {
   std::string processCommand = clangFilePath + " /Od /Zi /GS- -gdwarf " +
                                request->compilationflags() + " -c " + "\"" +
                                filePath + "\"" + " -o " + outputFilePath;
+  writeLog("starting to compile " + processCommand);
   auto workingDir =
       std::filesystem::path(request->filepath()).parent_path().string();
   if (!createProcess(processCommand, processOutput, workingDir)) {
     return Result("failed running process" + processCommand + " \n" +
                   processOutput);
   }
+  writeLog("finished compiling successfully");
+
   const std::vector<std::string> intrinsicsToReplace = {"memset", "memmove",
                                                         "memcpy"};
   std::string objCopyCommand = request->objcopypath() + " " + outputFilePath;

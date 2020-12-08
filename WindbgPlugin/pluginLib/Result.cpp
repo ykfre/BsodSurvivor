@@ -9,5 +9,3 @@ Result::Result(std::string err) {
   m_err = err;
   m_success = false;
 }
-
-Result::Result() {}

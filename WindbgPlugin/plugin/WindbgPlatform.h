@@ -40,11 +40,6 @@ public:
 
   size_t writeMemory(void *addr, const void *buf, size_t size) override;
 
-
   std::vector<std::shared_ptr<LoadedDll>> getModules() override;
   bool runThreadPlan() override;
-
-private:
-  void onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
-  void onUnLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
 };

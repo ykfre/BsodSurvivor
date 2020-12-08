@@ -12,19 +12,19 @@
 #include <grpcpp/health_check_service_interface.h>
 
 class GreeterServiceImpl final : public LinkCommand::Greeter::Service {
-  grpc::Status Compile(grpc::ServerContext *context,
-                       const LinkCommand::LinkCommandRequest *request,
-                       LinkCommand::LinkCommandReply *reply) override;
+  grpc::Status
+  Compile(grpc::ServerContext *context,
+          const LinkCommand::LinkCommandRequest *request,
+          grpc::ServerWriter<::LinkCommand::LinkCommandReply> *reply) override;
 
   grpc::Status
   ShouldSendPathData(grpc::ServerContext *context,
                      const LinkCommand::ShouldSendPathDataRequest *request,
                      LinkCommand::ShouldSendPathDataReply *reply) override;
 
-  grpc::Status
-  SendPathData(grpc::ServerContext *context,
-                     const LinkCommand::SendPathDataRequest *request,
-                     LinkCommand::SendPathDataReply *reply) override;
+  grpc::Status SendPathData(grpc::ServerContext *context,
+                            const LinkCommand::SendPathDataRequest *request,
+                            LinkCommand::SendPathDataReply *reply) override;
 };
 
 struct GrpcServer {

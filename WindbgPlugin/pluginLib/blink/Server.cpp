@@ -16,11 +16,11 @@
  *
  */
 
+#include "Platform.h"
 #include "blink.h"
 #include <iostream>
 #include <memory>
 #include <string>
-#include "Platform.h"
 
 #ifdef BAZEL_BUILD
 #include "examples/protos/helloworld.grpc.pb.h"
@@ -28,6 +28,7 @@
 #include "LinkCommand.grpc.pb.h"
 #include "Server.h"
 #endif
+#include "Logger.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -37,19 +38,41 @@ using LinkCommand::Greeter;
 using LinkCommand::LinkCommandReply;
 using LinkCommand::LinkCommandRequest;
 
+class VsLogger : public Logger {
+public:
+  VsLogger(grpc::ServerWriter<::LinkCommand::LinkCommandReply> *reply) {
+    m_reply = reply;
+  }
+  void write(const std::string &message) override {
+    auto reply = LinkCommandReply();
+    reply.set_islogging(true);
+    reply.set_message(message);
+    m_reply->Write(reply);
+  }
+
+private:
+  grpc::ServerWriter<::LinkCommand::LinkCommandReply> *m_reply;
+};
+
 // Logic and data behind the server's behavior.
-grpc::Status
-GreeterServiceImpl::Compile(grpc::ServerContext *context,
-                            const LinkCommand::LinkCommandRequest *request,
-                            LinkCommand::LinkCommandReply *reply) {
+grpc::Status GreeterServiceImpl::Compile(
+    grpc::ServerContext *context,
+    const LinkCommand::LinkCommandRequest *request,
+    grpc::ServerWriter<::LinkCommand::LinkCommandReply> *reply) {
   auto thread = g_threadFactory->create(GetCurrentThreadId());
+  t_logger = std::make_shared<VsLogger>(reply);
   g_platform->setCurrentThread(thread);
   g_platform->verifyPreConditions();
   auto result = g_blink.link(request);
+  auto message = LinkCommandReply();
   if (!result.m_success) {
-    reply->set_message(result.m_err);
+    message.set_message(result.m_err);
   }
-  reply->set_success(result.m_success);
+  message.set_islogging(false);
+  message.set_success(result.m_success);
+  auto options = grpc::WriteOptions();
+  reply->WriteLast(message, options);
+  t_logger.reset();
   return Status::OK;
 }
 
@@ -73,8 +96,7 @@ grpc::Status GreeterServiceImpl::SendPathData(
   return Status::OK;
 }
 
-GrpcServer createServer(size_t port)
-{
+GrpcServer createServer(size_t port) {
   auto service = std::make_shared<GreeterServiceImpl>();
   std::string server_address("0.0.0.0:" + std::to_string(port));
 
@@ -83,6 +105,7 @@ GrpcServer createServer(size_t port)
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  builder.
   // Register "service" as the instance through which we'll communicate with
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(service.get());

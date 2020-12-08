@@ -1,14 +1,19 @@
 #include "Logger.h"
 #include <Windows.h>
+#include <iomanip>
 #include <iostream>
 
-void ConsoleLogger::write(const std::string &message) {
-  std::cout << message;
-}
+#include <chrono>
+#include <sstream>
 
+void ConsoleLogger::write(const std::string &message) { std::cout << message; }
 void writeLog(const std::string &message) {
-  if (g_logger) {
-    g_logger->write(message + "\n");
+  if (t_logger) {
+    std::stringstream s;
+    auto time = std::time(nullptr);
+    std::put_time(std::gmtime(&time), "%F %T%z");
+    s << time;
+    t_logger->write(s.str() + message + "\n");
   }
 }
 
@@ -17,7 +22,6 @@ void logCallback(const char *message, void *batton) {
   auto messageString = std::string(message);
   if (messageString.find("error:") != -1 ||
       messageString.find("warning:") != -1) {
-    
   }
   writeLog(message);
 }

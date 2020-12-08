@@ -20,6 +20,7 @@ callDestructors(lldb_private::Thread &thread,
   lldb_private::MyRegisterContext youngestContext(thread, frameNum);
   auto module = getContainingModule(executionContext, youngestContext.GetPC());
   if (!module) {
+    writeLog("warning failed to find module containing current rip");
     return return_error;
   }
   auto objFile = module.getValue()->GetObjectFile();
@@ -74,16 +75,12 @@ callDestructors(lldb_private::Thread &thread,
     int currentState =
         findState(youngestContext.GetPC() - baseStartAddr, ipoEntries);
     if (-1 == currentState) {
-      lldb_private::Log *log(
-          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
-      LLDB_LOGF(log, "no desturctors");
+      writeLog("no desturctors in current frame");
       return return_error;
     }
 
     if (-1 == funcInfo.maxState) {
-      lldb_private::Log *log(
-          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
-      LLDB_LOGF(log, "no desturctors");
+      writeLog("no desturctors in current frame");
       return return_error;
     }
     std::vector<UnwindMapEntry2> unwindMap(funcInfo.maxState);
@@ -142,7 +139,7 @@ returnFromCurrentFrame(lldb_private::Thread &thread,
     if (shouldRunDestructors) {
       auto res = callDestructors(thread, executionContext, 0);
       if (!res.Success()) {
-        writeLog("failed to call destructors");
+        writeLog("failed to call destructors although they exists");
       }
     }
     youngestContext.WriteAllRegisterValues(olderFrameRegisters);

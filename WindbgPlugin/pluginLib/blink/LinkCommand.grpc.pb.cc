@@ -34,32 +34,25 @@ std::unique_ptr< Greeter::Stub> Greeter::NewStub(const std::shared_ptr< ::grpc::
 }
 
 Greeter::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel)
-  : channel_(channel), rpcmethod_Compile_(Greeter_method_names[0], ::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  : channel_(channel), rpcmethod_Compile_(Greeter_method_names[0], ::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
   , rpcmethod_ShouldSendPathData_(Greeter_method_names[1], ::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   , rpcmethod_SendPathData_(Greeter_method_names[2], ::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
 
-::grpc::Status Greeter::Stub::Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::LinkCommand::LinkCommandReply* response) {
-  return ::grpc::internal::BlockingUnaryCall(channel_.get(), rpcmethod_Compile_, context, request, response);
+::grpc::ClientReader< ::LinkCommand::LinkCommandReply>* Greeter::Stub::CompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request) {
+  return ::grpc::internal::ClientReaderFactory< ::LinkCommand::LinkCommandReply>::Create(channel_.get(), rpcmethod_Compile_, context, request);
 }
 
-void Greeter::Stub::experimental_async::Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, std::function<void(::grpc::Status)> f) {
-  ::grpc::internal::CallbackUnaryCall(stub_->channel_.get(), stub_->rpcmethod_Compile_, context, request, response, std::move(f));
+void Greeter::Stub::experimental_async::Compile(::grpc::ClientContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::experimental::ClientReadReactor< ::LinkCommand::LinkCommandReply>* reactor) {
+  ::grpc::internal::ClientCallbackReaderFactory< ::LinkCommand::LinkCommandReply>::Create(stub_->channel_.get(), stub_->rpcmethod_Compile_, context, request, reactor);
 }
 
-void Greeter::Stub::experimental_async::Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, ::grpc::experimental::ClientUnaryReactor* reactor) {
-  ::grpc::internal::ClientCallbackUnaryFactory::Create(stub_->channel_.get(), stub_->rpcmethod_Compile_, context, request, response, reactor);
+::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>* Greeter::Stub::AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+  return ::grpc::internal::ClientAsyncReaderFactory< ::LinkCommand::LinkCommandReply>::Create(channel_.get(), cq, rpcmethod_Compile_, context, request, true, tag);
 }
 
-::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>* Greeter::Stub::PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-  return ::grpc::internal::ClientAsyncResponseReaderFactory< ::LinkCommand::LinkCommandReply>::Create(channel_.get(), cq, rpcmethod_Compile_, context, request, false);
-}
-
-::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>* Greeter::Stub::AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-  auto* result =
-    this->PrepareAsyncCompileRaw(context, request, cq);
-  result->StartCall();
-  return result;
+::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>* Greeter::Stub::PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncReaderFactory< ::LinkCommand::LinkCommandReply>::Create(channel_.get(), cq, rpcmethod_Compile_, context, request, false, nullptr);
 }
 
 ::grpc::Status Greeter::Stub::ShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::LinkCommand::ShouldSendPathDataReply* response) {
@@ -111,13 +104,13 @@ void Greeter::Stub::experimental_async::SendPathData(::grpc::ClientContext* cont
 Greeter::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       Greeter_method_names[0],
-      ::grpc::internal::RpcMethod::NORMAL_RPC,
-      new ::grpc::internal::RpcMethodHandler< Greeter::Service, ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
+      ::grpc::internal::RpcMethod::SERVER_STREAMING,
+      new ::grpc::internal::ServerStreamingHandler< Greeter::Service, ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
           [](Greeter::Service* service,
              ::grpc::ServerContext* ctx,
              const ::LinkCommand::LinkCommandRequest* req,
-             ::LinkCommand::LinkCommandReply* resp) {
-               return service->Compile(ctx, req, resp);
+             ::grpc::ServerWriter<::LinkCommand::LinkCommandReply>* writer) {
+               return service->Compile(ctx, req, writer);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       Greeter_method_names[1],
@@ -144,10 +137,10 @@ Greeter::Service::Service() {
 Greeter::Service::~Service() {
 }
 
-::grpc::Status Greeter::Service::Compile(::grpc::ServerContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response) {
+::grpc::Status Greeter::Service::Compile(::grpc::ServerContext* context, const ::LinkCommand::LinkCommandRequest* request, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* writer) {
   (void) context;
   (void) request;
-  (void) response;
+  (void) writer;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 

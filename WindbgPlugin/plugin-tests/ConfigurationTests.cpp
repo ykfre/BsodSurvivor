@@ -1,22 +1,26 @@
 #include "Platform.h"
+
 #include "Config.h"
 #include "FunctionRunManager.h"
 #include "TestsUtils.h"
 #include "gtest/gtest.h"
 
 class ConfigurationTests : public testing::Test {};
-std::string JSON_DATA = "{"
-                        "\"executablePath\" : \"a.exe\","
-                        " \"executableModuleName\" : \"module\","
-                        " \"callDestructorsFunctionName\" : \"callDestructorsFunctionName\","
-                        " \"breakFunctionName\" : \"breakFunctionName\","
-                        "\"allocateSpaceInStackFunctionName\" : " "\"allocateSpaceInStackFunctionName\","
-                        "\"modulesNames\" : [ \"a\", \"b\" ]"
-                        "}";
+std::string JSON_DATA =
+    "{"
+    "\"executablePath\" : \"a.exe\","
+    " \"executableModuleName\" : \"module\","
+    " \"callDestructorsFunctionName\" : \"callDestructorsFunctionName\","
+    " \"breakFunctionName\" : \"breakFunctionName\","
+    "\"allocateSpaceInStackFunctionName\" : "
+    "\"allocateSpaceInStackFunctionName\","
+    "\"modulesNames\" : [ \"a\", \"b\" ],"
+    " \"serverPort\" : 5"
+    "}";
 
 std::string BAD_JSON_DATA = "{"
-                        "\"executablenassndmnmdnPath\" : \"a.exe\""
-                        "}";
+                            "\"executablenassndmnmdnPath\" : \"a.exe\""
+                            "}";
 
 TEST_F(ConfigurationTests, sanity) {
   Config config;
@@ -27,6 +31,8 @@ TEST_F(ConfigurationTests, sanity) {
   ASSERT_EQ(config.executableModuleName, "module");
   ASSERT_EQ(config.allocateSpaceInStackFunctionName,
             "allocateSpaceInStackFunctionName");
+
+  ASSERT_EQ(config.serverPort, 5);
   auto expectedModulesNames = std::vector<std::string>{"a", "b"};
   ASSERT_EQ(config.modulesNames, expectedModulesNames);
 }

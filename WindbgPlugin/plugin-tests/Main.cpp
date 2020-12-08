@@ -19,7 +19,6 @@
 
 
 int main(int argc, char** argv) {
-  g_logger = std::make_shared<ConsoleLogger>();
   g_platform = std::make_shared<UserModePlatform>();
   g_threadFactory = std::make_shared<UserModeThreadFactory>();
   commands::initializeLLdbGlobals();

@@ -3,8 +3,8 @@
 class [[nodiscard]] Result {
 public:
   Result(std::string err);
-  Result();
+  Result() = default;
 
-  bool m_success=true;
-  std::string m_err="";
+  bool m_success = true;
+  std::string m_err = "";
 };
