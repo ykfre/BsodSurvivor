@@ -21,6 +21,7 @@ public:
   EXT_COMMAND_METHOD(returntoframewithout);
   EXT_COMMAND_METHOD(returntoframewith);
   EXT_COMMAND_METHOD(execute);
+  EXT_COMMAND_METHOD(jump);
   EXT_COMMAND_METHOD(reloadblinkmodules);
 
   void log(const std::string &output);
@@ -29,14 +30,13 @@ public:
 
   void onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
   void onUnLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll);
-  bool addFilePathToHook(const std::string &filePath,
-                         const std::string &fileData);
-  bool shouldAddFilePathToHook(const std::string &filePath);
   bool isKernelDebugger();
   std::map<size_t, int> m_bpAndCounters;
   std::shared_ptr<size_t> m_event;
   inline static thread_local std::shared_ptr<IDebugClient5> t_debugClient5;
   inline static thread_local std::shared_ptr<IDebugClient> t_debugClient;
+  inline static  std::shared_ptr<IDebugControl> g_control;
+
   inline static thread_local std::shared_ptr<IDebugControl> t_control;
   inline static thread_local std::shared_ptr<IDebugSymbols> t_symbols;
   inline static thread_local std::shared_ptr<IDebugSymbols3> t_symbols3;

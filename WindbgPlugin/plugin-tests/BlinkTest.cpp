@@ -79,8 +79,14 @@ return ;
 class BlinkTests : public TestUtils {
 public:
   void SetUp() override {
-    //g_blink = Blink (For now we don't do this as this will fuck up the executable (as it means unloadint blink modules if exists)
+    g_blink = Blink();
     TestUtils::SetUp();
+  }
+
+  void TearDown() override {
+    for (auto &module : g_blink.getDynamicDlls()) {
+      module->setShouldRelease(false);
+    }
   }
 
   LinkCommand::LinkCommandRequest getLinkCommandRequest() {

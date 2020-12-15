@@ -9,7 +9,7 @@
 #include <psapi.h>
 #include <stdexcept>
 #include <vector>
-
+#include "blink/Server.h"
 void *UserModePlatform::allocateMemory(size_t size) {
   char *data = new char[size];
   DWORD dummy;

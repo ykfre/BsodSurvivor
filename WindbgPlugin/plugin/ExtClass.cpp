@@ -19,7 +19,6 @@
 #include <sstream>
 #include <string>
 #pragma warning(pop)
-
 void releaseHook(void **arg) {
   if (arg) {
     if (((HOOK_TRACE_INFO *)arg)->Link) {
@@ -134,29 +133,7 @@ HRESULT EXT_CLASS::initializeThreadGlobals() {
   return 0;
 }
 
-void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess,
-                     _In_ DWORD dwShareMode,
-                     _In_opt_ LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                     _In_ DWORD dwCreationDisposition,
-                     _In_ DWORD dwFlagsAndAttributes,
-                     _In_opt_ HANDLE hTemplateFile) {
-  std::wstring fileNameString;
-  if (fileName) {
-    fileNameString = fileName;
-    auto absolutePath = std::filesystem::absolute(fileName).string();
-    std::lock_guard lock(*g_blink.m_originalFileToNewFileMutex);
-    if (g_blink.m_originalFileToNewFile.end() !=
-        g_blink.m_originalFileToNewFile.find(absolutePath)) {
-      std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-      fileNameString =
-          converter.from_bytes(g_blink.m_originalFileToNewFile[absolutePath]);
-    }
-  }
-
-  return CreateFileW(fileNameString.c_str(), dwDesiredAccess, dwShareMode,
-                     lpSecurityAttributes, dwCreationDisposition,
-                     dwFlagsAndAttributes, hTemplateFile);
-}
+std::shared_ptr<IDebugClient> g_debugClient;
 
 HRESULT EXT_CLASS::Initialize() {
   g_blink.m_onLoadModule.push_back(
@@ -187,30 +164,19 @@ HRESULT EXT_CLASS::Initialize() {
   if (!g_config.load(dir.string() + "\\config.json")) {
     return -1;
   }
-  ExtensionApis.nSize = sizeof(ExtensionApis);
-  result = t_control->GetWindbgExtensionApis64(&ExtensionApis);
-  if (!SUCCEEDED(result)) {
-    return result;
-  }
-  result = t_debugClient->SetEventCallbacks(&m_debugEvents);
-  if (!SUCCEEDED(result)) {
-    return result;
-  }
 
-  auto hook = new HOOK_TRACE_INFO();
-  auto hookRes =
-      LhInstallHook(GetProcAddress(GetModuleHandleA("kernel32"), "CreateFileW"),
-                    createFileHook, nullptr, hook);
-  m_hook = std::shared_ptr<void *>((void **)hook, releaseHook);
-  if (FAILED(hookRes)) {
-    writeLog("failed to put hook on create file");
-    return -1;
+  auto server = createServer(g_config.serverPort);
+  if (!server.server) {
+    writeLog("failed to load rpc server, becaues port is in use: " +
+             std::to_string(g_config.serverPort));
   }
-  ULONG ACLEntries[1] = {0};
-  hookRes = LhSetExclusiveACL(ACLEntries, 0, hook);
-  if (FAILED(hookRes)) {
-    writeLog("failed to put hook on create file");
-    return -1;
+  auto parentProcessId = getParentProccessPid();
+  std::string dllToHook = dir.string() + "\\CreateFileHookDll.dll";
+  auto injectionRes =
+      loadRemoteDLL(OpenProcess(PROCESS_ALL_ACCESS, false, parentProcessId),
+                    dllToHook.c_str());
+  if (!injectionRes) {
+    writeLog("failed to inject process for create file.");
   }
 
   m_event = std::shared_ptr<size_t>(
@@ -224,27 +190,37 @@ HRESULT EXT_CLASS::Initialize() {
     writeLog("failed to create lldb-windbg event");
     return -1;
   }
-  auto server = createServer(g_config.serverPort);
-  if (!server.server) {
-    writeLog("failed to load rpc server, becaues port is in use: " +
-             std::to_string(g_config.serverPort));
-  }
   std::thread t([server]() { server.server->Wait(); });
   t.detach();
+
+  ExtensionApis.nSize = sizeof(ExtensionApis);
+  g_control = t_control;
+  result = g_control->GetWindbgExtensionApis64(&ExtensionApis);
+  if (!SUCCEEDED(result)) {
+    return result;
+  }
+  g_debugClient = t_debugClient;
+  result = g_debugClient->SetEventCallbacks(&m_debugEvents);
+  if (!SUCCEEDED(result)) {
+    return result;
+  }
   return 0;
 }
 
 void EXT_CLASS::executeCommand(
     const std::function<bool(CommonCommandArgs &)> &command) {
   std::thread t([this, command]() {
+    g_platform->setCurrentThread(g_threadFactory->create(0));
+
     if (!g_platform->verifyPreConditions()) {
       log("failed initialize thread globals");
     }
-    g_platform->setCurrentThread(g_threadFactory->create(0));
+
     CommonCommandArgs commonArgs;
     auto thread = g_platform->getCurrentThread();
     commonArgs.selectedFrameIndex =
         thread->getRegisterValue("$frame", 0).to_ulong();
+
     auto modules = g_blink.getAllDlls();
 
     g_platform->callAllocateSpaceInStack = [] {
@@ -323,6 +299,22 @@ EXT_COMMAND(returntoframewith,
     auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
         args, thread->getRegisterValue("$frame", 0).to_ulong(), true);
+  });
+}
+
+EXT_COMMAND(jump, "jump to line", "{;s;lineNumber;line number in decimal representation}") {
+  auto raw = GetUnnamedArgStr(0);
+  std::istringstream ss(raw);
+  uint32_t line;
+  ss >> line;
+  if (ss.fail()) {
+    writeLog("line isn't a decimal number although it should be - please give "
+             "a decimal number");
+  }
+  executeCommand([line, this](CommonCommandArgs &args) {
+    args.selectedFrameIndex = 0;
+    commands::jumpTo(args, line);
+    return true;
   });
 }
 

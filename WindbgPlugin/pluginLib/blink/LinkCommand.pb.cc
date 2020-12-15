@@ -147,6 +147,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_LinkCommand_2eproto::offsets[]
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
   PROTOBUF_FIELD_OFFSET(::LinkCommand::LinkCommandReply, success_),
+  PROTOBUF_FIELD_OFFSET(::LinkCommand::LinkCommandReply, islogging_),
   PROTOBUF_FIELD_OFFSET(::LinkCommand::LinkCommandReply, message_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::LinkCommand::ShouldSendPathDataRequest, _internal_metadata_),
@@ -176,10 +177,10 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_LinkCommand_2eproto::offsets[]
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::LinkCommand::LinkCommandRequest)},
   { 12, -1, sizeof(::LinkCommand::LinkCommandReply)},
-  { 19, -1, sizeof(::LinkCommand::ShouldSendPathDataRequest)},
-  { 25, -1, sizeof(::LinkCommand::ShouldSendPathDataReply)},
-  { 31, -1, sizeof(::LinkCommand::SendPathDataRequest)},
-  { 38, -1, sizeof(::LinkCommand::SendPathDataReply)},
+  { 20, -1, sizeof(::LinkCommand::ShouldSendPathDataRequest)},
+  { 26, -1, sizeof(::LinkCommand::ShouldSendPathDataReply)},
+  { 32, -1, sizeof(::LinkCommand::SendPathDataRequest)},
+  { 39, -1, sizeof(::LinkCommand::SendPathDataReply)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -196,20 +197,20 @@ const char descriptor_table_protodef_LinkCommand_2eproto[] PROTOBUF_SECTION_VARI
   "kCommandRequest\022\025\n\rclangFilePath\030\001 \001(\t\022\016"
   "\n\006ldPath\030\002 \001(\t\022\020\n\010masmPath\030\003 \001(\t\022\030\n\020comp"
   "ilationFlags\030\004 \001(\t\022\023\n\013linkerFlags\030\005 \001(\t\022"
-  "\020\n\010filePath\030\006 \001(\t\022\023\n\013objCopyPath\030\007 \001(\t\"4"
-  "\n\020LinkCommandReply\022\017\n\007success\030\001 \001(\010\022\017\n\007m"
-  "essage\030\002 \001(\t\")\n\031ShouldSendPathDataReques"
-  "t\022\014\n\004path\030\001 \001(\t\")\n\027ShouldSendPathDataRep"
-  "ly\022\016\n\006should\030\001 \001(\010\"1\n\023SendPathDataReques"
-  "t\022\014\n\004path\030\001 \001(\t\022\014\n\004data\030\002 \001(\t\"\023\n\021SendPat"
-  "hDataReply2\220\002\n\007Greeter\022K\n\007Compile\022\037.Link"
-  "Command.LinkCommandRequest\032\035.LinkCommand"
-  ".LinkCommandReply\"\000\022d\n\022ShouldSendPathDat"
-  "a\022&.LinkCommand.ShouldSendPathDataReques"
-  "t\032$.LinkCommand.ShouldSendPathDataReply\""
-  "\000\022R\n\014SendPathData\022 .LinkCommand.SendPath"
-  "DataRequest\032\036.LinkCommand.SendPathDataRe"
-  "ply\"\000b\006proto3"
+  "\020\n\010filePath\030\006 \001(\t\022\023\n\013objCopyPath\030\007 \001(\t\"G"
+  "\n\020LinkCommandReply\022\017\n\007success\030\001 \001(\010\022\021\n\ti"
+  "sLogging\030\002 \001(\010\022\017\n\007message\030\003 \001(\t\")\n\031Shoul"
+  "dSendPathDataRequest\022\014\n\004path\030\001 \001(\t\")\n\027Sh"
+  "ouldSendPathDataReply\022\016\n\006should\030\001 \001(\010\"1\n"
+  "\023SendPathDataRequest\022\014\n\004path\030\001 \001(\t\022\014\n\004da"
+  "ta\030\002 \001(\t\"\023\n\021SendPathDataReply2\222\002\n\007Greete"
+  "r\022M\n\007Compile\022\037.LinkCommand.LinkCommandRe"
+  "quest\032\035.LinkCommand.LinkCommandReply\"\0000\001"
+  "\022d\n\022ShouldSendPathData\022&.LinkCommand.Sho"
+  "uldSendPathDataRequest\032$.LinkCommand.Sho"
+  "uldSendPathDataReply\"\000\022R\n\014SendPathData\022 "
+  ".LinkCommand.SendPathDataRequest\032\036.LinkC"
+  "ommand.SendPathDataReply\"\000b\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_LinkCommand_2eproto_deps[1] = {
 };
@@ -223,7 +224,7 @@ static ::PROTOBUF_NAMESPACE_ID::internal::SCCInfoBase*const descriptor_table_Lin
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_LinkCommand_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_LinkCommand_2eproto = {
-  false, false, descriptor_table_protodef_LinkCommand_2eproto, "LinkCommand.proto", 693,
+  false, false, descriptor_table_protodef_LinkCommand_2eproto, "LinkCommand.proto", 714,
   &descriptor_table_LinkCommand_2eproto_once, descriptor_table_LinkCommand_2eproto_sccs, descriptor_table_LinkCommand_2eproto_deps, 6, 0,
   schemas, file_default_instances, TableStruct_LinkCommand_2eproto::offsets,
   file_level_metadata_LinkCommand_2eproto, 6, file_level_enum_descriptors_LinkCommand_2eproto, file_level_service_descriptors_LinkCommand_2eproto,
@@ -692,14 +693,18 @@ LinkCommandReply::LinkCommandReply(const LinkCommandReply& from)
     message_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), from._internal_message(),
       GetArena());
   }
-  success_ = from.success_;
+  ::memcpy(&success_, &from.success_,
+    static_cast<size_t>(reinterpret_cast<char*>(&islogging_) -
+    reinterpret_cast<char*>(&success_)) + sizeof(islogging_));
   // @@protoc_insertion_point(copy_constructor:LinkCommand.LinkCommandReply)
 }
 
 void LinkCommandReply::SharedCtor() {
   ::PROTOBUF_NAMESPACE_ID::internal::InitSCC(&scc_info_LinkCommandReply_LinkCommand_2eproto.base);
   message_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  success_ = false;
+  ::memset(&success_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&islogging_) -
+      reinterpret_cast<char*>(&success_)) + sizeof(islogging_));
 }
 
 LinkCommandReply::~LinkCommandReply() {
@@ -735,7 +740,9 @@ void LinkCommandReply::Clear() {
   (void) cached_has_bits;
 
   message_.ClearToEmpty(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArena());
-  success_ = false;
+  ::memset(&success_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&islogging_) -
+      reinterpret_cast<char*>(&success_)) + sizeof(islogging_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -754,9 +761,16 @@ const char* LinkCommandReply::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPA
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
-      // string message = 2;
+      // bool isLogging = 2;
       case 2:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 18)) {
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
+          islogging_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // string message = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 26)) {
           auto str = _internal_mutable_message();
           ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
           CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "LinkCommand.LinkCommandReply.message"));
@@ -797,14 +811,20 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(1, this->_internal_success(), target);
   }
 
-  // string message = 2;
+  // bool isLogging = 2;
+  if (this->islogging() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(2, this->_internal_islogging(), target);
+  }
+
+  // string message = 3;
   if (this->message().size() > 0) {
     ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
       this->_internal_message().data(), static_cast<int>(this->_internal_message().length()),
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
       "LinkCommand.LinkCommandReply.message");
     target = stream->WriteStringMaybeAliased(
-        2, this->_internal_message(), target);
+        3, this->_internal_message(), target);
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -823,7 +843,7 @@ size_t LinkCommandReply::ByteSizeLong() const {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // string message = 2;
+  // string message = 3;
   if (this->message().size() > 0) {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
@@ -832,6 +852,11 @@ size_t LinkCommandReply::ByteSizeLong() const {
 
   // bool success = 1;
   if (this->success() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // bool isLogging = 2;
+  if (this->islogging() != 0) {
     total_size += 1 + 1;
   }
 
@@ -872,6 +897,9 @@ void LinkCommandReply::MergeFrom(const LinkCommandReply& from) {
   if (from.success() != 0) {
     _internal_set_success(from._internal_success());
   }
+  if (from.islogging() != 0) {
+    _internal_set_islogging(from._internal_islogging());
+  }
 }
 
 void LinkCommandReply::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -896,7 +924,12 @@ void LinkCommandReply::InternalSwap(LinkCommandReply* other) {
   using std::swap;
   _internal_metadata_.Swap<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(&other->_internal_metadata_);
   message_.Swap(&other->message_, &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArena());
-  swap(success_, other->success_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(LinkCommandReply, islogging_)
+      + sizeof(LinkCommandReply::islogging_)
+      - PROTOBUF_FIELD_OFFSET(LinkCommandReply, success_)>(
+          reinterpret_cast<char*>(&success_),
+          reinterpret_cast<char*>(&other->success_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata LinkCommandReply::GetMetadata() const {

@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <string>
 #include <mutex>
+#include "CreateFileHook.grpc.pb.h"
 using LinkCommand::LinkCommandRequest;
 
 class Blink {
@@ -24,7 +25,7 @@ public:
   void notifyDynamicModuleLoaded(std::shared_ptr<LoadedDll> module);
   void notifyDynamicModuleUnloaded(std::shared_ptr<LoadedDll> module);
 
-  bool addFilePathToHook(const std::string &filePath,
+  void addFilePathToHook(const std::string &filePath,
                          const std::string &fileData);
   bool shouldAddFilePathToHook(const std::string &filePath);
   std::vector<std::function<void(const std::shared_ptr<LoadedDll> &)>>
@@ -32,7 +33,6 @@ public:
   std::vector<std::function<void(const std::shared_ptr<LoadedDll> &)>>
       m_onUnloadModule;
 
-  std::unordered_map<std::string, std::string> m_originalFileToNewFile;
   std::shared_ptr<std::mutex> m_originalFileToNewFileMutex;
   void *getSymbol(const std::string &symbolName);
 private:
@@ -49,7 +49,7 @@ private:
       std::shared_ptr<LoadedDll> &loadedDll);
 
   static std::string getRealSymbolName(const std::string &symbolName);
-
+  std::shared_ptr<CreateFileHook::Greeter::Stub> getClientForCreateFileHook();
   static bool isJumpSymbol(const std::string &symbol);
   inline const static std::string TEMP_DIR_NAME = "BLINK";
   mutable bool m_isInitDlls = false;

@@ -49,6 +49,9 @@ public:
   std::unordered_map<std::string, Symbol> getSymbols() const;
   lldb::ModuleSP getLLdbModule() const;
   std::string getName();
+  void setShouldRelease(bool shouldRelease) {
+    m_shouldRelease = shouldRelease;
+  }
 
 private:
   static bool getTripleForProcess(const lldb_private::FileSpec &executable,
@@ -61,6 +64,7 @@ private:
   mutable lldb::ModuleSP m_lldbModule;
   LoadedDynamically m_isDynamic;
   std::string m_moduleName;
+  bool m_shouldRelease = true;
   mutable bool m_isReadAsVirtual = false;
   mutable bool m_isReadAsDisk= false;
   mutable std::unordered_map<std::string, Symbol> m_symbolsNamesToSymbol;

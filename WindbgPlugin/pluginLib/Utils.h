@@ -15,6 +15,8 @@ std::optional<std::vector<char>> readFile(const std::string &file_path);
 [[nodiscard]] bool createProcess(const std::string &command,
                                  std::string &output,
                                  const std::string &workingDir = "");
-void abortIfFalse(bool condition, const std::string &message);
 
+int getParentProccessPid();
+void abortIfFalse(bool condition, const std::string &message);
+bool loadRemoteDLL(void *hProcess, const char *dllPath);
 std::string lowerString(const std::string &str);

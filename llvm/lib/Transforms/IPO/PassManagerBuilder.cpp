@@ -496,8 +496,11 @@ public:
              ++J) {
           if (isa<llvm::LoadInst>(J) ||
               isa<llvm::StoreInst>(J)) {
+            isChanged = true;
             Instruction *newInst = CallInst::Create(func, "");
-            B.getInstList().insertAfter(J, newInst);          
+            B.getInstList().insertAfter(J, newInst);
+            J++;
+            assert(isa<llvm::CallInst>(J) || isa<llvm::InvokeInst>(J));
           }
         }
       }
@@ -507,7 +510,8 @@ public:
       if (symbolName.startswith("__jmp_")) {
         continue;
       }
-      if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage) {
+      if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage ||
+          f.getLinkage() == GlobalValue::PrivateLinkage) {
         continue;
       }
       if (f.isDLLImportDependent()) {

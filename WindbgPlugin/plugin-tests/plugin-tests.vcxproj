@@ -136,7 +136,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
@@ -155,7 +155,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <BufferSecurityCheck>false</BufferSecurityCheck>

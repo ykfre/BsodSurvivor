@@ -95,6 +95,7 @@
 #include <bitset>
 #include <ehdata.h>
 #include <fstream>
+#include <sstream>
 #include <iostream>
 
 #pragma warning(pop)
@@ -578,7 +579,7 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
   writeLog(finishedString);
 
   if (lldb::eExpressionCompleted != result) {
-    if (value->GetError().AsCString()) {
+    if (value && value->GetError().AsCString()) {
       auto errorsStr = value->GetError().AsCString();
       writeLog(errorsStr);
     }
@@ -588,10 +589,11 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
 
 bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
                      size_t untilFrameIndex, bool shouldCallDestructors) {
-  writeLog("start returning from frame");
+  
   if (untilFrameIndex == 0) {
-    return true;
+    writeLog("you try to return to the same thread - not doing anything");
   }
+  writeLog("start returning from frame");
   std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
   llvm::Optional<CommonCommandInitializerValues>
       commonCommandInitializerValues =
@@ -609,6 +611,71 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
                                        ? "returned from frame successfully"
                                        : "failed to return from frmae";
   writeLog(returnFromFrameStr);
+  return error.Success();
+}
+
+bool jumpTo(CommonCommandArgs& commonCommandArgs, uint32_t line) {
+  std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
+  llvm::Optional<CommonCommandInitializerValues>
+      commonCommandInitializerValues =
+          commonCommandRunInitializer(commonCommandArgs, modules);
+  if (!commonCommandInitializerValues) {
+    return false;
+  }
+  lldb_private::ExecutionContext exe_ctx2;
+  commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
+      exe_ctx2);
+  lldb_private::Status error;
+  auto frame =
+      commonCommandInitializerValues->exeCtxScope->CalculateStackFrame();
+  auto thread = 
+      commonCommandInitializerValues->exeCtxScope->CalculateThread();
+
+  const lldb_private::SymbolContext &sym_ctx =
+      frame->GetSymbolContext(lldb::eSymbolContextLineEntry);
+
+    // Try the current file, but override if asked.
+    auto file = sym_ctx.line_entry.file;
+
+    if (!file) {
+      writeLog(
+          "No source file available for the current location.");
+      return false;
+    }
+
+    std::string warnings;
+    auto targetSp =
+        commonCommandInitializerValues->exeCtxScope->CalculateTarget();
+    // Find candidate locations.
+    std::vector<lldb_private::Address> candidates, within_function, outside_function;
+    const lldb_private::SymbolContext &sc =
+        frame->GetSymbolContext(lldb::eSymbolContextFunction);
+    targetSp->GetImages().FindAddressesForLine(
+        targetSp, file, line, sc.function,within_function, outside_function);
+    if (within_function.empty() && !outside_function.empty()) {
+      writeLog("The line for the jump isn't in the current function, not jumping");
+      return false;
+    } else if (within_function.empty()) {
+      writeLog(
+          "not found address for the wanted line - not jumping, probably the line is outside the current file");
+      return false;
+    }
+    uint64_t whereToJump = (uint64_t)-1;
+    for (const auto& address : within_function) {
+      whereToJump =
+          std::min(address.GetLoadAddress(targetSp.get()), whereToJump);
+    }
+    if (whereToJump > g_platform->getCurrentThread()->getRegisterValue("rip", 0).to_ullong()) {
+      writeLog("trying to jump after current line - not supported");
+      return false;
+    }
+    error = ::callDestructors(
+        *commonCommandInitializerValues->exeCtxScope->CalculateThread(),
+        exe_ctx2, (void *)whereToJump);
+    g_platform->getCurrentThread()->setRegisterValue("rip", whereToJump);
+    std::stringstream ss;
+    ss << std::hex << whereToJump;
+    writeLog("finished jumping to " + ss.str());
   return error.Success();
 }
 } // namespace commands

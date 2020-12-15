@@ -16,7 +16,7 @@ LoadedDll::LoadedDll(const std::string &moduleName, void *startAddress,
 }
 
 LoadedDll::~LoadedDll() {
-  if (m_isDynamic == LoadedDynamically::DYNAMIC) {
+  if (m_shouldRelease && m_isDynamic == LoadedDynamically::DYNAMIC) {
     if (m_startAddress) {
       g_platform->deallocateMemory(m_startAddress);
     }

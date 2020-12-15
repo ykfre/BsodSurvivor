@@ -135,7 +135,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir);$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>false</TreatWarningAsError>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -153,7 +153,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir);$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <TreatWarningAsError>false</TreatWarningAsError>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -166,6 +166,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\CreateFileHookDll\CreateFileHook.grpc.pb.h" />
+    <ClInclude Include="..\CreateFileHookDll\CreateFileHook.pb.h" />
     <ClInclude Include="blink\coff_reader.hpp" />
     <ClInclude Include="blink\LinkCommand.grpc.pb.h" />
     <ClInclude Include="blink\LinkCommand.pb.h" />
@@ -190,6 +192,8 @@
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\CreateFileHookDll\CreateFileHook.grpc.pb.cc" />
+    <ClCompile Include="..\CreateFileHookDll\CreateFileHook.pb.cc" />
     <ClCompile Include="blink\coff_reader.cpp" />
     <ClCompile Include="blink\LinkCommand.grpc.pb.cc">
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
@@ -234,6 +238,9 @@ C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --plugin=p
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)\blink\LinkCommand.pb.h</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)\blink\LinkCommand.pb.h</Outputs>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\CreateFileHookDll\CreateFileHook.proto" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

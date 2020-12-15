@@ -11,9 +11,9 @@ void writeLog(const std::string &message) {
   if (t_logger) {
     std::stringstream s;
     auto time = std::time(nullptr);
-    std::put_time(std::gmtime(&time), "%F %T%z");
-    s << time;
-    t_logger->write(s.str() + message + "\n");
+    auto formattedTime = std::put_time(std::gmtime(&time), "%F %T%z");
+    s << formattedTime;
+    t_logger->write(s.str() +": "+ message + "\n");
   }
 }
 

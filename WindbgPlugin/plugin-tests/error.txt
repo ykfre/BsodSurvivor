@@ -1,0 +1,35 @@
+error: unrecognized log category ''
+Logging categories for 'lldb':
+  all - all available logging categories
+  default - default set of logging categories
+  api - log API calls and return values
+  ast - log AST
+  break - log breakpoints
+  commands - log command argument parsing
+  comm - log communication activities
+  conn - log connection details
+  demangle - log mangled names to catch demangler crashes
+  dyld - log shared library related activities
+  event - log broadcaster, listener and event queue activities
+  expr - log expressions
+  formatters - log data formatters related activities
+  host - log host activities
+  jit - log JIT events in the target
+  language - log language runtime events
+  mmap - log mmap related activities
+  module - log module activities such as when modules are created, destroyed, replaced, and more
+  object - log object construction/destruction for important objects
+  os - log OperatingSystem plugin related activities
+  platform - log platform events and activities
+  process - log process events and activities
+  script - log events about the script interpreter
+  state - log private and public process state changes
+  step - log step related activities
+  symbol - log symbol related issues and warnings
+  system-runtime - log system runtime events
+  target - log target events and activities
+  temp - log internal temporary debug messages
+  thread - log thread events and activities
+  types - log type system related activities
+  unwind - log stack unwind activities
+  watch - log watchpoint related activities

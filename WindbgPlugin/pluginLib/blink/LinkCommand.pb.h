@@ -451,10 +451,11 @@ class LinkCommandReply PROTOBUF_FINAL :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kMessageFieldNumber = 2,
+    kMessageFieldNumber = 3,
     kSuccessFieldNumber = 1,
+    kIsLoggingFieldNumber = 2,
   };
-  // string message = 2;
+  // string message = 3;
   void clear_message();
   const std::string& message() const;
   void set_message(const std::string& value);
@@ -479,6 +480,15 @@ class LinkCommandReply PROTOBUF_FINAL :
   void _internal_set_success(bool value);
   public:
 
+  // bool isLogging = 2;
+  void clear_islogging();
+  bool islogging() const;
+  void set_islogging(bool value);
+  private:
+  bool _internal_islogging() const;
+  void _internal_set_islogging(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:LinkCommand.LinkCommandReply)
  private:
   class _Internal;
@@ -488,6 +498,7 @@ class LinkCommandReply PROTOBUF_FINAL :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr message_;
   bool success_;
+  bool islogging_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_LinkCommand_2eproto;
 };
@@ -1527,7 +1538,27 @@ inline void LinkCommandReply::set_success(bool value) {
   // @@protoc_insertion_point(field_set:LinkCommand.LinkCommandReply.success)
 }
 
-// string message = 2;
+// bool isLogging = 2;
+inline void LinkCommandReply::clear_islogging() {
+  islogging_ = false;
+}
+inline bool LinkCommandReply::_internal_islogging() const {
+  return islogging_;
+}
+inline bool LinkCommandReply::islogging() const {
+  // @@protoc_insertion_point(field_get:LinkCommand.LinkCommandReply.isLogging)
+  return _internal_islogging();
+}
+inline void LinkCommandReply::_internal_set_islogging(bool value) {
+  
+  islogging_ = value;
+}
+inline void LinkCommandReply::set_islogging(bool value) {
+  _internal_set_islogging(value);
+  // @@protoc_insertion_point(field_set:LinkCommand.LinkCommandReply.isLogging)
+}
+
+// string message = 3;
 inline void LinkCommandReply::clear_message() {
   message_.ClearToEmpty(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArena());
 }

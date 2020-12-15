@@ -8,7 +8,12 @@
 #include <string>
 #include <vector>
 #include "Logger.h"
-
+#include "CreateFileHook.grpc.pb.h"
+#include "CreateFileHook.pb.h"
+#include <grpc++/channel.h>
+#include <grpc++/client_context.h>
+#include <grpc++/create_channel.h>
+#include <grpc++/security/credentials.h>
 #include "LoadDllFromMemory.h"
 #include "utils.h"
 #include <assert.h>
@@ -111,7 +116,17 @@ void Blink::resetDllToChange() {
   }
   m_dynamicDlls.clear();
   m_dllToChange.reset();
-  m_originalFileToNewFile.clear();
+  try {
+    std::scoped_lock lock(*m_originalFileToNewFileMutex);
+
+    auto client = getClientForCreateFileHook();
+    auto request = CreateFileHook::Empty();
+    auto reply = CreateFileHook::Empty();
+    grpc::ClientContext context;
+
+    client->ClearPaths(&context, request, &reply);
+  } catch (...) {
+  }
 }
 
 std::vector<std::shared_ptr<LoadedDll>> Blink::getAllDlls() const {
@@ -282,7 +297,7 @@ Result Blink::link(const LinkCommandRequest *request,
   auto dllPath = getUniqueTempFilePath(request->filepath()+".dll");
   auto ldProcessCommand =
       ldLinkPath + " " + asmFileObjFilePath + " " + objFilePath +
-      R"( /dll /debug:full /force:unresolved )" + request->linkerflags() +
+      R"( /dll /debug:full /align:16 /driver /force:unresolved )" + request->linkerflags() +
       " /NODEFAULTLIB /noentry /out:" + dllPath;
   writeLog("starting to link " + ldProcessCommand);
   if (!createProcess(ldProcessCommand, processOutput)) {
@@ -489,6 +504,12 @@ std::string Blink::getRealSymbolName(const std::string &symbolName) {
   return realSymbolName;
 }
 
+std::shared_ptr<CreateFileHook::Greeter::Stub> Blink::getClientForCreateFileHook() {
+  return CreateFileHook::Greeter::NewStub(
+      grpc::CreateChannel("localhost:54000",
+                          grpc::InsecureChannelCredentials()));
+}
+
 bool Blink::isJumpSymbol(const std::string &symbol) {
   return symbol._Starts_with("__jmp_");
 }
@@ -523,7 +544,7 @@ Result Blink::link(const LinkCommandRequest *request) {
       std::filesystem::path(request->filepath()).filename().string());
   writeToFile(filePath, *readFile(request->filepath()));
   std::string processOutput;
-  std::string processCommand = clangFilePath + " /Od /Zi /GS- -gdwarf " +
+  std::string processCommand = clangFilePath + " /EHa /Od /Zi /GS- -gdwarf " +
                                request->compilationflags() + " -c " + "\"" +
                                filePath + "\"" + " -o " + outputFilePath;
   writeLog("starting to compile " + processCommand);
@@ -554,31 +575,51 @@ std::vector<std::shared_ptr<LoadedDll>> Blink::getDynamicDlls() const {
   return m_dynamicDlls;
 }
 
-bool Blink::addFilePathToHook(const std::string &filePath,
+void Blink::addFilePathToHook(const std::string &filePath,
                               const std::string &fileData) {
   if (!shouldAddFilePathToHook(filePath)) {
-    return false;
+    return;
   }
 
-  std::scoped_lock lock(*m_originalFileToNewFileMutex);
   auto newFilePath = g_blink.getUniqueTempFilePath(filePath, "first");
   (void)writeToFile(newFilePath,
                     std::vector<char>{fileData.begin(), fileData.end()});
   auto absolutePath = std::filesystem::absolute(filePath).string();
-  m_originalFileToNewFile[absolutePath] = newFilePath;
-  return true;
+  auto client = getClientForCreateFileHook();
+  try {
+    auto request = CreateFileHook::SendPathDataRequest();
+    request.set_oldpath(absolutePath);
+    request.set_newpath(newFilePath);
+    auto reply = CreateFileHook::SendPathDataReply();
+    grpc::ClientContext context;
+
+    client->SendPathData(&context, request, &reply);
+  }
+  catch(...) {
+  }
 }
 
 bool Blink::shouldAddFilePathToHook(const std::string &filePath) {
-  std::scoped_lock lock(*m_originalFileToNewFileMutex);
-  
-  initDllsIfNeeded();
-  if (!m_dllToChange) {
-    return false;
+    try {
+    std::scoped_lock lock(*m_originalFileToNewFileMutex);
+
+    initDllsIfNeeded();
+    if (!m_dllToChange) {
+      return false;
+    }
+    auto absolutePath = std::filesystem::absolute(filePath).string();
+    auto client = getClientForCreateFileHook();
+    auto request = CreateFileHook::ShouldSendPathDataRequest();
+    request.set_path(absolutePath);
+    auto reply = CreateFileHook::ShouldSendPathDataReply();
+    grpc::ClientContext context;
+    client->ShouldSendPath(&context,request, &reply);
+    auto res= reply.should();
+    return res;
+    }
+  catch(...) {
+      return false;
   }
-  auto absolutePath = std::filesystem::absolute(filePath).string();
-  return m_originalFileToNewFile.find(absolutePath) ==
-         m_originalFileToNewFile.end();
 }
 
 void *Blink::getSymbol(const std::string &symbolName) {

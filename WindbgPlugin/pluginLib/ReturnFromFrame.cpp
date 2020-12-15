@@ -15,9 +15,9 @@
 lldb_private::Status
 callDestructors(lldb_private::Thread &thread,
                 lldb_private::ExecutionContext &executionContext,
-                int frameNum) {
+                void *addressToJumpTo) {
   lldb_private::Status return_error;
-  lldb_private::MyRegisterContext youngestContext(thread, frameNum);
+  lldb_private::MyRegisterContext youngestContext(thread, 0);
   auto module = getContainingModule(executionContext, youngestContext.GetPC());
   if (!module) {
     writeLog("warning failed to find module containing current rip");
@@ -48,8 +48,7 @@ callDestructors(lldb_private::Thread &thread,
     int moreCountOfCodesNum = ((unwindInfo.CountOfCodes + 1) & ~1) - 1;
     UnwindInfoContinue unwindInfoEnd;
     executionContext.GetProcessPtr()->ReadMemory(
-        baseStartAddr + runTimeInfo->UnwindInfoAddress +
-            +sizeof(UNWIND_INFO) +
+        baseStartAddr + runTimeInfo->UnwindInfoAddress + +sizeof(UNWIND_INFO) +
             moreCountOfCodesNum * sizeof(UNWIND_CODE),
         &unwindInfoEnd, sizeof(unwindInfoEnd), return_error);
     if (!return_error.Success()) {
@@ -75,12 +74,16 @@ callDestructors(lldb_private::Thread &thread,
     int currentState =
         findState(youngestContext.GetPC() - baseStartAddr, ipoEntries);
     if (-1 == currentState) {
-      writeLog("no desturctors in current frame");
+      writeLog("no desturctors to call");
       return return_error;
     }
-
+    int functionToJumpToState = -1;
+    if (addressToJumpTo) {
+      functionToJumpToState =
+          findState((char*)addressToJumpTo - (char*)baseStartAddr, ipoEntries);
+    }
     if (-1 == funcInfo.maxState) {
-      writeLog("no desturctors in current frame");
+      writeLog("no desturctors to call");
       return return_error;
     }
     std::vector<UnwindMapEntry2> unwindMap(funcInfo.maxState);
@@ -91,7 +94,8 @@ callDestructors(lldb_private::Thread &thread,
       return return_error;
     }
     std::vector<void *> destructorsFunctions;
-    while (currentState != -1 && unwindMap[currentState].action) {
+    while (currentState != -1 && unwindMap[currentState].action &&
+           currentState != functionToJumpToState) {
       auto funcAddr = baseStartAddr + unwindMap[currentState].action;
       destructorsFunctions.push_back((void *)funcAddr);
       currentState = unwindMap[currentState].toState;
@@ -109,17 +113,27 @@ callDestructors(lldb_private::Thread &thread,
         size_t numOfDestructors;
         // void *destructors[];
       };
-      auto structToPass = (StructToPass *)g_platform->allocateMemory(
-          sizeof(void *) * destructorsFunctions.size() + sizeof(StructToPass));
-      structToPass->rsp = youngestContext.GetSP();
-      structToPass->numOfDestructors = destructorsFunctions.size();
-      for (size_t i = 0; i < structToPass->numOfDestructors; i++) {
-        ((void**)((char *)structToPass + sizeof(StructToPass)))[i] =  destructorsFunctions[i];
+      StructToPass structToPass;
+      structToPass.rsp = youngestContext.GetSP();
+      structToPass.numOfDestructors = destructorsFunctions.size();
+      std::vector<void *> destructors(structToPass.numOfDestructors);
+      for (size_t i = 0; i < structToPass.numOfDestructors; i++) {
+        destructors[i] = destructorsFunctions[i];
       }
+      auto structToPassRemote = g_platform->allocateMemory(
+          sizeof(void *) * destructorsFunctions.size() + sizeof(StructToPass));
+      g_platform->writeMemory(structToPassRemote, &structToPass,
+                              sizeof(StructToPass));
+      g_platform->writeMemory((char *)structToPassRemote + sizeof(StructToPass),
+                              destructors.data(),
+                              sizeof(void *) * destructorsFunctions.size());
       std::vector<uint64_t> args;
-      args.push_back((uint64_t)structToPass);
+      args.push_back((uint64_t)structToPassRemote);
+      writeLog("calling destructors");
       g_platform->runFunc(g_platform->getCallDestructorsFunction(), args);
-      g_platform->deallocateMemory(structToPass);
+      g_platform->deallocateMemory(structToPassRemote);
+    }else {
+      writeLog("no destructors to call");
     }
   }
   return return_error;
@@ -137,7 +151,7 @@ returnFromCurrentFrame(lldb_private::Thread &thread,
     lldb::DataBufferSP olderFrameRegisters;
     olderFrameContext.ReadAllRegisterValues(olderFrameRegisters);
     if (shouldRunDestructors) {
-      auto res = callDestructors(thread, executionContext, 0);
+      auto res = callDestructors(thread, executionContext);
       if (!res.Success()) {
         writeLog("failed to call destructors although they exists");
       }

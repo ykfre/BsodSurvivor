@@ -13,18 +13,23 @@
 void WindbgPlatform::addBp(void *addr) {
   PDEBUG_BREAKPOINT bp = nullptr;
   ULONG breakPointsNum = 0;
-  g_ExtInstance.t_control->GetNumberBreakpoints(&breakPointsNum);
+  g_ExtInstance.g_control->GetNumberBreakpoints(&breakPointsNum);
   for (uint32_t i = 0; i < breakPointsNum; i++) {
-    g_ExtInstance.t_control->GetBreakpointByIndex(i, &bp);
+    g_ExtInstance.g_control->GetBreakpointByIndex(i, &bp);
     ULONG64 offset = 0;
     bp->GetOffset(&offset);
     if ((void *)offset == addr) {
       return;
     }
   }
-  g_ExtInstance.t_control->AddBreakpoint(DEBUG_BREAKPOINT_CODE, DEBUG_ANY_ID,
+  g_ExtInstance.g_control->AddBreakpoint(DEBUG_BREAKPOINT_CODE, DEBUG_ANY_ID,
                                          &bp);
-  bp->AddFlags(DEBUG_BREAKPOINT_ENABLED | DEBUG_BREAKPOINT_ADDER_ONLY);
+  ULONG bpFlags;
+  bp->GetFlags(&bpFlags);
+  bpFlags |= DEBUG_BREAKPOINT_ENABLED | DEBUG_BREAKPOINT_ADDER_ONLY |
+     DEBUG_BREAKPOINT_GO_ONLY;
+  auto hres = bp->SetFlags(bpFlags);
+  abortIfFalse(SUCCEEDED(hres), "failed to set bp");
   bp->SetOffset(size_t(addr));
   g_ExtInstance.m_bpAndCounters[(size_t)addr] += 1;
 }
@@ -67,7 +72,7 @@ void *WindbgPlatform::allocateMemory(size_t size) {
 }
 
 void WindbgPlatform::deallocateMemory(void *address) {
-  if (g_ExtInstance.isKernelDebugger()) {
+  if (!g_ExtInstance.isKernelDebugger()) {
     std::stringstream command;
     command << ".dvfree 0x" << std::hex << (size_t)address << " 0";
     auto result = g_ExtInstance.t_control->Execute(DEBUG_OUTCTL_THIS_CLIENT,
@@ -99,16 +104,6 @@ std::vector<std::string> WindbgPlatform::getNeededSymbolNames() {
 
 std::bitset<128> WindbgThread::getRegisterValue(const std::string &registerName,
                                                 int frameIndex) {
-
-  abortIfFalse(SUCCEEDED(g_ExtInstance.t_control->Execute(
-                   DEBUG_OUTCTL_THIS_CLIENT, "rm 0x839 ", 0)),
-               "rm failed");
-  g_ExtInstance.t_output.clear();
-  abortIfFalse(
-      SUCCEEDED(g_ExtInstance.t_control->Execute(
-          DEBUG_OUTCTL_THIS_CLIENT,
-          std::string(".frame /r " + std::to_string(frameIndex)).c_str(), 0)),
-      ".frame failed");
   ULONG index;
 
   std::string registerNameLower = getCorrectRegisterName(registerName);
@@ -132,12 +127,17 @@ std::bitset<128> WindbgThread::getRegisterValue(const std::string &registerName,
       registerSize = 16;
     }
     memcpy(&Returnvalue, value.RawBytes, registerSize);
-    abortIfFalse(SUCCEEDED((g_ExtInstance.t_control->Execute(
-                     DEBUG_OUTCTL_THIS_CLIENT, "rm 0x2 ", 0))),
-                 "rm 2 failed");
-
     return Returnvalue;
   }
+  abortIfFalse(SUCCEEDED(g_ExtInstance.t_control->Execute(
+                   DEBUG_OUTCTL_THIS_CLIENT, "rm 0x839 ", 0)),
+               "rm failed");
+  g_ExtInstance.t_output.clear();
+  abortIfFalse(
+      SUCCEEDED(g_ExtInstance.t_control->Execute(
+          DEBUG_OUTCTL_THIS_CLIENT,
+          std::string(".frame /r " + std::to_string(frameIndex)).c_str(), 0)),
+      ".frame failed");
   abortIfFalse(SUCCEEDED((g_ExtInstance.t_control->Execute(
                    DEBUG_OUTCTL_THIS_CLIENT, "rm 0x2 ", 0))),
                "rm 2 failed");
@@ -289,13 +289,13 @@ std::vector<std::shared_ptr<LoadedDll>> WindbgPlatform::getModules() {
 }
 
 bool WindbgPlatform::runThreadPlan() {
-  writeLog("after parsing command");
   addBp(getFunctionToBreakAddress());
   auto thread = getCurrentThread();
+  int tid = thread->getThreadId();
   auto event =
-      g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
+      g_functionRunManager.registerForBpHittedForTid(tid);
   thread->resumeThread();
-  g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
+  g_functionRunManager.waitForFunctionToEnd(event, tid);
 
   return true;
 }

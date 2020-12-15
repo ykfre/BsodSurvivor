@@ -15,6 +15,8 @@
  * limitations under the License.
  *
  */
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 #include "Platform.h"
 #include "blink.h"
@@ -105,7 +107,6 @@ GrpcServer createServer(size_t port) {
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  builder.
   // Register "service" as the instance through which we'll communicate with
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(service.get());

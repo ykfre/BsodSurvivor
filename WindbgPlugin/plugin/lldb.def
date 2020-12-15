@@ -21,3 +21,4 @@ EXPORTS
     returntoframewith
     reloadblinkmodules
     execute
+    jump

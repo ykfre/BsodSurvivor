@@ -53,12 +53,14 @@ class Greeter final {
    public:
     virtual ~StubInterface() {}
     // Sends a greeting
-    virtual ::grpc::Status Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::LinkCommand::LinkCommandReply* response) = 0;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>> AsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>>(AsyncCompileRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::LinkCommand::LinkCommandReply>> Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::LinkCommand::LinkCommandReply>>(CompileRaw(context, request));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>> PrepareAsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>>(PrepareAsyncCompileRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>> AsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>>(AsyncCompileRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>> PrepareAsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>>(PrepareAsyncCompileRaw(context, request, cq));
     }
     virtual ::grpc::Status ShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::LinkCommand::ShouldSendPathDataReply* response) = 0;
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::ShouldSendPathDataReply>> AsyncShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) {
@@ -78,11 +80,10 @@ class Greeter final {
      public:
       virtual ~experimental_async_interface() {}
       // Sends a greeting
-      virtual void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, std::function<void(::grpc::Status)>) = 0;
       #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-      virtual void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Compile(::grpc::ClientContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::ClientReadReactor< ::LinkCommand::LinkCommandReply>* reactor) = 0;
       #else
-      virtual void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, ::grpc::experimental::ClientUnaryReactor* reactor) = 0;
+      virtual void Compile(::grpc::ClientContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::experimental::ClientReadReactor< ::LinkCommand::LinkCommandReply>* reactor) = 0;
       #endif
       virtual void ShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest* request, ::LinkCommand::ShouldSendPathDataReply* response, std::function<void(::grpc::Status)>) = 0;
       #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
@@ -105,8 +106,9 @@ class Greeter final {
     #endif
     virtual class experimental_async_interface* experimental_async() { return nullptr; }
   private:
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>* AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) = 0;
-    virtual ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::LinkCommandReply>* PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientReaderInterface< ::LinkCommand::LinkCommandReply>* CompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>* AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::LinkCommand::LinkCommandReply>* PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::ShouldSendPathDataReply>* AsyncShouldSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::ShouldSendPathDataReply>* PrepareAsyncShouldSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::LinkCommand::SendPathDataReply>* AsyncSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::SendPathDataRequest& request, ::grpc::CompletionQueue* cq) = 0;
@@ -115,12 +117,14 @@ class Greeter final {
   class Stub final : public StubInterface {
    public:
     Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel);
-    ::grpc::Status Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::LinkCommand::LinkCommandReply* response) override;
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>> AsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>>(AsyncCompileRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientReader< ::LinkCommand::LinkCommandReply>> Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::LinkCommand::LinkCommandReply>>(CompileRaw(context, request));
     }
-    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>> PrepareAsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
-      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>>(PrepareAsyncCompileRaw(context, request, cq));
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>> AsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>>(AsyncCompileRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>> PrepareAsyncCompile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>>(PrepareAsyncCompileRaw(context, request, cq));
     }
     ::grpc::Status ShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::LinkCommand::ShouldSendPathDataReply* response) override;
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::LinkCommand::ShouldSendPathDataReply>> AsyncShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) {
@@ -139,11 +143,10 @@ class Greeter final {
     class experimental_async final :
       public StubInterface::experimental_async_interface {
      public:
-      void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, std::function<void(::grpc::Status)>) override;
       #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-      void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Compile(::grpc::ClientContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::ClientReadReactor< ::LinkCommand::LinkCommandReply>* reactor) override;
       #else
-      void Compile(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response, ::grpc::experimental::ClientUnaryReactor* reactor) override;
+      void Compile(::grpc::ClientContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::experimental::ClientReadReactor< ::LinkCommand::LinkCommandReply>* reactor) override;
       #endif
       void ShouldSendPathData(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest* request, ::LinkCommand::ShouldSendPathDataReply* response, std::function<void(::grpc::Status)>) override;
       #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
@@ -168,8 +171,9 @@ class Greeter final {
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
     class experimental_async async_stub_{this};
-    ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>* AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) override;
-    ::grpc::ClientAsyncResponseReader< ::LinkCommand::LinkCommandReply>* PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientReader< ::LinkCommand::LinkCommandReply>* CompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request) override;
+    ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>* AsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::LinkCommand::LinkCommandReply>* PrepareAsyncCompileRaw(::grpc::ClientContext* context, const ::LinkCommand::LinkCommandRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::LinkCommand::ShouldSendPathDataReply>* AsyncShouldSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::LinkCommand::ShouldSendPathDataReply>* PrepareAsyncShouldSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::ShouldSendPathDataRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::LinkCommand::SendPathDataReply>* AsyncSendPathDataRaw(::grpc::ClientContext* context, const ::LinkCommand::SendPathDataRequest& request, ::grpc::CompletionQueue* cq) override;
@@ -185,7 +189,7 @@ class Greeter final {
     Service();
     virtual ~Service();
     // Sends a greeting
-    virtual ::grpc::Status Compile(::grpc::ServerContext* context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response);
+    virtual ::grpc::Status Compile(::grpc::ServerContext* context, const ::LinkCommand::LinkCommandRequest* request, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* writer);
     virtual ::grpc::Status ShouldSendPathData(::grpc::ServerContext* context, const ::LinkCommand::ShouldSendPathDataRequest* request, ::LinkCommand::ShouldSendPathDataReply* response);
     virtual ::grpc::Status SendPathData(::grpc::ServerContext* context, const ::LinkCommand::SendPathDataRequest* request, ::LinkCommand::SendPathDataReply* response);
   };
@@ -201,12 +205,12 @@ class Greeter final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestCompile(::grpc::ServerContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::ServerAsyncResponseWriter< ::LinkCommand::LinkCommandReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    void RequestCompile(::grpc::ServerContext* context, ::LinkCommand::LinkCommandRequest* request, ::grpc::ServerAsyncWriter< ::LinkCommand::LinkCommandReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -262,38 +266,29 @@ class Greeter final {
       ::grpc::Service::experimental().
     #endif
         MarkMethodCallback(0,
-          new ::grpc::internal::CallbackUnaryHandler< ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
+          new ::grpc::internal::CallbackServerStreamingHandler< ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
             [this](
     #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
                    ::grpc::CallbackServerContext*
     #else
                    ::grpc::experimental::CallbackServerContext*
     #endif
-                     context, const ::LinkCommand::LinkCommandRequest* request, ::LinkCommand::LinkCommandReply* response) { return this->Compile(context, request, response); }));}
-    void SetMessageAllocatorFor_Compile(
-        ::grpc::experimental::MessageAllocator< ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>* allocator) {
-    #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
-    #else
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::experimental().GetHandler(0);
-    #endif
-      static_cast<::grpc::internal::CallbackUnaryHandler< ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>*>(handler)
-              ->SetMessageAllocator(allocator);
+                     context, const ::LinkCommand::LinkCommandRequest* request) { return this->Compile(context, request); }));
     }
     ~ExperimentalWithCallbackMethod_Compile() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-    virtual ::grpc::ServerUnaryReactor* Compile(
-      ::grpc::CallbackServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/)
+    virtual ::grpc::ServerWriteReactor< ::LinkCommand::LinkCommandReply>* Compile(
+      ::grpc::CallbackServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/)
     #else
-    virtual ::grpc::experimental::ServerUnaryReactor* Compile(
-      ::grpc::experimental::CallbackServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/)
+    virtual ::grpc::experimental::ServerWriteReactor< ::LinkCommand::LinkCommandReply>* Compile(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/)
     #endif
       { return nullptr; }
   };
@@ -408,7 +403,7 @@ class Greeter final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -459,12 +454,12 @@ class Greeter final {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
-    void RequestCompile(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    void RequestCompile(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -519,29 +514,29 @@ class Greeter final {
       ::grpc::Service::experimental().
     #endif
         MarkMethodRawCallback(0,
-          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+          new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
     #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
                    ::grpc::CallbackServerContext*
     #else
                    ::grpc::experimental::CallbackServerContext*
     #endif
-                     context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Compile(context, request, response); }));
+                     context, const::grpc::ByteBuffer* request) { return this->Compile(context, request); }));
     }
     ~ExperimentalWithRawCallbackMethod_Compile() override {
       BaseClassMustBeDerivedFromService(this);
     }
     // disable synchronous version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     #ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
-    virtual ::grpc::ServerUnaryReactor* Compile(
-      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    virtual ::grpc::ServerWriteReactor< ::grpc::ByteBuffer>* Compile(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)
     #else
-    virtual ::grpc::experimental::ServerUnaryReactor* Compile(
-      ::grpc::experimental::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)
+    virtual ::grpc::experimental::ServerWriteReactor< ::grpc::ByteBuffer>* Compile(
+      ::grpc::experimental::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)
     #endif
       { return nullptr; }
   };
@@ -622,33 +617,6 @@ class Greeter final {
       { return nullptr; }
   };
   template <class BaseClass>
-  class WithStreamedUnaryMethod_Compile : public BaseClass {
-   private:
-    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
-   public:
-    WithStreamedUnaryMethod_Compile() {
-      ::grpc::Service::MarkMethodStreamed(0,
-        new ::grpc::internal::StreamedUnaryHandler<
-          ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
-            [this](::grpc::ServerContext* context,
-                   ::grpc::ServerUnaryStreamer<
-                     ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>* streamer) {
-                       return this->StreamedCompile(context,
-                         streamer);
-                  }));
-    }
-    ~WithStreamedUnaryMethod_Compile() override {
-      BaseClassMustBeDerivedFromService(this);
-    }
-    // disable regular version of this method
-    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::LinkCommand::LinkCommandReply* /*response*/) override {
-      abort();
-      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
-    }
-    // replace default version of method with streamed unary
-    virtual ::grpc::Status StreamedCompile(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::LinkCommand::LinkCommandRequest,::LinkCommand::LinkCommandReply>* server_unary_streamer) = 0;
-  };
-  template <class BaseClass>
   class WithStreamedUnaryMethod_ShouldSendPathData : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
@@ -702,9 +670,36 @@ class Greeter final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status StreamedSendPathData(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::LinkCommand::SendPathDataRequest,::LinkCommand::SendPathDataReply>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_Compile<WithStreamedUnaryMethod_ShouldSendPathData<WithStreamedUnaryMethod_SendPathData<Service > > > StreamedUnaryService;
-  typedef Service SplitStreamedService;
-  typedef WithStreamedUnaryMethod_Compile<WithStreamedUnaryMethod_ShouldSendPathData<WithStreamedUnaryMethod_SendPathData<Service > > > StreamedService;
+  typedef WithStreamedUnaryMethod_ShouldSendPathData<WithStreamedUnaryMethod_SendPathData<Service > > StreamedUnaryService;
+  template <class BaseClass>
+  class WithSplitStreamingMethod_Compile : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithSplitStreamingMethod_Compile() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::SplitServerStreamingHandler<
+          ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerSplitStreamer<
+                     ::LinkCommand::LinkCommandRequest, ::LinkCommand::LinkCommandReply>* streamer) {
+                       return this->StreamedCompile(context,
+                         streamer);
+                  }));
+    }
+    ~WithSplitStreamingMethod_Compile() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Compile(::grpc::ServerContext* /*context*/, const ::LinkCommand::LinkCommandRequest* /*request*/, ::grpc::ServerWriter< ::LinkCommand::LinkCommandReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with split streamed
+    virtual ::grpc::Status StreamedCompile(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::LinkCommand::LinkCommandRequest,::LinkCommand::LinkCommandReply>* server_split_streamer) = 0;
+  };
+  typedef WithSplitStreamingMethod_Compile<Service > SplitStreamedService;
+  typedef WithSplitStreamingMethod_Compile<WithStreamedUnaryMethod_ShouldSendPathData<WithStreamedUnaryMethod_SendPathData<Service > > > StreamedService;
 };
 
 }  // namespace LinkCommand
