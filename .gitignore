@@ -88,3 +88,5 @@ autoconf/autom4te.cache
 /**/*.id0
 /temp2/**
 /**/*.CopyComplete
+/**/obj/**
+/**/bin/**

@@ -98,7 +98,7 @@ public:
     std::string cppFilePath = g_blink.getUniqueTempFilePath("a.cpp");
     request.set_filepath(cppFilePath);
     request.set_masmpath(
-        R"(C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\Hostx64\x64\ml64.exe)");
+        R"(ml64.exe)");
     request.set_linkerflags("");
     return request;
   }

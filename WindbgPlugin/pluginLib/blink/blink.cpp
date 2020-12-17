@@ -3,21 +3,21 @@
 #pragma warning(push, 0)
 #include "lldb/Core/Mangled.h"
 #pragma warning(pop)
-#include <algorithm>
-#include <stdio.h>
-#include <string>
-#include <vector>
-#include "Logger.h"
 #include "CreateFileHook.grpc.pb.h"
 #include "CreateFileHook.pb.h"
+#include "LoadDllFromMemory.h"
+#include "Logger.h"
+#include "utils.h"
+#include <algorithm>
+#include <assert.h>
 #include <grpc++/channel.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 #include <grpc++/security/credentials.h>
-#include "LoadDllFromMemory.h"
-#include "utils.h"
-#include <assert.h>
 #include <set>
+#include <stdio.h>
+#include <string>
+#include <vector>
 
 #include "Platform.h"
 #include "blink.h"
@@ -44,7 +44,7 @@ std::string getSymbolName(const IMAGE_SYMBOL &symbol,
   }
   return symbol_name;
 }
-Result Blink::initDllsIfNeeded()const {
+Result Blink::initDllsIfNeeded() const {
   std::scoped_lock mutex(*m_mutex);
   if (m_isInitDlls) {
     return Result();
@@ -178,11 +178,124 @@ Blink::getSymbolsToChangeInOldObjects() {
 
 Result Blink::link(const LinkCommandRequest *request,
                    const std::vector<char> &objFileData) {
-  auto header = *(IMAGE_FILE_HEADER *)objFileData.data();
-  auto newObjFileData = objFileData;
+  Result result;
 
   auto symbolsToUpdateWith = getSymbolsToUpdateWith();
+  std::set<std::string> symbolsWeShouldUpdateInNewObj;
+  result = getSymbolsWeShouldUpdateInNewObj(objFileData, symbolsToUpdateWith,
+                                            symbolsWeShouldUpdateInNewObj);
+  if (!result.m_success) {
+    return result;
+  }
+  std::string asmFilePath;
+  result =
+      writeAsmFileWithNeededSymbols(symbolsWeShouldUpdateInNewObj, asmFilePath);
+  if (!result.m_success) {
+    return result;
+  }
 
+  auto asmFileObjFilePath = getUniqueTempFilePath("asm.obj");
+  result = createAsmObjFile(request, asmFileObjFilePath, asmFilePath);
+  if (!result.m_success) {
+    return result;
+  }
+  auto dllPath = getUniqueTempFilePath(request->filepath() + ".dll");
+  auto objFilePath = getUniqueTempFilePath("cpp.obj");
+  static_cast<void>(writeToFile(objFilePath, objFileData));
+  result = runLinkCommand(request, dllPath, asmFileObjFilePath, objFilePath);
+  if (!result.m_success) {
+    return result;
+  }
+  std::unordered_map<std::string, Symbol> neededSymbols{};
+  for (const auto &symbolName : symbolsWeShouldUpdateInNewObj) {
+    std::string realSymbolName = getRealSymbolName(symbolName);
+    neededSymbols[realSymbolName] = symbolsToUpdateWith.at(realSymbolName);
+  }
+  auto dllData = readFile(dllPath);
+  if (!dllData) {
+    return Result("failed to read " + dllPath);
+  }
+
+  writeLog("loading dll to memory");
+  std::shared_ptr<LoadedDll> loadedDll;
+  result = loadDllFromMemory(std::filesystem::path(dllPath).filename().string(),
+                             *dllData, neededSymbols, loadedDll);
+  if (!result.m_success) {
+    return result;
+  }
+  writeLog("finished loading dll to memory");
+  result =
+      updatePreviousNeededSymbols(loadedDll, symbolsWeShouldUpdateInNewObj);
+  if (!result.m_success) {
+    return result;
+  }
+  m_dynamicDlls.push_back(loadedDll);
+  notifyDynamicModuleLoaded(loadedDll);
+  return Result();
+}
+
+Result
+Blink::updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
+                                   const std::set<std::string> &symbolsToNull) {
+  writeLog("updating previous modules with new symbols");
+  auto newSymbols = loadedDll->getSymbols();
+  for (const auto &symbolsInModule : getSymbolsToChangeInOldObjects()) {
+    std::vector<std::pair<std::string, void *>> needToReplaceOldSymbols;
+    for (const auto &oldSymbol : symbolsInModule) {
+      auto realOldSymbolName = getRealSymbolName(oldSymbol.first);
+      if (newSymbols.find(realOldSymbolName) != newSymbols.end() &&
+          symbolsToNull.find(realOldSymbolName) == symbolsToNull.end()) {
+        if (((size_t)oldSymbol.second.m_address) % sizeof(void *) != 0) {
+          return Result(
+              "The updated values don't have size which is devided by "
+              "sizeof(void*)");
+        }
+        needToReplaceOldSymbols.push_back(
+            std::make_pair(realOldSymbolName, oldSymbol.second.m_address));
+      }
+    }
+    std::sort(needToReplaceOldSymbols.begin(), needToReplaceOldSymbols.end(),
+              [](const std::pair<std::string, void *> &pair1,
+                 const std::pair<std::string, void *> &pair2) {
+                return pair1.second < pair2.second;
+              });
+    if (needToReplaceOldSymbols.empty()) {
+      return Result();
+    }
+
+    auto oldInfoSize =
+        ((char *)needToReplaceOldSymbols[needToReplaceOldSymbols.size() - 1]
+             .second -
+         (char *)needToReplaceOldSymbols[0].second + sizeof(void*)) /
+        sizeof(void *);
+
+    std::vector<void *> oldInfo(oldInfoSize);
+
+    auto readSize = g_platform->readMemory(needToReplaceOldSymbols[0].second,
+                                           oldInfo.data(), oldInfo.size() *sizeof(void*));
+    if (readSize != oldInfo.size() * sizeof(void *)) {
+      return Result("failed to read");
+    }
+    for (size_t i = 0; i < needToReplaceOldSymbols.size(); i++) {
+      size_t indexToChange = ((char *)needToReplaceOldSymbols[i].second -
+                              (char *)needToReplaceOldSymbols[0].second) /
+                             sizeof(void *);
+      oldInfo[indexToChange] =
+          newSymbols[needToReplaceOldSymbols[i].first].m_address;
+    }
+    g_platform->writeMemory(needToReplaceOldSymbols[0].second, oldInfo.data(),
+                            sizeof(size_t) * oldInfo.size());
+  }
+  return Result();
+}
+
+Result Blink::getSymbolsWeShouldUpdateInNewObj(
+    const std::vector<char> &objFileData,
+    const std::unordered_map<std::string, Symbol> &symbolsToUpdateWith,
+    std::set<std::string> &symbolsWeShouldUpdate) {
+  symbolsWeShouldUpdate.clear();
+  auto header = *(IMAGE_FILE_HEADER *)objFileData.data();
+  auto newObjFileData = objFileData;
   std::vector<IMAGE_SECTION_HEADER *> sections;
   for (int i = 0; i < header.NumberOfSections; i++) {
     char *sectionLocation = newObjFileData.data() + sizeof(IMAGE_FILE_HEADER);
@@ -191,7 +304,6 @@ Result Blink::link(const LinkCommandRequest *request,
   }
 
   std::vector<IMAGE_SYMBOL> symbols(header.NumberOfSymbols);
-  std::set<std::string> symbolsToNull;
   memcpy(symbols.data(), newObjFileData.data() + header.PointerToSymbolTable,
          header.NumberOfSymbols * sizeof(IMAGE_SYMBOL));
 
@@ -211,51 +323,74 @@ Result Blink::link(const LinkCommandRequest *request,
   // Resolve internal and external currentModuleSymbols
   std::vector<BYTE *> local_symbol_addresses(header.NumberOfSymbols);
   std::vector<std::pair<BYTE *, const BYTE *>> image_function_relocations;
-
-  // Perform relocation on each section
+  std::unordered_map<std::string, IMAGE_SYMBOL> namesToSymbols;
+  for (const auto &symbol : symbols) {
+    auto symbolName = getSymbolName(symbol, strings);
+    namesToSymbols[symbolName] = symbol;
+  }
+  std::set<int> symbolIndexesNeededByRelocations;
   for (auto section : sections) {
     const auto section_relocation_table =
         reinterpret_cast<const IMAGE_RELOCATION *>(
             newObjFileData.data() + section->PointerToRelocations);
-    std::vector<IMAGE_RELOCATION> newRelocationsTable;
     for (unsigned int k = 0; k < section->NumberOfRelocations; ++k) {
       const IMAGE_RELOCATION &relocation = section_relocation_table[k];
-      auto &symbol = symbols.at(relocation.SymbolTableIndex);
-      auto symbolName = getSymbolName(symbol, strings);
+      symbolIndexesNeededByRelocations.insert(relocation.SymbolTableIndex);
+    }
+  }
 
-      if (symbolName._Starts_with("__imp_") ||
-          symbolName._Starts_with("__jmp_")) {
-        std::string realSymbolName = getRealSymbolName(symbolName);
-        bool isExternal = true;
-        for (size_t i = 0; i < symbols.size(); i++) {
-          auto baseNameSymbol = symbols.at(i);
-          auto baseName = getSymbolName(baseNameSymbol, strings);
-          if ("__imp_" + baseName == getSymbolName(symbol, strings) ||
-              "__jmp_" + baseName == getSymbolName(symbol, strings)) {
-            if (!(baseNameSymbol.StorageClass == IMAGE_SYM_CLASS_EXTERNAL &&
-                  baseNameSymbol.SectionNumber == IMAGE_SYM_UNDEFINED)) {
-              isExternal = false;
-            }
-            break;
-          }
-        }
-        if (isExternal) {
-          if (symbolsToUpdateWith.find(realSymbolName) ==
-              symbolsToUpdateWith.end()) {
+  for (const auto &symbolIndex : symbolIndexesNeededByRelocations) {
+    auto &symbol = symbols.at(symbolIndex);
+    auto symbolName = getSymbolName(symbol, strings);
 
-            return Result("failed to find symbol " + realSymbolName + "\n" +
-                          "demangled: " +
-                          std::string(lldb_private::Mangled(realSymbolName)
-                                          .GetDemangledName()
-                                          .AsCString()));
-          }
-          symbolsToNull.insert(
-              getSymbolName(symbols.at(relocation.SymbolTableIndex), strings));
+    if (symbolName._Starts_with("__imp_") ||
+        symbolName._Starts_with("__jmp_")) {
+      std::string realSymbolName = getRealSymbolName(symbolName);
+      bool isExternal = true;
+      auto foundedSymbol = namesToSymbols.find(realSymbolName);
+      if (foundedSymbol != namesToSymbols.end()) {
+        if (!(foundedSymbol->second.StorageClass == IMAGE_SYM_CLASS_EXTERNAL &&
+              foundedSymbol->second.SectionNumber == IMAGE_SYM_UNDEFINED)) {
+          isExternal = false;
         }
+      }
+      if (isExternal) {
+        if (symbolsToUpdateWith.find(realSymbolName) ==
+            symbolsToUpdateWith.end()) {
+
+          return Result("failed to find symbol " + realSymbolName + "\n" +
+                        "demangled: " +
+                        std::string(lldb_private::Mangled(realSymbolName)
+                                        .GetDemangledName()
+                                        .AsCString()));
+        }
+        symbolsWeShouldUpdate.insert(
+            getSymbolName(symbols.at(symbolIndex), strings));
+      }
+    } else {
+      if (symbol.StorageClass == IMAGE_SYM_CLASS_EXTERNAL &&
+          symbol.SectionNumber == IMAGE_SYM_UNDEFINED) {
+        if (symbolName._Starts_with("__CxxFrameHandler") ||
+            symbolName.find("type_info") != -1) {
+          continue;
+        }
+        return Result("failed to find symbol " + symbolName +
+                      " which is probably intrinsic/static and should had "
+                      "implementation in this obj file\n" +
+                      "demangled: " +
+                      std::string(lldb_private::Mangled(symbolName)
+                                      .GetDemangledName()
+                                      .AsCString()));
       }
     }
   }
 
+  return Result();
+}
+
+Result
+Blink::writeAsmFileWithNeededSymbols(const std::set<std::string> &symbolsToNull,
+                                     std::string &asmFilePath) {
   std::string defData = "_DATA SEGMENT\n";
   for (auto symbolName : symbolsToNull) {
     if (symbolName._Starts_with("__imp")) {
@@ -278,12 +413,15 @@ Result Blink::link(const LinkCommandRequest *request,
     }
   }
   defData += "_TEXT ENDS\nEND";
-  auto asmFilePath = getUniqueTempFilePath("a.asm");
+  asmFilePath = getUniqueTempFilePath("a.asm");
   static_cast<void>(writeToFile(
       asmFilePath, std::vector<char>{defData.begin(), defData.end()}));
-  auto objFilePath = getUniqueTempFilePath("cpp.obj");
-  static_cast<void>(writeToFile(objFilePath, objFileData));
-  auto asmFileObjFilePath = getUniqueTempFilePath("asm.obj");
+  return Result();
+}
+
+Result Blink::createAsmObjFile(const LinkCommandRequest *request,
+                               const std::string &asmFileObjFilePath,
+                               const std::string &asmFilePath) {
   std::string processOutput;
   auto asmCommand = request->masmpath() + " /c /nologo /Zi /Fo" +
                     asmFileObjFilePath + " /W3 /errorReport:prompt  /Ta" +
@@ -292,57 +430,26 @@ Result Blink::link(const LinkCommandRequest *request,
     return Result("failed to create process " + asmCommand + "\n" +
                   processOutput);
   }
+  return Result();
+}
 
+Result Blink::runLinkCommand(const LinkCommandRequest *request,
+                             const std::string &wantedOutputDll,
+                             const std::string &asmFileObjFilePath,
+                             const std::string &objFilePath) {
   std::string ldLinkPath = request->ldpath();
-  auto dllPath = getUniqueTempFilePath(request->filepath()+".dll");
   auto ldProcessCommand =
       ldLinkPath + " " + asmFileObjFilePath + " " + objFilePath +
-      R"( /dll /debug:full /align:16 /driver /force:unresolved )" + request->linkerflags() +
-      " /NODEFAULTLIB /noentry /out:" + dllPath;
+      R"( /dll /debug:full /align:16 /driver /force:unresolved )" +
+      request->linkerflags() +
+      " /NODEFAULTLIB /noentry /out:" + wantedOutputDll;
   writeLog("starting to link " + ldProcessCommand);
+  std::string processOutput;
   if (!createProcess(ldProcessCommand, processOutput)) {
     return Result("failed to create process " + ldProcessCommand + "\n" +
                   processOutput);
   }
   writeLog("link finished");
-
-  std::unordered_map<std::string, Symbol> neededSymbols{};
-  for (const auto &symbolName : symbolsToNull) {
-    std::string realSymbolName = getRealSymbolName(symbolName);
-    neededSymbols[realSymbolName] =
-        symbolsToUpdateWith.at(realSymbolName);
-  }
-  auto dllData = readFile(dllPath);
-  if (!dllData) {
-    return Result("failed to read " + dllPath);
-  }
-
-  writeLog("loading dll to memory");
-
-  std::shared_ptr<LoadedDll> loadedDll;
-  auto result =
-      loadDllFromMemory(std::filesystem::path(dllPath).filename().string(),
-                        *dllData, neededSymbols, loadedDll);
-  if (!result.m_success) {
-    return result;
-  }
-  writeLog("finished loading dll to memory");
-  writeLog("updating previous modules with new symbols");
-  auto newSymbols = loadedDll->getSymbols();
-  for (const auto &symbolsInModule : getSymbolsToChangeInOldObjects()) {
-    for (const auto &oldSymbol : symbolsInModule) {
-      auto realOldSymbolName = getRealSymbolName(oldSymbol.first);
-      if (newSymbols.find(realOldSymbolName) !=
-              newSymbols.end() &&
-          symbolsToNull.find(realOldSymbolName) == symbolsToNull.end()) {
-        auto symbolAddrInNewObj = newSymbols.at(realOldSymbolName);
-        g_platform->writeMemory(oldSymbol.second.m_address, &symbolAddrInNewObj.m_address,
-                                sizeof(symbolAddrInNewObj.m_address));
-      }
-    }
-  }
-  m_dynamicDlls.push_back(loadedDll);
-  notifyDynamicModuleLoaded(loadedDll);
   return Result();
 }
 
@@ -460,6 +567,20 @@ Result Blink::loadDllFromMemory(
   }
   g_platform->writeMemory(loadedImage, localLoadedImage.data(),
                           localLoadedImage.size());
+  result = updateSymbolsInNewObj(loadedDll, symbolsToImport, loadedImage,
+                                 localLoadedImage.data());
+  if (!result.m_success) {
+    return result;
+  }
+  g_platform->writeMemory(loadedImage, localLoadedImage.data(),
+                          localLoadedImage.size());
+  return result;
+}
+
+Result Blink::updateSymbolsInNewObj(
+    const std::shared_ptr<LoadedDll> &loadedDll,
+    const std::unordered_map<std::string, Symbol> &symbolsToImport,
+    void *loadedImage, void *localLoadedImage) {
   auto newSymbols = loadedDll->getSymbols();
   auto oldSymbols = g_blink.getSymbolsToUpdateWith();
   for (const auto &symbol : newSymbols) {
@@ -474,22 +595,19 @@ Result Blink::loadDllFromMemory(
     } else if (oldSymbols.find(realSymbolName) != oldSymbols.end()) {
       auto foundedSymbol = oldSymbols.find(realSymbolName);
       bool isFunctionSymbol = symbol.first._Starts_with("__my_imp");
-      if (!isFunctionSymbol &&
-          !foundedSymbol->second.m_isConst) {
+      if (!isFunctionSymbol && !foundedSymbol->second.m_isConst) {
         shouldChangeSymbol = true;
       }
     }
     if (shouldChangeSymbol) {
       if (oldSymbols.find(realSymbolName) != oldSymbols.end()) {
         *(uint64_t *)((char *)symbol.second.m_address - (char *)loadedImage +
-                      localLoadedImage.data()) =
+                      (char *)localLoadedImage) =
             (uint64_t)oldSymbols.find(realSymbolName)->second.m_address;
       }
     }
   }
-  g_platform->writeMemory(loadedImage, localLoadedImage.data(),
-                          localLoadedImage.size());
-  return result;
+  return Result();
 }
 
 std::string Blink::getRealSymbolName(const std::string &symbolName) {
@@ -504,10 +622,10 @@ std::string Blink::getRealSymbolName(const std::string &symbolName) {
   return realSymbolName;
 }
 
-std::shared_ptr<CreateFileHook::Greeter::Stub> Blink::getClientForCreateFileHook() {
-  return CreateFileHook::Greeter::NewStub(
-      grpc::CreateChannel("localhost:54000",
-                          grpc::InsecureChannelCredentials()));
+std::shared_ptr<CreateFileHook::Greeter::Stub>
+Blink::getClientForCreateFileHook() {
+  return CreateFileHook::Greeter::NewStub(grpc::CreateChannel(
+      "localhost:54000", grpc::InsecureChannelCredentials()));
 }
 
 bool Blink::isJumpSymbol(const std::string &symbol) {
@@ -537,12 +655,44 @@ Result Blink::link(const LinkCommandRequest *request) {
   if (!result.m_success) {
     return result;
   }
-  std::string clangFilePath = request->clangfilepath();
-  auto outputFilePath = getUniqueTempFilePath(
+
+  auto objFilePath = getUniqueTempFilePath(
       std::filesystem::path(request->filepath()).filename().string() + ".o");
   auto filePath = getUniqueTempFilePath(
       std::filesystem::path(request->filepath()).filename().string());
   writeToFile(filePath, *readFile(request->filepath()));
+  result = compile(request, filePath, objFilePath);
+  if (!result.m_success) {
+    return result;
+  }
+
+  result = replaceIntrinsicsInObjFile(request, objFilePath);
+  if (!result.m_success) {
+    return result;
+  }
+  return link(request, objFilePath);
+}
+
+Result Blink::replaceIntrinsicsInObjFile(const LinkCommandRequest *request,
+                                         const std::string &objFilePath) {
+  const std::vector<std::string> intrinsicsToReplace = {"memset", "memmove",
+                                                        "memcpy"};
+  std::string objCopyCommand = request->objcopypath() + " " + objFilePath;
+  for (const auto &intrinsic : intrinsicsToReplace) {
+    objCopyCommand += " --redefine-sym " + intrinsic + "=__jmp_" + intrinsic;
+  }
+  std::string processOutput;
+  if (!createProcess(objCopyCommand, processOutput)) {
+    return Result("failed running process" + objCopyCommand + " \n" +
+                  objCopyCommand);
+  }
+  return Result();
+}
+
+Result Blink::compile(const LinkCommandRequest *request,
+                      const std::string &filePath,
+                      const std::string &outputFilePath) {
+  std::string clangFilePath = request->clangfilepath();
   std::string processOutput;
   std::string processCommand = clangFilePath + " /EHa /Od /Zi /GS- -gdwarf " +
                                request->compilationflags() + " -c " + "\"" +
@@ -554,20 +704,9 @@ Result Blink::link(const LinkCommandRequest *request) {
     return Result("failed running process" + processCommand + " \n" +
                   processOutput);
   }
+  writeLog(processOutput);
   writeLog("finished compiling successfully");
-
-  const std::vector<std::string> intrinsicsToReplace = {"memset", "memmove",
-                                                        "memcpy"};
-  std::string objCopyCommand = request->objcopypath() + " " + outputFilePath;
-  for (const auto &intrinsic : intrinsicsToReplace) {
-    objCopyCommand += " --redefine-sym " + intrinsic + "=__jmp_" + intrinsic;
-  }
-
-  if (!createProcess(objCopyCommand, processOutput)) {
-    return Result("failed running process" + processCommand + " \n" +
-                  objCopyCommand);
-  }
-  return link(request, outputFilePath);
+  return Result();
 }
 
 std::vector<std::shared_ptr<LoadedDll>> Blink::getDynamicDlls() const {
@@ -594,13 +733,12 @@ void Blink::addFilePathToHook(const std::string &filePath,
     grpc::ClientContext context;
 
     client->SendPathData(&context, request, &reply);
-  }
-  catch(...) {
+  } catch (...) {
   }
 }
 
 bool Blink::shouldAddFilePathToHook(const std::string &filePath) {
-    try {
+  try {
     std::scoped_lock lock(*m_originalFileToNewFileMutex);
 
     initDllsIfNeeded();
@@ -613,12 +751,11 @@ bool Blink::shouldAddFilePathToHook(const std::string &filePath) {
     request.set_path(absolutePath);
     auto reply = CreateFileHook::ShouldSendPathDataReply();
     grpc::ClientContext context;
-    client->ShouldSendPath(&context,request, &reply);
-    auto res= reply.should();
+    client->ShouldSendPath(&context, request, &reply);
+    auto res = reply.should();
     return res;
-    }
-  catch(...) {
-      return false;
+  } catch (...) {
+    return false;
   }
 }
 
@@ -654,11 +791,10 @@ std::unordered_map<std::string, Symbol> Blink::getSymbolsToUpdateWith() {
     for (const auto &symbol : module->getSymbols()) {
 
       if (symbols.find(symbol.first) != symbols.end()) {
-        if (symbol.second.m_isFunction||
-            symbol.second.m_isConst) {
+        if (symbol.second.m_isFunction || symbol.second.m_isConst) {
           symbols[symbol.first] = symbol.second;
         }
-      }else {
+      } else {
         symbols[symbol.first] = symbol.second;
       }
     }

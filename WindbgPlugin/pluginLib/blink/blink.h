@@ -2,12 +2,12 @@
 #pragma warning(push, 0)
 #include "LinkCommand.grpc.pb.h"
 #pragma warning(pop)
+#include "CreateFileHook.grpc.pb.h"
 #include "LoadDllFromMemory.h"
 #include "Result.h"
 #include <Windows.h>
-#include <string>
 #include <mutex>
-#include "CreateFileHook.grpc.pb.h"
+#include <string>
 using LinkCommand::LinkCommandRequest;
 
 class Blink {
@@ -15,6 +15,10 @@ public:
   Blink();
   Result initDllsIfNeeded() const;
   Result link(const LinkCommandRequest *request);
+  Result replaceIntrinsicsInObjFile(const LinkCommandRequest *request,
+                                    const std::string &objFilePath);
+  Result compile(const LinkCommandRequest *request, const std::string &filePath,
+                 const std::string &outputFilePath);
   std::vector<std::shared_ptr<LoadedDll>> getDynamicDlls() const;
   void resetDllToChange();
   std::string getUniqueTempFilePath(const std::string &filePath,
@@ -35,6 +39,7 @@ public:
 
   std::shared_ptr<std::mutex> m_originalFileToNewFileMutex;
   void *getSymbol(const std::string &symbolName);
+
 private:
   Result link(const LinkCommandRequest *request, const std::string &newObjPath);
   std::unordered_map<std::string, Symbol> getSymbolsToUpdateWith();
@@ -42,11 +47,38 @@ private:
   getSymbolsToChangeInOldObjects();
   Result link(const LinkCommandRequest *request,
               const std::vector<char> &objFileData);
+
+  Result
+  updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
+                                const std::set<std::string> &symbolsToNull);
+
+  Result getSymbolsWeShouldUpdateInNewObj(
+      const std::vector<char> &objFileData,
+      const std::unordered_map<std::string, Symbol> &symbolsToUpdateWith,
+      std::set<std::string> &symbolsWeShouldUpdate);
+
+  Result
+  writeAsmFileWithNeededSymbols(const std::set<std::string> &symbolsToNull,
+                                std::string &asmFilePath);
+
+  Result createAsmObjFile(const LinkCommandRequest *request,
+                          const std::string &asmFileObjFilePath,
+                          const std::string &asmFilePath);
+
+  Result runLinkCommand(const LinkCommandRequest *request,
+                        const std::string &wantedOutputDll,
+                        const std::string &asmFileObjFilePath,
+                        const std::string &objFilePath);
   Result fixRelocations(std::vector<char> &localLoadedImage, uint64_t delta);
   Result loadDllFromMemory(
       const std::string &dllName, const std::vector<char> &dllData,
       const std::unordered_map<std::string, Symbol> &symbolsToImport,
       std::shared_ptr<LoadedDll> &loadedDll);
+
+  Result updateSymbolsInNewObj(
+      const std::shared_ptr<LoadedDll> &loadedDll,
+      const std::unordered_map<std::string, Symbol> &symbolsToImport,
+      void *loadedImage, void *localLoadedImage);
 
   static std::string getRealSymbolName(const std::string &symbolName);
   std::shared_ptr<CreateFileHook::Greeter::Stub> getClientForCreateFileHook();

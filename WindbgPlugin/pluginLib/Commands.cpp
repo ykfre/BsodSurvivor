@@ -592,6 +592,7 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
   
   if (untilFrameIndex == 0) {
     writeLog("you try to return to the same thread - not doing anything");
+    return false;
   }
   writeLog("start returning from frame");
   std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();

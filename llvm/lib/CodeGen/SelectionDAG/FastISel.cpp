@@ -1691,6 +1691,7 @@ bool FastISel::selectInstruction(const Instruction *I) {
       removeDeadCode(FuncInfo.InsertPt, SavedInsertPt);
     SavedInsertPt = FuncInfo.InsertPt;
   }
+  
   // Next, try calling the target to attempt to handle the instruction.
   if (fastSelectInstruction(I)) {
     ++NumFastIselSuccessTarget;

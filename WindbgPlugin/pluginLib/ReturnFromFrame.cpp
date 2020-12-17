@@ -28,11 +28,13 @@ callDestructors(lldb_private::Thread &thread,
       objFile->GetBaseAddress().GetLoadAddress(executionContext.GetTargetPtr());
   auto runTimeInfoTable = getRunTimeTable(baseStartAddr);
   if (!runTimeInfoTable) {
+    writeLog("no destructors");
     return return_error;
   }
   auto runTimeInfo =
       runTimeInfoTable.value().findRunTime(youngestContext.GetPC());
   if (!runTimeInfo) {
+    writeLog("no destructors");
     return return_error;
   }
   UNWIND_INFO unwindInfo;
@@ -41,6 +43,7 @@ callDestructors(lldb_private::Thread &thread,
       baseStartAddr + runTimeInfo->UnwindInfoAddress, &unwindInfo,
       sizeof(unwindInfo), return_error);
   if (!return_error.Success()) {
+
     return return_error;
   }
   if (unwindInfo.Flags & UNW_FLAG_EHANDLER ||
@@ -62,6 +65,7 @@ callDestructors(lldb_private::Thread &thread,
       return return_error;
     }
     if (funcInfo.magicNumber != 0x19930522) {
+      writeLog("not pe");
       return return_error;
     }
     std::vector<IptoStateMapEntry2> ipoEntries(funcInfo.nIPMapEntries);
@@ -79,8 +83,8 @@ callDestructors(lldb_private::Thread &thread,
     }
     int functionToJumpToState = -1;
     if (addressToJumpTo) {
-      functionToJumpToState =
-          findState((char*)addressToJumpTo - (char*)baseStartAddr, ipoEntries);
+      functionToJumpToState = findState(
+          (char *)addressToJumpTo - (char *)baseStartAddr, ipoEntries);
     }
     if (-1 == funcInfo.maxState) {
       writeLog("no desturctors to call");
@@ -132,9 +136,11 @@ callDestructors(lldb_private::Thread &thread,
       writeLog("calling destructors");
       g_platform->runFunc(g_platform->getCallDestructorsFunction(), args);
       g_platform->deallocateMemory(structToPassRemote);
-    }else {
+    } else {
       writeLog("no destructors to call");
     }
+  } else {
+    writeLog("no desturctors to call");
   }
   return return_error;
 }

@@ -263,9 +263,18 @@ EXT_COMMAND(execute, "Execute command",
       log("failed to read script file: " + scriptFilePath);
       return false;
     }
-    return commands::executeExpression(
+    auto thread = g_platform->getCurrentThread();
+    auto currentFrame = thread->getRegisterValue("$frame", 0).to_ullong();
+    auto res = commands::executeExpression(
         args,
         std::string{expression.value().begin(), expression.value().end()});
+    abortIfFalse(
+        SUCCEEDED(g_ExtInstance.t_control->Execute(
+            DEBUG_OUTCTL_THIS_CLIENT,
+            std::string(".frame /r " + std::to_string(currentFrame)).c_str(),
+            0)),
+        ".frame failed");
+    return res;
   });
 }
 
