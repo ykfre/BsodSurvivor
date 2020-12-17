@@ -104,13 +104,13 @@ namespace VSPackage.BsodSurvivorPlugin
 
                 {
                     CommandID selectionsMenuCommandID = new CommandID(GuidList.guidBsodSurvivorPluginCmdSet, (int)PkgCmdIDList.cmdidLink);
-                    MenuCommand selectionsMenuItem = new MenuCommand(onLinkRequested, selectionsMenuCommandID);
+                    MenuCommand selectionsMenuItem = new MenuCommand(OnLinkRequested, selectionsMenuCommandID);
                     mcs.AddCommand(selectionsMenuItem);
                 }
 
                 {
                     CommandID selectionsMenuCommandID = new CommandID(GuidList.guidBsodSurvivorPluginMultiItemProjectCmdSet, (int)PkgCmdIDList.cmdidLink1);
-                    MenuCommand selectionsMenuItem = new MenuCommand(onLinkRequested, selectionsMenuCommandID);
+                    MenuCommand selectionsMenuItem = new MenuCommand(OnLinkRequested, selectionsMenuCommandID);
                     mcs.AddCommand(selectionsMenuItem);
                 }
 
@@ -138,7 +138,7 @@ namespace VSPackage.BsodSurvivorPlugin
 
         }
 
-        private void onLinkRequested(object sender, EventArgs e)
+        private void OnLinkRequested(object sender, EventArgs e)
         {
             JoinableTaskFactory.Run(async () =>
             {
