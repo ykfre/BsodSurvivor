@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Windows.Forms;
 
-namespace VSPackage.CPPCheckPlugin
+namespace VSPackage.BsodSurvivorPlugin
 {
 	class DebugTracer
 	{

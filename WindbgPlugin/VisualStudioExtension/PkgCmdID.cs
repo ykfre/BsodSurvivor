@@ -2,7 +2,7 @@
 // MUST match PkgCmdID.h
 using System;
 
-namespace VSPackage.CPPCheckPlugin
+namespace VSPackage.BsodSurvivorPlugin
 {
     static class PkgCmdIDList
     {

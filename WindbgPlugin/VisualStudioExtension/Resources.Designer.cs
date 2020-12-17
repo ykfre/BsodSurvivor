@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace VSPackage.CPPCheckPlugin {
+namespace VSPackage.BsodSurvivorPlugin {
     using System;
     
     
@@ -39,7 +39,7 @@ namespace VSPackage.CPPCheckPlugin {
         internal static global::System.Resources.ResourceManager ResourceManager {
             get {
                 if (object.ReferenceEquals(resourceMan, null)) {
-                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("VSPackage.CPPCheckPlugin.Resources", typeof(Resources).Assembly);
+                    global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager("VSPackage.BsodSurvivorPlugin.Resources", typeof(Resources).Assembly);
                     resourceMan = temp;
                 }
                 return resourceMan;
