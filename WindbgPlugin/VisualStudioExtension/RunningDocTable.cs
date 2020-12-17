@@ -14,8 +14,8 @@ namespace VSIXProject1
     {
         #region Members
 
-        private RunningDocumentTable mRunningDocumentTable;
-        private DTE mDte;
+        private readonly RunningDocumentTable mRunningDocumentTable;
+        private readonly DTE mDte;
 
         public delegate void OnBeforeSaveHandler(Document document);
         public event OnBeforeSaveHandler BeforeSave;
