@@ -1,4 +1,6 @@
 #include "Platform.h"
+#include "Commands.h"
+#include "Logger.h"
 #include "TestsUtils.h"
 #include "Config.h"
 #include "Crt.h"
@@ -49,4 +51,22 @@ void TestUtils::SetUp() {
   executablePath.resize(executablePathSize + 1);
   g_config.executablePath = executablePath;
 
+}
+
+void TestUtils::executeExpression(std::thread &t,
+                                         int selectedFrameIndex) {
+  waitForBpNotification();
+  SuspendThread(t.native_handle());
+  executeCommand(t, [&](CommonCommandArgs &args) {
+    g_platform->setCurrentThread(
+        g_threadFactory->create(GetThreadId(t.native_handle())));
+    t_logger = std::make_shared<ConsoleLogger>();
+
+    args.selectedFrameIndex = selectedFrameIndex;
+    auto expr = g_expr;
+    return commands::executeExpression(args, expr);
+  });
+  ResumeThread(t.native_handle());
+  while (g_shouldPauseExecute) {
+  };
 }

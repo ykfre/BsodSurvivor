@@ -136,7 +136,8 @@
 
  STDMETHODIMP_(HRESULT __stdcall)
     DebugEvents::GetInterestMask(PULONG Mask) noexcept {
-  *Mask = DEBUG_EVENT_BREAKPOINT;
+   *Mask = DEBUG_EVENT_BREAKPOINT | DEBUG_EVENT_UNLOAD_MODULE |
+           DEBUG_EVENT_LOAD_MODULE;
   return 0;
 }
 

@@ -146,7 +146,7 @@
       <PreprocessorDefinitions>EXPORTS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)stl;$(ProjectDir);$(ProjectDir);</AdditionalIncludeDirectories>
       <ExceptionHandling>Async</ExceptionHandling>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
@@ -167,7 +167,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)stl</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)stl;$(ProjectDir);</AdditionalIncludeDirectories>
       <WholeProgramOptimization>false</WholeProgramOptimization>
       <ExceptionHandling>Async</ExceptionHandling>
       <BufferSecurityCheck>false</BufferSecurityCheck>
@@ -184,6 +184,7 @@
   <ItemGroup>
     <ClCompile Include="AssertUtils.cpp" />
     <ClCompile Include="blink\First.cpp" />
+    <ClCompile Include="blink\ForExpressions.cpp" />
     <ClCompile Include="blink\Second.cpp" />
     <ClCompile Include="ClassWithDestructor.cpp" />
     <ClCompile Include="Crt.cpp" />
@@ -195,6 +196,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AssertUtils.h" />
+    <ClInclude Include="blink\ForExpressions.h" />
     <ClInclude Include="Crt.h" />
     <ClInclude Include="ExportsDefines.h" />
     <ClInclude Include="ExpressionTests.h" />

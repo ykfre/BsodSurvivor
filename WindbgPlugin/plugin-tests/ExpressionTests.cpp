@@ -17,20 +17,7 @@ public:
     test::expression::g_counter = 0;
     TestUtils::SetUp();
   }
-    void executeExpression(std::thread& t, int selectedFrameIndex =0) {
-    waitForBpNotification();
-    SuspendThread(t.native_handle());
-    executeCommand(t, [&](CommonCommandArgs &args) {
-      g_platform->setCurrentThread(
-          g_threadFactory->create(GetThreadId(t.native_handle())));
-      t_logger = std::make_shared<ConsoleLogger>();
-
-      args.selectedFrameIndex = selectedFrameIndex;
-      auto expr = g_expr;
-      return commands::executeExpression(args, expr);
-    });
-    ResumeThread(t.native_handle());
-  }
+    
 };
 
 TEST_F(ExpressionTests, LocalsSanity)
@@ -132,4 +119,5 @@ TEST_F(ExpressionTests, SelectFrame1) {
   executeExpression(t, selectedFrameIndex);
   t.join();
 }
+
 

@@ -3288,7 +3288,7 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
       if (!isTypeLegal(Val->getType(), VT) ||
           (VT.isVector() && VT.getVectorElementType() == MVT::i1))
         return false;
-      ResultReg = getRegForValue(Val);
+      ResultReg = getRegForValue(Val, true);
     }
 
     if (!ResultReg)

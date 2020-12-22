@@ -1329,7 +1329,6 @@ static llvm::InvokeInst* EmitSehEHaScope(CodeGenFunction& CGF,
 
 // Invoke a llvm.eha.scope.begin at the beginning of a CPP scope for -EHa
 void CodeGenFunction::EmitSehCppScopeBegin() {
-  assert(getLangOpts().EHAsynch);
   llvm::FunctionType* FTy =
     llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
   llvm::FunctionCallee SehCppScope =
@@ -1340,7 +1339,6 @@ void CodeGenFunction::EmitSehCppScopeBegin() {
 // Invoke a llvm.eha.scope.end at the end of a CPP scope for -EHa
 //   llvm.eha.scope.end is emitted before popCleanup, so it's "invoked"
 void CodeGenFunction::EmitSehCppScopeEnd() {
-  assert(getLangOpts().EHAsynch);
   llvm::FunctionType* FTy =
     llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
   llvm::FunctionCallee SehCppScope =
@@ -1350,7 +1348,6 @@ void CodeGenFunction::EmitSehCppScopeEnd() {
 
 // Invoke a llvm.eha.scope.begin at the beginning of a CPP scope for -EHa
 void CodeGenFunction::EmitSehTryScopeBegin() {
-  assert(getLangOpts().EHAsynch);
   llvm::FunctionType* FTy =
     llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
   llvm::FunctionCallee SehCppScope =
@@ -1361,7 +1358,6 @@ void CodeGenFunction::EmitSehTryScopeBegin() {
 // Invoke a llvm.eha.scope.end at the end of a CPP scope for -EHa
 //   llvm.eha.scope.end is emitted before popCleanup, so it's "invoked"
 void CodeGenFunction::EmitSehTryScopeEnd() {
-  assert(getLangOpts().EHAsynch);
   llvm::FunctionType* FTy =
     llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
   llvm::FunctionCallee SehCppScope =

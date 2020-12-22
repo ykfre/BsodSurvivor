@@ -20,5 +20,7 @@ EXPORTS
     returntoframewithout
     returntoframewith
     reloadblinkmodules
-    execute
+    expr
     jump
+    discardexpr
+    reloadconfig

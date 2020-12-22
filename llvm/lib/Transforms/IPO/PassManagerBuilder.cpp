@@ -25,6 +25,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/CommandLine.h"
@@ -475,6 +476,35 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
       (!PGOInstrUse.empty() || !PGOSampleUse.empty() || EnablePGOCSInstrGen))
     MPM.add(createControlHeightReductionLegacyPass());
 }
+bool replaceFunctionsWithImp(Module &M) {
+  bool isChanged = false;
+  for (auto &f : M) {
+    auto symbolName = f.getName();
+    if (symbolName.startswith("__jmp_")) {
+      continue;
+    }
+    if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage ||
+        f.getLinkage() == GlobalValue::PrivateLinkage) {
+      continue;
+    }
+    if (f.isDLLImportDependent()) {
+      continue;
+    }
+
+    if (f.getName() == "__CxxFrameHandler3") {
+      continue;
+    }
+
+    isChanged = true;
+    auto FDecl = Function::Create(
+        f.getFunctionType(), GlobalValue::ExternalLinkage, f.getAddressSpace(),
+        ("__jmp_" + f.getName()).str(), &M);
+    FDecl->setAttributes(f.getAttributes());
+    FDecl->setCallingConv(f.getCallingConv());
+    f.replaceNonMetadataUsesWith(FDecl);
+  }
+  return isChanged;
+}
 
 struct Hello : public ModulePass {
 public:
@@ -482,7 +512,9 @@ public:
   Hello() : ModulePass(ID) {}
   bool runOnModule(Module &M) override {
     bool isChanged = false;
-    auto f = M.getOrInsertFunction("myCallBeforeSetLoad", llvm::Type::getVoidTy(M.getContext()))
+    std::string newFunctionName = "myCallBeforeSetLoad";
+    auto f = M.getOrInsertFunction(newFunctionName,
+                                   llvm::Type::getVoidTy(M.getContext()))
                  .getCallee();
     auto func = dyn_cast<llvm::Function>(f);
     func->setAttributes(llvm::AttributeList{});
@@ -495,41 +527,37 @@ public:
         for (llvm::BasicBlock::iterator J = B.begin(), JE = B.end(); J != JE;
              ++J) {
           if (isa<llvm::LoadInst>(J) ||
-              isa<llvm::StoreInst>(J)) {
+              isa<llvm::StoreInst>(J) ||isa<llvm::CallInst>(J)||
+              isa<llvm::InvokeInst>(J)) {
+            if (isa<llvm::DbgInfoIntrinsic>(J)) {
+              continue;
+            }
+            if (auto call = llvm::dyn_cast<llvm::CallInst>(J)) {
+              if (call->getCalledFunction()) {
+                if (call->getCalledFunction()->getName().str() ==
+                    newFunctionName) {
+                  continue;
+                }
+              }
+            }
+
+            if (auto call = llvm::dyn_cast<llvm::InvokeInst>(J)) {
+              if (call->getCalledFunction()) {
+                if (call->getCalledFunction()->getName().str() ==
+                    newFunctionName) {
+                  continue;
+                }
+              }
+            }
             isChanged = true;
             Instruction *newInst = CallInst::Create(func, "");
-            B.getInstList().insertAfter(J, newInst);
-            J++;
-            assert(isa<llvm::CallInst>(J) || isa<llvm::InvokeInst>(J));
+            B.getInstList().insert(J, newInst);
           }
         }
       }
     }
-    for (auto &f : M) {
-      auto symbolName = f.getName();
-      if (symbolName.startswith("__jmp_")) {
-        continue;
-      }
-      if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage ||
-          f.getLinkage() == GlobalValue::PrivateLinkage) {
-        continue;
-      }
-      if (f.isDLLImportDependent()) {
-        continue;
-      }
-
-      if (f.getName() == "__CxxFrameHandler3") {
-        continue;
-      }
-      isChanged = true;
-      auto FDecl = Function::Create(
-          f.getFunctionType(), GlobalValue::ExternalLinkage,
-          f.getAddressSpace(), ("__jmp_" + f.getName()).str(), &M);
-      FDecl->setAttributes(f.getAttributes());
-      FDecl->setCallingConv(f.getCallingConv());
-      f.replaceNonMetadataUsesWith(FDecl);
-    }
-
+    
+    isChanged |= replaceFunctionsWithImp(M);
     return isChanged;
   }
 };

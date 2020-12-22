@@ -38,4 +38,6 @@ public:
 
   bool runThreadPlan() override;
   std::vector<std::shared_ptr<LoadedDll>> getModules() override;
+
+  bool isUserMode() override { return true; }
 };

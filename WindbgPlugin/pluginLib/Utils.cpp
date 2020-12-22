@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <fstream>
 #include <tlhelp32.h>
+#include <string>
 #pragma warning(pop)
 
 std::vector<std::string> splitString(const std::string &str,

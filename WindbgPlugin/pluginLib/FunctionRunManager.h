@@ -10,7 +10,7 @@ public:
   std::shared_ptr<Event> registerForBpHittedForTid(int tid);
   void waitForFunctionToEnd(std::shared_ptr<Event> event, int tid);
   void notifyFunctionEnded(int tid);
-
+  bool isWaitingForFunctionToEnd(int tid);
 private:
   std::map<int, std::vector<std::shared_ptr<Event>>> m_tidToMutexes;
   std::mutex m_tidToMutexesMutex;

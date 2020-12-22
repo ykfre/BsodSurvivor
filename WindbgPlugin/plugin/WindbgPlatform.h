@@ -31,6 +31,8 @@ private:
 class WindbgPlatform : public Platform {
 public:
   WindbgPlatform();
+  bool isUserMode() override;
+
   void *allocateMemory(size_t size) override;
   void deallocateMemory(void *addr) override;
   void addBp(void *addr) override;
@@ -38,7 +40,8 @@ public:
 
   size_t readMemory(void *addr, void *buf, size_t size) override;
 
-  size_t writeMemory(void *addr, const void *buf, size_t size) override;
+  [[nodiscard]] size_t writeMemory(void *addr, const void *buf,
+                                   size_t size) override;
 
   std::vector<std::shared_ptr<LoadedDll>> getModules() override;
   bool runThreadPlan() override;

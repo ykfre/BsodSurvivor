@@ -91,7 +91,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
-    <OutDir>C:\Users\idowe\Desktop\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe\amd64\winext</OutDir>
+    <OutDir>C:\Users\idowe\Desktop\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe - Copy\amd64\winext</OutDir>
     <TargetName>lldb</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

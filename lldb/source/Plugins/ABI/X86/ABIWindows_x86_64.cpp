@@ -146,9 +146,6 @@ bool ABIWindows_x86_64::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   const RegisterInfo *reg_info = nullptr;
 
-  if (args.size() > 4) // Windows x64 only put first 4 arguments into registers
-    return false;
-
   for (size_t i = 0; i < args.size(); ++i) {
     reg_info = reg_ctx->GetRegisterInfo(eRegisterKindGeneric,
                                         LLDB_REGNUM_GENERIC_ARG1 + i);
@@ -162,7 +159,7 @@ bool ABIWindows_x86_64::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   LLDB_LOGF(log, "16-byte aligning SP: 0x%" PRIx64 " to 0x%" PRIx64,
             (uint64_t)sp, (uint64_t)(sp & ~0xfull));
-
+  sp -= std::max(args.size(), (size_t)4) * sizeof(size_t);
   sp &= ~(0xfull); // 16-byte alignment
   ProcessSP process_sp(thread.GetProcess());
 

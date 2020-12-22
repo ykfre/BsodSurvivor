@@ -33,6 +33,7 @@ TEST_F(ConfigurationTests, sanity) {
             "allocateSpaceInStackFunctionName");
 
   ASSERT_EQ(config.serverPort, 5);
+  ASSERT_EQ(config.shouldFreeMemoryOnUnloadingModule, true);
   auto expectedModulesNames = std::vector<std::string>{"a", "b"};
   ASSERT_EQ(config.modulesNames, expectedModulesNames);
 }

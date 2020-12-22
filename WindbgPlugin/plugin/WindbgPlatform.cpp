@@ -67,6 +67,10 @@ void *WindbgPlatform::allocateMemory(size_t size) {
       return nullptr;
     }
     auto allocated_addr = runFunc(mallocAddr, {NonPagedPool, size});
+    std::stringstream ss;
+    ss << std::hex << (size_t)allocated_addr;
+    writeLog("allocate memory in " + ss.str()+ " with size " + std::to_string(size));
+
     return (void *)allocated_addr;
   }
 }
@@ -79,6 +83,9 @@ void WindbgPlatform::deallocateMemory(void *address) {
                                                    command.str().c_str(), 0);
     abortIfFalse(SUCCEEDED(result), "deallocate failed");
   } else {
+    std::stringstream ss;
+    ss << std::hex << (size_t)address;
+    writeLog("free memory in " + ss.str());
     void *freeAddr = g_blink.getSymbol("ExFreePool");
     abortIfFalse(freeAddr, "not found deallocate function");
     g_platform->runFunc((void *)freeAddr, {(size_t)address});
@@ -88,6 +95,8 @@ void WindbgPlatform::deallocateMemory(void *address) {
 int WindbgThread::getThreadId() {
   return getRegisterValue("$tid", 0).to_ulong();
 }
+
+bool WindbgPlatform::isUserMode() { return !g_ExtInstance.isKernelDebugger(); }
 
 std::vector<std::string> WindbgPlatform::getNeededSymbolNames() {
   if (g_ExtInstance.isKernelDebugger()) {
@@ -191,7 +200,11 @@ size_t WindbgPlatform::readMemory(void *addr, void *buf, size_t size) {
 size_t WindbgPlatform::writeMemory(void *addr, const void *buf, size_t size) {
   ULONG bytesRead = 0;
   if (!SUCCEEDED(g_ExtInstance.t_debug->WriteVirtual(
-          (size_t)addr, (void *)buf, (uint32_t)size, &bytesRead))) {
+          (size_t)addr, (void *)buf, (uint32_t)size, &bytesRead)) ||
+      bytesRead != size) {
+    std::stringstream ss;
+    ss << "write failed in " << std::hex << addr << " from " << (size_t)buf << "with size " << size;
+    writeLog(ss.str());
     return 0;
   }
   return bytesRead;

@@ -65,7 +65,7 @@ callDestructors(lldb_private::Thread &thread,
       return return_error;
     }
     if (funcInfo.magicNumber != 0x19930522) {
-      writeLog("not pe");
+      writeLog("not function which we able to call its destructor");
       return return_error;
     }
     std::vector<IptoStateMapEntry2> ipoEntries(funcInfo.nIPMapEntries);

@@ -46,7 +46,10 @@ std::string getSymbolName(const IMAGE_SYMBOL &symbol,
 }
 Result Blink::initDllsIfNeeded() const {
   std::scoped_lock mutex(*m_mutex);
-  if (m_isInitDlls) {
+  if (m_isInUnload) {
+    return Result();
+  }
+  if (m_dllToChange) {
     return Result();
   }
   std::vector<std::string> modulesToFind;
@@ -58,8 +61,13 @@ Result Blink::initDllsIfNeeded() const {
     auto foundModule =
         std::find_if(modules.begin(), modules.end(),
                      [&](std::shared_ptr<LoadedDll> currentModule) {
-                       return lowerString(currentModule->getName())
-                           ._Starts_with(lowerString(moduleName));
+                       if (!g_platform->isUserMode()) {
+                         return lowerString(currentModule->getName()) ==
+                                lowerString(moduleName);
+                       } else {
+                         return lowerString(currentModule->getName())
+                             ._Starts_with(lowerString(moduleName));
+                       }
                      });
     if (foundModule == modules.end()) {
       return Result("failed to find module " + moduleName +
@@ -71,7 +79,6 @@ Result Blink::initDllsIfNeeded() const {
       m_dllToChange = *foundModule;
     }
   }
-  m_isInitDlls = true;
   return Result();
 }
 
@@ -111,11 +118,13 @@ void Blink::notifyDynamicModuleUnloaded(std::shared_ptr<LoadedDll> module) {
 }
 
 void Blink::resetDllToChange() {
+  setInUnload(true);
   for (const auto &dll : getDynamicDlls()) {
     notifyDynamicModuleUnloaded(dll);
   }
   m_dynamicDlls.clear();
   m_dllToChange.reset();
+  setInUnload(false);
   try {
     std::scoped_lock lock(*m_originalFileToNewFileMutex);
 
@@ -130,12 +139,15 @@ void Blink::resetDllToChange() {
 }
 
 std::vector<std::shared_ptr<LoadedDll>> Blink::getAllDlls() const {
-  auto dlls = getDynamicDlls();
-  auto ordinaryDlls = getOrdinaryDlls();
-  dlls.insert(dlls.end(), ordinaryDlls.begin(), ordinaryDlls.end());
+  auto dlls = getOrdinaryDlls();
+  if (m_isInUnload) {
+    return dlls;
+  }
+  auto dynamicDlls = getDynamicDlls();
   if (m_dllToChange) {
     dlls.push_back(m_dllToChange);
   }
+  dlls.insert(dlls.end(), dynamicDlls.begin(), dynamicDlls.end());
   return dlls;
 }
 
@@ -218,8 +230,8 @@ Result Blink::link(const LinkCommandRequest *request,
 
   writeLog("loading dll to memory");
   std::shared_ptr<LoadedDll> loadedDll;
-  result = loadDllFromMemory(std::filesystem::path(dllPath).filename().string(),
-                             *dllData, neededSymbols, loadedDll);
+  result = loadDll(dllPath, std::filesystem::path(dllPath).filename().string(),
+                   *dllData, neededSymbols, loadedDll);
   if (!result.m_success) {
     return result;
   }
@@ -229,6 +241,9 @@ Result Blink::link(const LinkCommandRequest *request,
   if (!result.m_success) {
     return result;
   }
+  // For now it isn't possible to free the module - as there is a need to FunctionToBreak function, but this function exist
+  // in dllToChange, need somehow to solve this.
+  loadedDll->setShouldRelease(false);
   m_dynamicDlls.push_back(loadedDll);
   notifyDynamicModuleLoaded(loadedDll);
   return Result();
@@ -266,13 +281,14 @@ Blink::updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
     auto oldInfoSize =
         ((char *)needToReplaceOldSymbols[needToReplaceOldSymbols.size() - 1]
              .second -
-         (char *)needToReplaceOldSymbols[0].second + sizeof(void*)) /
+         (char *)needToReplaceOldSymbols[0].second + sizeof(void *)) /
         sizeof(void *);
 
     std::vector<void *> oldInfo(oldInfoSize);
 
-    auto readSize = g_platform->readMemory(needToReplaceOldSymbols[0].second,
-                                           oldInfo.data(), oldInfo.size() *sizeof(void*));
+    auto readSize =
+        g_platform->readMemory(needToReplaceOldSymbols[0].second,
+                               oldInfo.data(), oldInfo.size() * sizeof(void *));
     if (readSize != oldInfo.size() * sizeof(void *)) {
       return Result("failed to read");
     }
@@ -283,7 +299,7 @@ Blink::updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
       oldInfo[indexToChange] =
           newSymbols[needToReplaceOldSymbols[i].first].m_address;
     }
-    g_platform->writeMemory(needToReplaceOldSymbols[0].second, oldInfo.data(),
+    (void)g_platform->writeMemory(needToReplaceOldSymbols[0].second, oldInfo.data(),
                             sizeof(size_t) * oldInfo.size());
   }
   return Result();
@@ -440,7 +456,7 @@ Result Blink::runLinkCommand(const LinkCommandRequest *request,
   std::string ldLinkPath = request->ldpath();
   auto ldProcessCommand =
       ldLinkPath + " " + asmFileObjFilePath + " " + objFilePath +
-      R"( /dll /debug:full /align:16 /driver /force:unresolved )" +
+      R"( /dll /debug:full /force:unresolved )" +
       request->linkerflags() +
       " /NODEFAULTLIB /noentry /out:" + wantedOutputDll;
   writeLog("starting to link " + ldProcessCommand);
@@ -524,10 +540,11 @@ Result Blink::fixRelocations(std::vector<char> &localLoadedImage,
   return Result();
 }
 
-Result Blink::loadDllFromMemory(
-    const std::string &dllName, const std::vector<char> &dllData,
-    const std::unordered_map<std::string, Symbol> &symbolsToImport,
-    std::shared_ptr<LoadedDll> &loadedDll) {
+Result
+Blink::loadDll(const std::string &localModuleFilePath,
+               const std::string &dllName, const std::vector<char> &dllData,
+               const std::unordered_map<std::string, Symbol> &symbolsToImport,
+               std::shared_ptr<LoadedDll> &loadedDll) {
   Result result;
   auto imageDosHeader = (IMAGE_DOS_HEADER *)dllData.data();
   auto imageNtHeaders =
@@ -536,7 +553,6 @@ Result Blink::loadDllFromMemory(
   std::vector<char> localLoadedImage(
       std::max((size_t)imageSize, dllData.size()));
   memcpy(localLoadedImage.data(), dllData.data(), dllData.size());
-  size_t maxLoadableSectionAddr = 0;
   for (int i = 0; i < imageNtHeaders->FileHeader.NumberOfSections; i++) {
     auto sectionHeaderLocationOffset =
         imageDosHeader->e_lfanew + sizeof(DWORD) +
@@ -549,31 +565,30 @@ Result Blink::loadDllFromMemory(
                sectionHeaderLocationInDisk->VirtualAddress,
            dllData.data() + sectionHeaderLocationInDisk->PointerToRawData,
            sectionHeaderLocationInDisk->Misc.VirtualSize);
-    if (!(sectionHeaderLocationInDisk->Characteristics &
-          IMAGE_SCN_MEM_DISCARDABLE)) {
-      maxLoadableSectionAddr = sectionHeaderLocationInDisk->VirtualAddress +
-                               sectionHeaderLocationInDisk->Misc.VirtualSize;
-    }
   }
-  localLoadedImage.resize(maxLoadableSectionAddr);
-  auto loadedImage = g_platform->allocateMemory(maxLoadableSectionAddr);
+  auto loadedImage = g_platform->allocateMemory(imageSize);
   loadedDll = std::make_shared<LoadedDll>(
       dllName, loadedImage, LoadedDll::LoadedDynamically::DYNAMIC);
+  loadedDll->setLocalFilePath(localModuleFilePath);
   result = fixRelocations(localLoadedImage,
                           (char *)loadedImage -
                               (char *)imageNtHeaders->OptionalHeader.ImageBase);
   if (!result.m_success) {
     return result;
   }
-  g_platform->writeMemory(loadedImage, localLoadedImage.data(),
-                          localLoadedImage.size());
+  if (!g_platform->writeMemory(loadedImage, localLoadedImage.data(),
+                          localLoadedImage.size())) {
+    return Result();
+  }
   result = updateSymbolsInNewObj(loadedDll, symbolsToImport, loadedImage,
                                  localLoadedImage.data());
   if (!result.m_success) {
     return result;
   }
-  g_platform->writeMemory(loadedImage, localLoadedImage.data(),
-                          localLoadedImage.size());
+  if (!g_platform->writeMemory(loadedImage, localLoadedImage.data(),
+                          localLoadedImage.size())) {
+    return Result();
+  }
   return result;
 }
 
@@ -648,6 +663,8 @@ Blink::Blink() {
   m_tempDirPath = tempDir;
   std::filesystem::create_directory(m_tempDirPath);
 }
+
+void Blink::setInUnload(bool isInUnload) { m_isInUnload = isInUnload; }
 
 Result Blink::link(const LinkCommandRequest *request) {
   writeLog("blink starting");
@@ -741,8 +758,7 @@ bool Blink::shouldAddFilePathToHook(const std::string &filePath) {
   try {
     std::scoped_lock lock(*m_originalFileToNewFileMutex);
 
-    initDllsIfNeeded();
-    if (!m_dllToChange) {
+    if (!initDllsIfNeeded().m_success) {
       return false;
     }
     auto absolutePath = std::filesystem::absolute(filePath).string();
@@ -782,14 +798,15 @@ std::unordered_map<std::string, Symbol> Blink::getSymbolsToUpdateWith() {
   std::vector<std::shared_ptr<LoadedDll>> modules;
   modules.insert(modules.end(), m_orderinaryDlls.begin(),
                  m_orderinaryDlls.end());
-  if (m_dllToChange) {
-    modules.push_back(m_dllToChange);
+  if (!m_isInUnload) {
+    if (m_dllToChange) {
+      modules.push_back(m_dllToChange);
+    }
+    modules.insert(modules.end(), m_dynamicDlls.begin(), m_dynamicDlls.end());
   }
-  modules.insert(modules.end(), m_dynamicDlls.begin(), m_dynamicDlls.end());
   std::unordered_map<std::string, Symbol> symbols;
   for (const auto &module : modules) {
     for (const auto &symbol : module->getSymbols()) {
-
       if (symbols.find(symbol.first) != symbols.end()) {
         if (symbol.second.m_isFunction || symbol.second.m_isConst) {
           symbols[symbol.first] = symbol.second;

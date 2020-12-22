@@ -32,3 +32,15 @@ void FunctionRunManager::notifyFunctionEnded(int tid) {
   auto currentMutex = mutexes.at(mutexes.size() - 1);
   currentMutex->notify();
 }
+
+bool FunctionRunManager::isWaitingForFunctionToEnd(int tid) {
+  std::lock_guard<std::mutex> lock(m_tidToMutexesMutex);
+  if (m_tidToMutexes.find(tid) == m_tidToMutexes.end()) {
+    return false;
+  }
+  auto mutexes = m_tidToMutexes[tid];
+  if (mutexes.empty()) {
+    return false;
+  }
+  return true;
+}

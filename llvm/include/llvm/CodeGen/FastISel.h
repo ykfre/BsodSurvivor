@@ -269,7 +269,7 @@ public:
 
   /// Create a virtual register and arrange for it to be assigned the
   /// value for the given LLVM value.
-  Register getRegForValue(const Value *V);
+  Register getRegForValue(const Value *V, bool shouldSaveDebug = false);
 
   /// Look up the value to see if its value is already cached in a
   /// register. It may be defined by instructions across blocks or defined

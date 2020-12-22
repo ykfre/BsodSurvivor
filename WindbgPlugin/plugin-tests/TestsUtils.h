@@ -9,6 +9,8 @@
 class TestUtils : public testing::Test {
 public:
   void SetUp() override;
+
+  void executeExpression(std::thread &t, int selectedFrameIndex = 0);
 };
 
 void executeCommand(

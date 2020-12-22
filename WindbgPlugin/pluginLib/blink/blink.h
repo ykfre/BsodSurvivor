@@ -13,6 +13,7 @@ using LinkCommand::LinkCommandRequest;
 class Blink {
 public:
   Blink();
+  void setInUnload(bool isInUnload);
   Result initDllsIfNeeded() const;
   Result link(const LinkCommandRequest *request);
   Result replaceIntrinsicsInObjFile(const LinkCommandRequest *request,
@@ -32,13 +33,14 @@ public:
   void addFilePathToHook(const std::string &filePath,
                          const std::string &fileData);
   bool shouldAddFilePathToHook(const std::string &filePath);
+  void *getSymbol(const std::string &symbolName);
+
   std::vector<std::function<void(const std::shared_ptr<LoadedDll> &)>>
       m_onLoadModule;
   std::vector<std::function<void(const std::shared_ptr<LoadedDll> &)>>
       m_onUnloadModule;
 
   std::shared_ptr<std::mutex> m_originalFileToNewFileMutex;
-  void *getSymbol(const std::string &symbolName);
 
 private:
   Result link(const LinkCommandRequest *request, const std::string &newObjPath);
@@ -50,7 +52,7 @@ private:
 
   Result
   updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
-                                const std::set<std::string> &symbolsToNull);
+                              const std::set<std::string> &symbolsToNull);
 
   Result getSymbolsWeShouldUpdateInNewObj(
       const std::vector<char> &objFileData,
@@ -70,10 +72,10 @@ private:
                         const std::string &asmFileObjFilePath,
                         const std::string &objFilePath);
   Result fixRelocations(std::vector<char> &localLoadedImage, uint64_t delta);
-  Result loadDllFromMemory(
-      const std::string &dllName, const std::vector<char> &dllData,
-      const std::unordered_map<std::string, Symbol> &symbolsToImport,
-      std::shared_ptr<LoadedDll> &loadedDll);
+  Result loadDll(const std::string &localModuleFilePath,
+                 const std::string &dllName, const std::vector<char> &dllData,
+                 const std::unordered_map<std::string, Symbol> &symbolsToImport,
+                 std::shared_ptr<LoadedDll> &loadedDll);
 
   Result updateSymbolsInNewObj(
       const std::shared_ptr<LoadedDll> &loadedDll,
@@ -84,10 +86,9 @@ private:
   std::shared_ptr<CreateFileHook::Greeter::Stub> getClientForCreateFileHook();
   static bool isJumpSymbol(const std::string &symbol);
   inline const static std::string TEMP_DIR_NAME = "BLINK";
-  mutable bool m_isInitDlls = false;
 
   std::shared_ptr<std::mutex> m_mutex;
-
+  bool m_isInUnload = false;
   mutable std::shared_ptr<LoadedDll> m_dllToChange;
   mutable std::vector<std::shared_ptr<LoadedDll>> m_orderinaryDlls;
   mutable std::vector<std::shared_ptr<LoadedDll>> m_dynamicDlls;

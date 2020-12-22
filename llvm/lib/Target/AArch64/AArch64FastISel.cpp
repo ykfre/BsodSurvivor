@@ -764,7 +764,7 @@ bool AArch64FastISel::computeAddress(const Value *Obj, Address &Addr, Type *Ty)
         if (const auto *C = dyn_cast<ConstantInt>(RHS))
           if (C->getValue() == 0xffffffff) {
             Addr.setExtendType(AArch64_AM::UXTW);
-            unsigned Reg = getRegForValue(LHS);
+            unsigned Reg = getRegForValue(LHS, false);
             if (!Reg)
               return false;
             bool RegIsKill = hasTrivialKill(LHS);

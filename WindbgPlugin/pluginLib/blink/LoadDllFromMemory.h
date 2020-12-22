@@ -44,16 +44,18 @@ public:
   LoadedDll(const LoadedDll &) = delete;
   LoadedDll &operator=(const LoadedDll &) = delete;
   std::vector<char> readDataAsVirtual() const;
-  std::vector<char> readDataAsDisk() const;
   void *getStartAddress() const { return m_startAddress; }
   std::unordered_map<std::string, Symbol> getSymbols() const;
   lldb::ModuleSP getLLdbModule() const;
+  void setLocalFilePath(const std::string &filePath);
   std::string getName();
   void setShouldRelease(bool shouldRelease) {
     m_shouldRelease = shouldRelease;
   }
 
 private:
+  std::vector<char> readDataAsDisk() const;
+
   static bool getTripleForProcess(const lldb_private::FileSpec &executable,
                                   llvm::Triple &triple);
   std::vector<char> readDataImp(bool asVirtual) const;
@@ -61,6 +63,7 @@ private:
                    std::optional<size_t> whereTo = std::nullopt) const;
   std::unordered_map<std::string, Symbol> getExportedSymbols() const;
   void *m_startAddress;
+  std::optional<std::string> m_localFilePath;
   mutable lldb::ModuleSP m_lldbModule;
   LoadedDynamically m_isDynamic;
   std::string m_moduleName;

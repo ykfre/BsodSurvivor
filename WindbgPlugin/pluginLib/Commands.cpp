@@ -6,6 +6,7 @@
 
 #pragma warning(push, 0)
 #include "Api/SystemInitializerFull.h"
+#include "FunctionRunManager.h"
 #include "CommonCommandArgs.h"
 #include "Config.h"
 #include "Logger.h"
@@ -155,7 +156,7 @@ public:
       images.Append(currentModuleSp);
     }
     if (!foundOurModule) {
-      writeLog("We don't have our module, check the path you given in "
+      writeLog("We don't have our module loaded, check the path you given in "
                "configuration");
       return std::shared_ptr<Process2>();
     }
@@ -261,7 +262,7 @@ private:
 
 class Platform2 : public lldb_private::Platform {
 public:
-  Platform2(bool is_host_platform, CommonCommandArgs &args)
+  Platform2(bool is_host_platform, const CommonCommandArgs &args)
       : lldb_private::Platform(is_host_platform), m_CommonCommandArgs(args) {}
   UserIDResolver2 m_resolver;
   const char *GetDescription() override { return ""; };
@@ -462,8 +463,25 @@ struct CommonCommandInitializerValues {
 };
 
 llvm::Optional<CommonCommandInitializerValues>
-commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
+commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
                             std::vector<std::shared_ptr<LoadedDll>> &modules) {
+  g_platform->callAllocateSpaceInStack = [] {
+    auto thread = g_platform->getCurrentThread();
+    void *allocateSpaceInStackFuncAddress =
+        g_blink.getSymbol(g_config.allocateSpaceInStackFunctionName);
+    if (!allocateSpaceInStackFuncAddress) {
+      return false;
+    }
+
+    thread->setRegisterValue("rip", (size_t)allocateSpaceInStackFuncAddress);
+    g_platform->addBp(
+        reinterpret_cast<char *>(allocateSpaceInStackFuncAddress) + 12);
+    auto event =
+        g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
+    thread->resumeThread();
+    g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
+    return true;
+  };
   lldb_private::Platform::SetHostPlatform(
       lldb::PlatformSP(new Platform2(true, commonCommandArgs)));
   CommonCommandInitializerValues commonCommandInitializerValues;
@@ -478,10 +496,8 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
 
   // Keep it for now for debugging puproses only.
   auto error_stream = std::make_shared<llvm::raw_fd_ostream>(FD, true, true);
-  commonCommandInitializerValues.debugger->SetLoggingCallback(
-      logCallback, nullptr);
   if (!commonCommandInitializerValues.debugger->EnableLog(
-          "lldb", {""}, "", 0, *error_stream)) {
+          "lldb", {"default", "expr"}, "log.txt", 0, *error_stream)) {
     return llvm::NoneType();
   }
 
@@ -498,14 +514,22 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
     return llvm::NoneType();
   }
 
+
   llvm::Triple triple;
   triple.setArch(llvm::Triple::x86_64);
   commonCommandInitializerValues.targetSp->SetArchitecture(
       lldb_private::ArchSpec(triple));
   commonCommandInitializerValues.exeCtxScope = std::make_shared<MyCtx>(
       commonCommandInitializerValues.targetSp, commonCommandArgs, modules);
-  commonCommandInitializerValues.exeCtxScope->CalculateThread()
-      ->SetSelectedFrameByIndex(commonCommandArgs.selectedFrameIndex);
+  if (!commonCommandInitializerValues.exeCtxScope->CalculateProcess()) {
+    return llvm::NoneType();
+  }
+  if(!commonCommandInitializerValues.exeCtxScope->CalculateThread()
+      ->SetSelectedFrameByIndex(commonCommandArgs.selectedFrameIndex)) {
+    writeLog("failed to set wanted frame index " +
+             std::to_string(commonCommandArgs.selectedFrameIndex) + "\n maybe there is module which isn't the main one in the middle?, for exmple, nt,hal, and etc");
+    return llvm::NoneType();
+  }
 
   commonCommandInitializerValues.targetSp->GetProcessSP() =
       commonCommandInitializerValues.exeCtxScope->CalculateProcess();
@@ -538,23 +562,33 @@ commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
   return commonCommandInitializerValues;
 }
 
+bool runCommand(const std::function<bool()> &func,
+                const CommonCommandArgs &commonCommandArgs,
+                std::vector<std::shared_ptr<LoadedDll>>& modules) {
+  if (!g_platform->verifyPreConditions()) {
+    return false;
+  }
+  llvm::Optional<CommonCommandInitializerValues>
+      commonCommandInitializerValues =
+          commonCommandRunInitializer(commonCommandArgs, modules);
+  if (!commonCommandInitializerValues) {
+    writeLog("failed to run initialize lldb");
+    return false;
+  }
+  return func();
+}
+
 bool executeExpression(CommonCommandArgs &commonCommandArgs,
                        const std::string &expression) {
   writeLog("sarting executing expression");
 
-  auto modules = g_blink.getOrdinaryDlls();
-  if (g_blink.getDllToChange()) {
-    modules.push_back(g_blink.getDllToChange());
-  }
+  auto modules = g_blink.getAllDlls();
   llvm::Optional<CommonCommandInitializerValues>
       commonCommandInitializerValues =
           commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
-  lldb_private::MyRegisterContext registersContext(
-      *commonCommandInitializerValues->exeCtxScope->CalculateThread(),
-      commonCommandArgs.selectedFrameIndex);
 
   lldb_private::EvaluateExpressionOptions options;
   options.SetUnwindOnError(false);
@@ -591,7 +625,7 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
                      size_t untilFrameIndex, bool shouldCallDestructors) {
   
   if (untilFrameIndex == 0) {
-    writeLog("you try to return to the same thread - not doing anything");
+    writeLog("you try to return to the same frame - not doing anything");
     return false;
   }
   writeLog("start returning from frame");

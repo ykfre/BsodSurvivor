@@ -20,9 +20,11 @@ public:
   EXT_COMMAND_METHOD(returnwith);
   EXT_COMMAND_METHOD(returntoframewithout);
   EXT_COMMAND_METHOD(returntoframewith);
-  EXT_COMMAND_METHOD(execute);
+  EXT_COMMAND_METHOD(expr);
   EXT_COMMAND_METHOD(jump);
   EXT_COMMAND_METHOD(reloadblinkmodules);
+  EXT_COMMAND_METHOD(discardexpr);
+  EXT_COMMAND_METHOD(reloadconfig);
 
   void log(const std::string &output);
   HRESULT initializeThreadGlobals();
@@ -48,6 +50,8 @@ public:
   inline static thread_local StringOutputCallbacks t_output;
 
 private:
+  std::string getWindbgDir() const;
+  std::string getConfigFilePath()const ;
   void
   executeCommand(const std::function<bool(CommonCommandArgs &args)> &command);
   DebugEvents m_debugEvents;

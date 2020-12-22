@@ -30,7 +30,7 @@
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
-
+#include <algorithm>
 #include "lldb/../../source/Plugins/Language/CPlusPlus/CPlusPlusLanguage.h"
 #include "lldb/../../source/Plugins/ObjectFile/JIT/ObjectFileJIT.h"
 
@@ -798,7 +798,10 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
       // missing_weak_symbol will be true only if we found only weak undefined 
       // references to this symbol.
       symbol_was_missing_weak = true;      
-      for (auto candidate_sc : sc_list.SymbolContexts()) {        
+      auto symbolContexts = sc_list.SymbolContexts();
+      for (size_t i = sc_list.GetSize(); i != 0;i--) {
+        SymbolContext candidate_sc;
+        sc_list.GetContextAtIndex(i-1, candidate_sc);
         // Only symbols can be weak undefined:
         if (!candidate_sc.symbol)
           symbol_was_missing_weak = false;
@@ -852,28 +855,13 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
       return false;
     };
 
-    if (sc.module_sp) {
-      sc.module_sp->FindFunctions(spec.name, CompilerDeclContext(), spec.mask,
-                                  true,  // include_symbols
-                                  false, // include_inlines
-                                  sc_list);
-    }
-
-    lldb::addr_t load_address = LLDB_INVALID_ADDRESS;
-
-    if (get_external_load_address(load_address, sc_list, sc)) {
-      return load_address;
-    } else {
-      sc_list.Clear();
-    }
-
     if (sc_list.GetSize() == 0 && sc.target_sp) {
       sc.target_sp->GetImages().FindFunctions(spec.name, spec.mask,
                                               true,  // include_symbols
                                               false, // include_inlines
                                               sc_list);
     }
-
+    lldb::addr_t load_address = LLDB_INVALID_ADDRESS;
     if (get_external_load_address(load_address, sc_list, sc)) {
       return load_address;
     } else {
@@ -887,7 +875,17 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
 
     if (get_external_load_address(load_address, sc_list, sc)) {
       return load_address;
+    } else {
+      sc_list.Clear();
     }
+
+    if (sc.module_sp) {
+      sc.module_sp->FindFunctions(spec.name, CompilerDeclContext(), spec.mask,
+                                  true,  // include_symbols
+                                  false, // include_inlines
+                                  sc_list);
+    }
+
     // if there are any searches we try after this, add an sc_list.Clear() in
     // an "else" clause here
 

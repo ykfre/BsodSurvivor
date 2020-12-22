@@ -52,6 +52,7 @@ void EXT_CLASS::onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll) {
   std::stringstream command;
   command << ".reload /f " << dll->getName() << "=" << std::hex
           << dll->getStartAddress();
+  writeLog("loading module " + command.str());
   auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
       DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
   assert(res);
@@ -61,6 +62,7 @@ void EXT_CLASS::onUnLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll) {
   auto thread = g_threadFactory->create(0);
   std::stringstream command;
   command << ".reload /u " << dll->getName();
+  writeLog("unload module " + command.str());
   auto res = SUCCEEDED(g_ExtInstance.t_control->Execute(
       DEBUG_OUTCTL_THIS_CLIENT, command.str().c_str(), 0));
   assert(res);
@@ -136,6 +138,58 @@ HRESULT EXT_CLASS::initializeThreadGlobals() {
 std::shared_ptr<IDebugClient> g_debugClient;
 
 HRESULT EXT_CLASS::Initialize() {
+  t_logger = std::make_shared<WindbgLogger>();
+  HRESULT result = initializeThreadGlobals();
+
+  if (!SUCCEEDED(result)) {
+    log("failed to initialize windbg globals");
+    return -1;
+  }
+  m_event = std::shared_ptr<size_t>(
+      (size_t *)CreateEventA(nullptr, false, false, "lldb-windbg"),
+      [](size_t *handle) {
+        if (handle) {
+          CloseHandle(handle);
+        }
+      });
+
+  if (!m_event) {
+    writeLog("failed to create bsod survivor event");
+    return -1;
+  } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    writeLog(
+        "another bsod survivor plugin already exist - please unload it first");
+    return -1;
+  }
+
+  auto configFilePath = getConfigFilePath();
+  if (!g_config.load(configFilePath)) {
+    return -1;
+  }
+
+  auto server = createServer(g_config.serverPort);
+  if (!server.server) {
+    writeLog("failed to load rpc server, becaues port is in use: " +
+             std::to_string(g_config.serverPort));
+    return -1;
+  }
+  writeLog("loaded rpc server");
+  auto processToInjectTo = getParentProccessPid();
+  std::string dllToHook = getWindbgDir() + "\\CreateFileHookDll.dll";
+  if (!std::filesystem::exists(dllToHook)) {
+    writeLog("didn't find hook dll " + dllToHook);
+    return -1;
+  }
+  writeLog("trying loading hook dll " + dllToHook);
+  bool injectionRes =
+      loadRemoteDLL(OpenProcess(PROCESS_ALL_ACCESS, false, processToInjectTo),
+                    dllToHook.c_str());
+
+  if (!injectionRes) {
+    writeLog("failed to inject process for create file.");
+    return -1;
+  }
+  writeLog("loaded create file hook");
   g_blink.m_onLoadModule.push_back(
       [this](const std::shared_ptr<LoadedDll> &dll) {
         onLoadDynamicModule(dll);
@@ -149,47 +203,7 @@ HRESULT EXT_CLASS::Initialize() {
   g_threadFactory = std::make_shared<WindbgThreadFactory>();
 
   commands::initializeLLdbGlobals();
-  HRESULT result = initializeThreadGlobals();
-  if (!SUCCEEDED(result)) {
-    log("failed to initialize windbg globals");
-    return -1;
-  }
-  auto currentModule = GetModuleHandleA(nullptr);
-  std::string modulePath;
-  modulePath.resize(MAX_PATH);
-  auto modulePathSize = GetModuleFileNameA(
-      currentModule, (char *)modulePath.c_str(), modulePath.size());
-  modulePath.resize(modulePathSize + 1);
-  auto dir = std::filesystem::path(modulePath).parent_path();
-  if (!g_config.load(dir.string() + "\\config.json")) {
-    return -1;
-  }
 
-  auto server = createServer(g_config.serverPort);
-  if (!server.server) {
-    writeLog("failed to load rpc server, becaues port is in use: " +
-             std::to_string(g_config.serverPort));
-  }
-  auto parentProcessId = getParentProccessPid();
-  std::string dllToHook = dir.string() + "\\CreateFileHookDll.dll";
-  auto injectionRes =
-      loadRemoteDLL(OpenProcess(PROCESS_ALL_ACCESS, false, parentProcessId),
-                    dllToHook.c_str());
-  if (!injectionRes) {
-    writeLog("failed to inject process for create file.");
-  }
-
-  m_event = std::shared_ptr<size_t>(
-      (size_t *)CreateEventA(nullptr, false, false, "lldb-windbg"),
-      [](size_t *handle) {
-        if (handle) {
-          CloseHandle(handle);
-        }
-      });
-  if (!m_event) {
-    writeLog("failed to create lldb-windbg event");
-    return -1;
-  }
   std::thread t([server]() { server.server->Wait(); });
   t.detach();
 
@@ -204,7 +218,24 @@ HRESULT EXT_CLASS::Initialize() {
   if (!SUCCEEDED(result)) {
     return result;
   }
+  writeLog("finished initializing successfully");
   return 0;
+}
+
+std::string EXT_CLASS::getWindbgDir() const {
+  std::string modulePath;
+  modulePath.resize(MAX_PATH);
+  auto currentModule = GetModuleHandleA(nullptr);
+
+  auto modulePathSize = GetModuleFileNameA(
+      currentModule, (char *)modulePath.c_str(), modulePath.size());
+  modulePath.resize(modulePathSize + 1);
+  return std::filesystem::path(modulePath).parent_path().string();
+}
+
+std::string EXT_CLASS::getConfigFilePath() const {
+  auto dir = getWindbgDir();
+  return dir + "\\config.json";
 }
 
 void EXT_CLASS::executeCommand(
@@ -213,7 +244,8 @@ void EXT_CLASS::executeCommand(
     g_platform->setCurrentThread(g_threadFactory->create(0));
 
     if (!g_platform->verifyPreConditions()) {
-      log("failed initialize thread globals");
+      log("failed to verify pre conditions");
+      return;
     }
 
     CommonCommandArgs commonArgs;
@@ -221,25 +253,6 @@ void EXT_CLASS::executeCommand(
     commonArgs.selectedFrameIndex =
         thread->getRegisterValue("$frame", 0).to_ulong();
 
-    auto modules = g_blink.getAllDlls();
-
-    g_platform->callAllocateSpaceInStack = [] {
-      auto thread = g_platform->getCurrentThread();
-      void *allocateSpaceInStackFuncAddress =
-          g_blink.getSymbol(g_config.allocateSpaceInStackFunctionName);
-      if (!allocateSpaceInStackFuncAddress) {
-        return false;
-      }
-
-      thread->setRegisterValue("rip", (size_t)allocateSpaceInStackFuncAddress);
-      g_platform->addBp(
-          reinterpret_cast<char *>(allocateSpaceInStackFuncAddress) + 12);
-      auto event =
-          g_functionRunManager.registerForBpHittedForTid(thread->getThreadId());
-      thread->resumeThread();
-      g_functionRunManager.waitForFunctionToEnd(event, thread->getThreadId());
-      return true;
-    };
     command(commonArgs);
   });
   t.detach();
@@ -252,7 +265,7 @@ bool EXT_CLASS::isKernelDebugger() {
   return DEBUG_CLASS_KERNEL == Class;
 }
 #include <iostream>
-EXT_COMMAND(execute, "Execute command",
+EXT_COMMAND(expr, "EvaluateExpression",
             "{;s;expressionFilePath;the file path of the expression}") {
   auto scriptFilePathPointer = GetUnnamedArgStr(0);
   std::string scriptFilePath = scriptFilePathPointer;
@@ -276,6 +289,14 @@ EXT_COMMAND(execute, "Execute command",
         ".frame failed");
     return res;
   });
+}
+
+EXT_COMMAND(reloadconfig, "reload config", "") {
+  auto configFilePath = getConfigFilePath();
+  if (!g_config.load(configFilePath)) {
+    return;
+  }
+  g_blink.resetDllToChange();
 }
 
 EXT_COMMAND(returnwithout, "return from current frame without destructor", "") {
@@ -311,7 +332,21 @@ EXT_COMMAND(returntoframewith,
   });
 }
 
-EXT_COMMAND(jump, "jump to line", "{;s;lineNumber;line number in decimal representation}") {
+EXT_COMMAND(discardexpr, "Discard current expression", "") {
+  executeCommand([](CommonCommandArgs &args) {
+    args.selectedFrameIndex = 0;
+    auto thread = g_platform->getCurrentThread();
+    if (!g_functionRunManager.isWaitingForFunctionToEnd(
+            thread->getThreadId())) {
+      writeLog("no active expression to discard");
+    }
+    g_functionRunManager.notifyFunctionEnded(thread->getThreadId());
+    return true;
+  });
+}
+
+EXT_COMMAND(jump, "jump to line",
+            "{;s;lineNumber;line number in decimal representation}") {
   auto raw = GetUnnamedArgStr(0);
   std::istringstream ss(raw);
   uint32_t line;

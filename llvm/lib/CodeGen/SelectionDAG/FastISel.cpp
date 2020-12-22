@@ -373,7 +373,8 @@ bool FastISel::hasTrivialKill(const Value *V) {
          cast<Instruction>(*I->user_begin())->getParent() == I->getParent();
 }
 
-Register FastISel::getRegForValue(const Value *V) {
+Register FastISel::getRegForValue(const Value *V,
+                                  bool shouldSaveDebug) {
   EVT RealVT = TLI.getValueType(DL, V->getType(), /*AllowUnknown=*/true);
   // Don't handle non-simple values in FastISel.
   if (!RealVT.isSimple())
@@ -402,9 +403,12 @@ Register FastISel::getRegForValue(const Value *V) {
       (!isa<AllocaInst>(V) ||
        !FuncInfo.StaticAllocaMap.count(cast<AllocaInst>(V))))
     return FuncInfo.InitializeRegForValue(V);
-
+  auto debugLoc = DbgLoc;
   SavePoint SaveInsertPt = enterLocalValueArea();
-
+  if (shouldSaveDebug) {
+    DbgLoc = debugLoc;
+  
+  }
   // Materialize the value in a register. Emit any instructions in the
   // local value area.
   Reg = materializeRegForValue(V, VT);
@@ -425,7 +429,7 @@ Register FastISel::materializeConstant(const Value *V, MVT VT) {
     // Translate this as an integer zero so that it can be
     // local-CSE'd with actual integer zeros.
     Reg =
-        getRegForValue(Constant::getNullValue(DL.getIntPtrType(V->getType())));
+        getRegForValue(Constant::getNullValue(DL.getIntPtrType(V->getType())), true);
   else if (const auto *CF = dyn_cast<ConstantFP>(V)) {
     if (CF->isNullValue())
       Reg = fastMaterializeFloatZero(CF);
@@ -443,7 +447,7 @@ Register FastISel::materializeConstant(const Value *V, MVT VT) {
       (void)Flt.convertToInteger(SIntVal, APFloat::rmTowardZero, &isExact);
       if (isExact) {
         Register IntegerReg =
-            getRegForValue(ConstantInt::get(V->getContext(), SIntVal));
+            getRegForValue(ConstantInt::get(V->getContext(), SIntVal), true);
         if (IntegerReg)
           Reg = fastEmit_r(IntVT.getSimpleVT(), VT, ISD::SINT_TO_FP, IntegerReg,
                            /*Kill=*/false);

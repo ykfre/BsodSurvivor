@@ -15,7 +15,7 @@ std::vector<std::string> Platform::getNeededSymbolNames() {
 void *Platform::getFunctionToBreakAddress() {
   void *functionToBreakAddress = nullptr;
   functionToBreakAddress = g_blink.getSymbol(g_config.breakFunctionName);
-  abortIfFalse(functionToBreakAddress, "not found a bp function");
+  abortIfFalse(functionToBreakAddress, "not found " + g_config.breakFunctionName);
   return functionToBreakAddress;
 }
 
@@ -27,6 +27,11 @@ void *Platform::getCallDestructorsFunction() {
 }
 
 bool Platform::verifyPreConditions() {
+  auto res = g_blink.initDllsIfNeeded();
+  if (!res.m_success) {
+    writeLog(res.m_err);
+    return false;
+  }
   for (const auto &symbol : g_platform->getNeededSymbolNames()) {
     void *outAddr = nullptr;
     if (!g_blink.getSymbol(symbol)) {

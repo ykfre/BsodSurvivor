@@ -1,6 +1,7 @@
 #include "blink/blink.h"
 #include "Config.h"
 #include "TestsUtils.h"
+#include "blink/ForExpressions.h"
 #include "blink/LoadDllFromMemory.h"
 #include "utils.h"
 #include "gtest/gtest.h"
@@ -97,8 +98,7 @@ public:
     request.set_ldpath(R"(C:\code\llvm-project\temp\Release\bin\lld-link.exe)");
     std::string cppFilePath = g_blink.getUniqueTempFilePath("a.cpp");
     request.set_filepath(cppFilePath);
-    request.set_masmpath(
-        R"(ml64.exe)");
+    request.set_masmpath(R"(ml64.exe)");
     request.set_linkerflags("");
     return request;
   }
@@ -131,23 +131,25 @@ TEST_F(BlinkTests, BAD_COMPILATION_CPP) {
   ASSERT_EQ(oldDynamic, g_blink.getDynamicDlls());
 }
 
-
 TEST_F(BlinkTests, sanity) {
   auto request = getLinkCommandRequest();
   writeToFile(request.filepath(),
               std::vector<char>{FIRST_CPP_2.begin(), FIRST_CPP_2.end()});
   ASSERT_TRUE(g_blink.link(&request).m_success);
 
-  auto functionToSeeChangeInNewObj =
-      (int (*)())g_blink.getDynamicDlls().at(0)->getSymbols().at("functionToSeeChangeInNewObj")
+  auto functionToSeeChangeInNewObj = (int (*)())g_blink.getDynamicDlls()
+                                         .at(0)
+                                         ->getSymbols()
+                                         .at("functionToSeeChangeInNewObj")
                                          .m_address;
   auto res = functionToSeeChangeInNewObj();
   if (res != 34) {
     throw std::exception("1");
   }
 
-  auto functionToSeeChangeInOldObj =
-      (int (*)())g_blink.getDllToChange()->getSymbols().at("functionToSeeChangeInNewObj")
+  auto functionToSeeChangeInOldObj = (int (*)())g_blink.getDllToChange()
+                                         ->getSymbols()
+                                         .at("functionToSeeChangeInNewObj")
                                          .m_address;
   res = functionToSeeChangeInOldObj();
   if (res != 34) {
@@ -158,20 +160,69 @@ TEST_F(BlinkTests, sanity) {
               std::vector<char>{FIRST_CPP_3.begin(), FIRST_CPP_3.end()});
   ASSERT_TRUE(g_blink.link(&request).m_success);
 
-  auto functionToSeeChangeInOldObj2 =
-      (int (*)())g_blink.getDynamicDlls().at(0)->getSymbols().at(
-          "functionToSeeChangeIOldObj2").m_address;
+  auto functionToSeeChangeInOldObj2 = (int (*)())g_blink.getDynamicDlls()
+                                          .at(0)
+                                          ->getSymbols()
+                                          .at("functionToSeeChangeIOldObj2")
+                                          .m_address;
   res = functionToSeeChangeInOldObj2();
   if (res != 8) {
     throw std::exception("1");
   }
 
-  functionToSeeChangeInOldObj =
-      (int (*)())g_blink.getDllToChange()->getSymbols().at(
-          "functionToSeeChangeInNewObj").m_address;
+  functionToSeeChangeInOldObj = (int (*)())g_blink.getDllToChange()
+                                    ->getSymbols()
+                                    .at("functionToSeeChangeInNewObj")
+                                    .m_address;
   res = functionToSeeChangeInOldObj();
   if (res != 7) {
     throw std::exception("1");
   }
 }
 
+const std::string BLINK_EXPR_CPP1 = R"(
+namespace blinkExpr {
+void functionInNewModule1(){};
+class M
+{
+public:
+static int functionToChange1() { return 2; }
+};
+
+void fksk()
+{
+M::functionToChange1();
+}
+} // namespace blinkExpr
+)";
+
+const std::string BLINK_EXPR_CPP2 = R"(
+namespace blinkExpr {
+class M
+{
+public:
+static int functionToChange1() { return 3; }
+};
+
+void fksk()
+{
+M::functionToChange1();
+}
+} // namespace blinkExpr
+)";
+
+
+TEST_F(BlinkTests, BlinkWithExpr) {
+  std::thread t(blinkExpr::test_blink_expr);
+  auto request = getLinkCommandRequest();
+  writeToFile(request.filepath(), std::vector<char>{BLINK_EXPR_CPP1.begin(),
+                                                    BLINK_EXPR_CPP1.end()});
+  ASSERT_TRUE(g_blink.link(&request).m_success);
+  executeExpression(t);
+
+  writeToFile(request.filepath(), std::vector<char>{BLINK_EXPR_CPP2.begin(),
+                                                    BLINK_EXPR_CPP2.end()});
+  ASSERT_TRUE(g_blink.link(&request).m_success);
+  executeExpression(t);
+  t.join();
+}

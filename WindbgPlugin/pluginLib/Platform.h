@@ -51,7 +51,7 @@ public:
       runFunc;
   std::optional<std::function<bool()>> callAllocateSpaceInStack;
 
-
+  virtual bool isUserMode()=0;
 protected:
   std::shared_ptr<PlatformThread> m_thread;
 };

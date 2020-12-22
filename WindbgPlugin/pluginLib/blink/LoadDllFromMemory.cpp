@@ -105,6 +105,15 @@ std::unordered_map<std::string, Symbol> LoadedDll::getSymbols() const {
 
 lldb::ModuleSP LoadedDll::getLLdbModule() const {
   if (!m_lldbModule) {
+    if (m_localFilePath) {
+      lldb_private::FileSpec fileSpec(*m_localFilePath);
+
+      llvm::Triple triple;
+      getTripleForProcess(fileSpec, triple);
+      m_lldbModule = lldb::ModuleSP(
+          new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
+      return m_lldbModule;
+    }
     llvm::SmallString<128> TmpModel;
     llvm::sys::path::system_temp_directory(true, TmpModel);
     llvm::sys::path::append(TmpModel, m_moduleName + "%%%%%.dll");
@@ -123,6 +132,10 @@ lldb::ModuleSP LoadedDll::getLLdbModule() const {
         new lldb_private::Module(fileSpec, lldb_private::ArchSpec(triple)));
   }
   return m_lldbModule;
+}
+
+void LoadedDll::setLocalFilePath(const std::string &filePath) {
+  m_localFilePath = filePath;
 }
 
 std::string LoadedDll::getName() { return m_moduleName; }
@@ -255,7 +268,7 @@ std::unordered_map<std::string, Symbol> LoadedDll::getExportedSymbols() const {
     DWORD *addresses =
         (DWORD *)(loadedDllData.data() + exports->AddressOfFunctions);
     // Use Ordinal to Lookup Function Address and Calculate Absolute
-    void *addr = (void *)(loadedDllData.data() + addresses[entry.idx]);
+    void *addr = (void *)((char*)m_startAddress + addresses[entry.idx]);
     res[entry.name] =
         Symbol(entry.name, addr, Symbol::IsConst::IS,
                              Symbol::IsFromExport::IS, Symbol::IsFunction::IS);

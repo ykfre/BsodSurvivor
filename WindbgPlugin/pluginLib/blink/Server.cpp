@@ -18,10 +18,12 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "ws2_32.lib")
 
+#include "Commands.h"
 #include "Platform.h"
 #include "blink.h"
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #ifdef BAZEL_BUILD
@@ -64,14 +66,25 @@ grpc::Status GreeterServiceImpl::Compile(
   auto thread = g_threadFactory->create(GetCurrentThreadId());
   t_logger = std::make_shared<VsLogger>(reply);
   g_platform->setCurrentThread(thread);
-  g_platform->verifyPreConditions();
-  auto result = g_blink.link(request);
+  auto dlls = std::vector<std::shared_ptr<LoadedDll>>{g_blink.getDllToChange()};
+  auto ordinaryDlls = g_blink.getOrdinaryDlls();
+  dlls.insert(dlls.begin(), ordinaryDlls.begin(), ordinaryDlls.end());
+  bool res = commands::runCommand(
+      [&request]() {
+        std::stringstream ss;
+        ss << std::hex << g_blink.getDllToChange()->getStartAddress();
+        writeLog("main module is loaded at " + ss.str());
+        auto result = g_blink.link(request);
+        if (!result.m_success) {
+          writeLog(result.m_err);
+        }
+        return result.m_success;
+      },
+      CommonCommandArgs{0}, dlls);
   auto message = LinkCommandReply();
-  if (!result.m_success) {
-    message.set_message(result.m_err);
-  }
+
   message.set_islogging(false);
-  message.set_success(result.m_success);
+  message.set_success(res);
   auto options = grpc::WriteOptions();
   reply->WriteLast(message, options);
   t_logger.reset();
