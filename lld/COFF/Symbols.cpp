@@ -33,6 +33,8 @@ static std::string maybeDemangleSymbol(StringRef symName) {
     StringRef prefixless = symName;
     if (prefixless.consume_front("__imp_"))
       prefix = "__declspec(dllimport) ";
+    if (prefixless.consume_front("__jmp_")) {
+    }
     StringRef demangleInput = prefixless;
     if (config->machine == I386)
       demangleInput.consume_front("_");
@@ -133,6 +135,14 @@ MemoryBufferRef LazyArchive::getMemberBuffer() {
   return CHECK(c.getMemoryBufferRef(),
       "could not get the buffer for the member defining symbol " +
       toCOFFString(sym));
+}
+DefinedLocalImport::DefinedLocalImport(StringRef n, Defined *s, bool isFunc)
+    : Defined(DefinedLocalImportKind, n) {
+  data = make<LocalImportChunk>(s);
+}
+
+FunctionJumperSymbol::FunctionJumperSymbol(StringRef n, Defined *s): Defined(FunctionJumperKind, n) {
+  data = make<ImportThunkChunkX64>(s);
 }
 } // namespace coff
 } // namespace lld

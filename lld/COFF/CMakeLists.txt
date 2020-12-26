@@ -10,6 +10,7 @@ add_lld_library(lldCOFF
   Chunks.cpp
   DebugTypes.cpp
   DLL.cpp
+  FixChecksum.cpp
   Driver.cpp
   DriverUtils.cpp
   ICF.cpp

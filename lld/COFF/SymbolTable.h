@@ -56,6 +56,8 @@ public:
   // accordingly, then print an error message for any remaining undefined
   // symbols and warn about imported local symbols.
   void resolveRemainingUndefines();
+  
+  bool importNeededObjectsForJumps();
 
   void loadMinGWAutomaticImports();
   bool handleMinGWAutomaticImport(Symbol *sym, StringRef name);
@@ -108,6 +110,9 @@ public:
 
   // A list of chunks which to be added to .rdata.
   std::vector<Chunk *> localImportChunks;
+
+  // A list of chunks which to be added to .data.
+  std::vector<Chunk *> functionJumpersChunks;
 
   // Iterates symbols in non-determinstic hash table order.
   template <typename T> void forEachSymbol(T callback) {

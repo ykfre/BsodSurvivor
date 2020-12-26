@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Writer.h"
+#include "FiXChecksum.h"
 #include "Config.h"
 #include "DLL.h"
 #include "InputFiles.h"
@@ -65,10 +66,10 @@ $ nasm -fbin /tmp/DOSProgram.asm -o /tmp/DOSProgram.bin
 $ xxd -i /tmp/DOSProgram.bin
 */
 static unsigned char dosProgram[] = {
-  0x0e, 0x1f, 0xba, 0x0e, 0x00, 0xb4, 0x09, 0xcd, 0x21, 0xb8, 0x01, 0x4c,
-  0xcd, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6f, 0x67, 0x72,
-  0x61, 0x6d, 0x20, 0x63, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65,
-  0x20, 0x72, 0x75, 0x6e, 0x20, 0x69, 0x6e, 0x20, 0x44, 0x4f, 0x53, 0x20,
+    0x0e, 0x1f, 0xba, 0x0e, 0x00, 0xb4, 0x09, 0xcd, 0x21, 0xb8, 0x01, 0x4c,
+    0xcd, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6f, 0x67, 0x72,
+    0x61, 0x6d, 0x20, 0x63, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65,
+    0x20, 0x72, 0x75, 0x6e, 0x20, 0x69, 0x6e, 0x20, 0x44, 0x4f, 0x53, 0x20,
   0x6d, 0x6f, 0x64, 0x65, 0x2e, 0x24, 0x00, 0x00
 };
 static_assert(sizeof(dosProgram) % 8 == 0,
@@ -102,7 +103,7 @@ public:
   void writeTo(uint8_t *b) const override {
     auto *d = reinterpret_cast<debug_directory *>(b);
 
-    for (const std::pair<COFF::DebugType, Chunk *>& record : records) {
+    for (const std::pair<COFF::DebugType, Chunk *> &record : records) {
       Chunk *c = record.second;
       OutputSection *os = c->getOutputSection();
       uint64_t offs = os->getFileOff() + (c->getRVA() - os->getRVA());
@@ -614,7 +615,7 @@ void Writer::run() {
 
   if (fileSize > UINT32_MAX)
     fatal("image size (" + Twine(fileSize) + ") " +
-        "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
+          "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
 
   openFile(config->outputFile);
   if (config->is64()) {
@@ -642,6 +643,9 @@ void Writer::run() {
   ScopedTimer t2(diskCommitTimer);
   if (auto e = buffer->commit())
     fatal("failed to write the output file: " + toString(std::move(e)));
+  if(!fixChecksum(config->outputFile)) {
+    fatal("failed to fix the checksum of the output file: ");
+  }
 }
 
 static StringRef getOutputSectionName(StringRef name) {
@@ -925,10 +929,15 @@ void Writer::createMiscChunks() {
     }
   }
 
+  // Create thunks for function jumpers symbols.
+  for (Chunk *c : symtab->functionJumpersChunks) {
+    textSec->addChunk(c);
+  }
+
   // Create thunks for locally-dllimported symbols.
   if (!symtab->localImportChunks.empty()) {
     for (Chunk *c : symtab->localImportChunks)
-      rdataSec->addChunk(c);
+      dataSec->addChunk(c);
   }
 
   // Create Debug Information Chunks
@@ -1559,7 +1568,10 @@ static void maybeAddAddressTakenFunction(SymbolRVASet &addressTakenSyms,
     // Thunks are always code, include them.
     addSymbolToRVASet(addressTakenSyms, cast<Defined>(s));
     break;
-
+  case Symbol::FunctionJumperKind:
+    // Thunks are always code, include them.
+    addSymbolToRVASet(addressTakenSyms, cast<Defined>(s));
+    break;
   case Symbol::DefinedRegularKind: {
     // This is a regular, defined, symbol from a COFF file. Mark the symbol as
     // address taken if the symbol type is function and it's in an executable
