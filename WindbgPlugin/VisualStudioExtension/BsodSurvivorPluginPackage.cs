@@ -153,7 +153,7 @@ namespace VSPackage.BsodSurvivorPlugin
                     {
                         Link(configuredFilesList[0].Files[0]);
                     }
-                    else if(configuredFilesList.Count > 0 && configuredFilesList[0].Files.Count >0)
+                    else if (configuredFilesList.Count > 0 && configuredFilesList[0].Files.Count > 0)
                     {
                         AddTextToOutputWindow("Not linking, selected files count is greater than one");
                     }
@@ -187,7 +187,11 @@ namespace VSPackage.BsodSurvivorPlugin
                     return;
                 }
                 filePath = document.FullName;
-
+                if (!(filePath.ToLower().EndsWith(".cpp") ||
+                    filePath.ToLower().EndsWith(".c")))
+                {
+                    return;
+                }
                 if (!System.IO.File.Exists(filePath))
                 {
                     return;

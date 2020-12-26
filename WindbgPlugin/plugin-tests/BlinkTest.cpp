@@ -11,7 +11,6 @@
 const std::string FIRST_CPP_2 =
     R"(
 #include <Windows.h>
-#include <string>
 namespace blink{
 extern int g;
 
@@ -23,8 +22,6 @@ extern void n();
 int m()
 {
   n();
-  auto c = std::string("ms");
-  auto d = c.empty();
 	const char* b = "8786";
 	int a = strlen(b);
 	return a + g + 1 + second_obj_func()+externalFunc()+ g_unconstGlobal +g_constGlboal;
@@ -99,6 +96,7 @@ public:
     std::string cppFilePath = g_blink.getUniqueTempFilePath("a.cpp");
     request.set_filepath(cppFilePath);
     request.set_masmpath(R"(ml64.exe)");
+    request.set_compilationflags("/std:c++17");
     request.set_linkerflags("");
     return request;
   }

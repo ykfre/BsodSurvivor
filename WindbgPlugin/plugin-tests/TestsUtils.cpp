@@ -40,9 +40,11 @@ void TestUtils::SetUp() {
   g_config.breakFunctionName = "FunctionToBreak";
   g_config.callDestructorsFunctionName = "CallDestructors";
   g_config.executableModuleName = "ExecutableTest.dll";
+  g_config.shouldHaveAllocateSpaceInStackFunction = false;
   g_config.allocateSpaceInStackFunctionName = "allocateSpaceInStack";
   g_config.modulesNames = {"ntdll.dll", "kernel32.dll", "kernelbase.dll",
                            "ucrtbase.dll", "externalDll.dll"};
+  g_config.logCategories = {"default", "expr"};
   std::string executablePath;
   executablePath.resize(MAX_PATH);
   auto executablePathSize = GetModuleFileNameA(

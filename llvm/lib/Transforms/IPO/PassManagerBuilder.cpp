@@ -483,6 +483,9 @@ bool replaceFunctionsWithImp(Module &M) {
     if (symbolName.startswith("__jmp_")) {
       continue;
     }
+    if (f.hasFnAttribute(llvm::Attribute::AlwaysInline)) {
+      continue;
+    }
     if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage ||
         f.getLinkage() == GlobalValue::PrivateLinkage) {
       continue;
@@ -517,25 +520,32 @@ public:
                                    llvm::Type::getVoidTy(M.getContext()))
                  .getCallee();
     auto func = dyn_cast<llvm::Function>(f);
-    func->setAttributes(llvm::AttributeList{});
+    auto attributes = llvm::AttributeList{};
+    func->setAttributes(attributes);
+    func->addFnAttr(llvm::Attribute::NoUnwind);
     for (auto &FF : M) {
-        if (FF.getName().find("myCallBeforeSetLoad") != -1)
+      if (FF.getName() == newFunctionName)
         {
         continue;
       }
       for (auto &B : FF) {
+        // Exceptions handling block seems to cause weird states.
+        if (B.isEHPad()) {
+          continue;
+        }
         for (llvm::BasicBlock::iterator J = B.begin(), JE = B.end(); J != JE;
              ++J) {
           if (isa<llvm::LoadInst>(J) ||
-              isa<llvm::StoreInst>(J) ||isa<llvm::CallInst>(J)||
-              isa<llvm::InvokeInst>(J)) {
+              isa<llvm::StoreInst>(J) || isa<InvokeInst>(J) || isa<CallInst>(J)) {
             if (isa<llvm::DbgInfoIntrinsic>(J)) {
               continue;
             }
+
             if (auto call = llvm::dyn_cast<llvm::CallInst>(J)) {
               if (call->getCalledFunction()) {
+                  auto funcName = call->getCalledFunction()->getName().str();
                 if (call->getCalledFunction()->getName().str() ==
-                    newFunctionName) {
+                        newFunctionName ) {
                   continue;
                 }
               }
@@ -543,13 +553,30 @@ public:
 
             if (auto call = llvm::dyn_cast<llvm::InvokeInst>(J)) {
               if (call->getCalledFunction()) {
-                if (call->getCalledFunction()->getName().str() ==
-                    newFunctionName) {
+                auto funcName = call->getCalledFunction()->getName().str();
+                if (funcName == newFunctionName) {
                   continue;
                 }
               }
             }
             isChanged = true;
+            if (!isa<InvokeInst>(J)) {
+              Instruction *newInst2 = CallInst::Create(func, "");
+              B.getInstList().insertAfter(J, newInst2);
+            }
+            auto temp = J;
+            if (temp != B.begin()) {
+              auto prev = temp--;
+              if (auto call = llvm::dyn_cast<llvm::CallInst>(temp)) {
+                if (call->getCalledFunction()) {
+                  auto funcName = call->getCalledFunction()->getName().str();
+                  if (call->getCalledFunction()->getName().str() ==
+                      newFunctionName) {
+                    continue;
+                  }
+                }
+              }
+            }
             Instruction *newInst = CallInst::Create(func, "");
             B.getInstList().insert(J, newInst);
           }

@@ -15,7 +15,9 @@ std::string JSON_DATA =
     "\"allocateSpaceInStackFunctionName\" : "
     "\"allocateSpaceInStackFunctionName\","
     "\"modulesNames\" : [ \"a\", \"b\" ],"
-    " \"serverPort\" : 5"
+        "\"logCategories\" : [ \"a\", \"b\" ],"
+    " \"serverPort\" : 5,"
+    " \"shouldHaveAllocateSpaceInStackFunction\" : true"
     "}";
 
 std::string BAD_JSON_DATA = "{"
@@ -33,7 +35,6 @@ TEST_F(ConfigurationTests, sanity) {
             "allocateSpaceInStackFunctionName");
 
   ASSERT_EQ(config.serverPort, 5);
-  ASSERT_EQ(config.shouldFreeMemoryOnUnloadingModule, true);
   auto expectedModulesNames = std::vector<std::string>{"a", "b"};
   ASSERT_EQ(config.modulesNames, expectedModulesNames);
 }

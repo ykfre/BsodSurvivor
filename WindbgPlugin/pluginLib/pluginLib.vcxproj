@@ -211,6 +211,7 @@
     <ClCompile Include="Config.cpp" />
     <ClCompile Include="eh_data.cpp" />
     <ClCompile Include="Commands.cpp" />
+    <ClCompile Include="Event.cpp" />
     <ClCompile Include="FunctionRunManager.cpp" />
     <ClCompile Include="LLdbUtils.cpp" />
     <ClCompile Include="Logger.cpp" />

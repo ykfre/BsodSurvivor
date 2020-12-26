@@ -266,21 +266,21 @@ bool EXT_CLASS::isKernelDebugger() {
 }
 #include <iostream>
 EXT_COMMAND(expr, "EvaluateExpression",
-            "{;s;expressionFilePath;the file path of the expression}") {
+            "{custom}{;x;expressionFilePath;the file path of the expression}") {
   auto scriptFilePathPointer = GetUnnamedArgStr(0);
   std::string scriptFilePath = scriptFilePathPointer;
   std::cout << scriptFilePath;
   executeCommand([this, scriptFilePath](CommonCommandArgs &args) {
+    std::string expressionValue = scriptFilePath;
     auto expression = readFile(scriptFilePath);
-    if (!expression) {
-      log("failed to read script file: " + scriptFilePath);
-      return false;
+    if (expression) {
+      expressionValue =
+          std::string(expression.value().begin(), expression.value().end());
     }
     auto thread = g_platform->getCurrentThread();
     auto currentFrame = thread->getRegisterValue("$frame", 0).to_ullong();
     auto res = commands::executeExpression(
-        args,
-        std::string{expression.value().begin(), expression.value().end()});
+        args, std::string{expressionValue.begin(), expressionValue.end()});
     abortIfFalse(
         SUCCEEDED(g_ExtInstance.t_control->Execute(
             DEBUG_OUTCTL_THIS_CLIENT,

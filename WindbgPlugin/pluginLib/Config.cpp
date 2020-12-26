@@ -134,6 +134,14 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
              callDestructorsFunctionName)) {
     return false;
   }
+
+  if (!parse("shouldHaveAllocateSpaceInStackFunction", root,
+             shouldHaveAllocateSpaceInStackFunction)) {
+    return false;
+  }
+  if (!parse("logCategories", root, logCategories)) {
+    return false;
+  }
   return true;
 }
 

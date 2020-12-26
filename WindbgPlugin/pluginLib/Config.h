@@ -12,7 +12,9 @@ struct Config
   std::string breakFunctionName;
   std::string callDestructorsFunctionName;
   std::string allocateSpaceInStackFunctionName;
+  bool shouldHaveAllocateSpaceInStackFunction;
   std::vector<std::string> modulesNames;
+  std::vector<std::string> logCategories;
   size_t serverPort = 0;
 };
 

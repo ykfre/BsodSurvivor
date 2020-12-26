@@ -7,9 +7,10 @@ API bool g_shouldPauseExecute = 1;
 API bool g_notifyBp;
 API std::string g_expr;
 
-extern "C" __declspec(dllexport)void print(const char* m) {
+extern "C" __declspec(dllexport) void print(const char *m) {
   std::cout << "expression failed:" << std::endl;
-	std::cout << m << std::endl; }
+  std::cout << m << std::endl;
+}
 
 extern "C" API void FunctionToBreak() {
   g_notifyFunctionEnded();
@@ -24,31 +25,30 @@ struct StructToPass {
 };
 
 extern "C" API void CallDestructors(StructToPass *structToPass) {
-  for (size_t i = 0; i< structToPass->numOfDestructors; i++) {
-    ((void (*)(size_t, size_t))((&structToPass->destructors)[i]))(0, structToPass->rsp);
+  for (size_t i = 0; i < structToPass->numOfDestructors; i++) {
+    ((void (*)(size_t, size_t))((&structToPass->destructors)[i]))(
+        0, structToPass->rsp);
   }
 }
 
-
-
 __declspec(dllexport) extern "C" void my_4283271732885569984(
     const void *address) {
-  //delete[] address;
+  // delete[] address;
 }
 
 __declspec(dllexport) extern "C" void my_13277635176987272308(void *address,
                                                               size_t sz) {
-  //delete[] address;
+  // delete[] address;
 }
 
 //__acrt_iob_func
-__declspec(dllexport) extern "C" void* my_2440136842857855463() {
+__declspec(dllexport) extern "C" void *my_2440136842857855463() {
   return nullptr;
 }
 
 __declspec(dllexport) extern "C" void my_10679423878247868446(
     const void *address) {
-  //delete address;
+  // delete address;
 }
 
 // new[]
