@@ -21,32 +21,32 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{d8dd884b-254a-4003-8f54-994ce605b70e}</ProjectGuid>
-    <RootNamespace>plugintests</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectGuid>{d56206ff-89ff-46a5-9b1f-9b74ae4bb90f}</ProjectGuid>
+    <RootNamespace>WindbgPlugin</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -72,31 +72,41 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <TargetName>lldb</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <TargetName>lldb</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClangClExecutable>$(SolutionDir)..\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
-    <ClangClAdditionalOptions>-gdwarf</ClangClAdditionalOptions>
+    <UseLldLink>false</UseLldLink>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClangClExecutable>$(SolutionDir)..\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
-    <ClangClAdditionalOptions>-gdwarf</ClangClAdditionalOptions>
+    <UseLldLink>false</UseLldLink>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClangClExecutable>$(SolutionDir)..\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
-    <ClangClAdditionalOptions>-gdwarf</ClangClAdditionalOptions>
+    <UseLldLink>false</UseLldLink>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClangClExecutable>$(SolutionDir)..\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
-    <ClangClAdditionalOptions>-gdwarf</ClangClAdditionalOptions>
+    <UseLldLink>false</UseLldLink>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgManifestInstall>false</VcpkgManifestInstall>
+    <VcpkgEnabled>true</VcpkgEnabled>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -104,12 +114,14 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\pluginLib;$(ProjectDir)..\temp\tools\lldb\include;$(ProjectDir)..\temp\include;$(ProjectDir)..\lldb\include;$(ProjectDir)..\llvm\include;$(ProjectDir)..\lldb\source;$(ProjectDir)..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\clang\include;$(ProjectDir)..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>engextcpp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>lldb.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -120,7 +132,7 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)\..\pluginLib;$(ProjectDir)..\temp\tools\lldb\include;$(ProjectDir)..\temp\include;$(ProjectDir)..\lldb\include;$(ProjectDir)..\llvm\include;$(ProjectDir)..\lldb\source;$(ProjectDir)..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\clang\include;$(ProjectDir)..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -128,6 +140,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>engextcpp.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>lldb.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -136,15 +150,15 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\pluginLib;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>Version.lib;Rpcrt4.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>lldb.def</ModuleDefinitionFile>
       <StackReserveSize>5242880</StackReserveSize>
-      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -155,44 +169,42 @@
       <SDLCheck>false</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\..\llvm\utils\unittest\googletest\include;$(ProjectDir)..\pluginlib;$(ProjectDir)..\ExecutableTest;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir).\..\temp\tools\clang\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\CreateFileHookDll;$(ProjectDir)..\pluginLib;$(ProjectDir)..\..\temp\tools\lldb\include;$(ProjectDir)..\..\temp\include;$(ProjectDir)..\..\lldb\include;$(ProjectDir)..\..\llvm\include;$(ProjectDir)..\..\lldb\source;$(ProjectDir)..\..\llvm\lib\ExecutionEngine\MCJIT;$(ProjectDir)..\..\clang\include;$(ProjectDir)..\..\temp\tools\clang\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <Optimization>Disabled</Optimization>
-      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <StackReserveSize>5242880</StackReserveSize>
-      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>lldb.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="BlinkTest.cpp" />
-    <ClCompile Include="ConfigurationTests.cpp" />
-    <ClCompile Include="ExpressionTests.cpp" />
-    <ClCompile Include="FunctionRunManagerTests.cpp" />
-    <ClCompile Include="Main.cpp" />
-    <ClCompile Include="ReturnFromFrameTests.cpp" />
-    <ClCompile Include="TestsUtils.cpp" />
-    <ClCompile Include="UserModePlatform.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\temp\utils\unittest\gtest.vcxproj">
-      <Project>{d9092a68-3fb0-3871-a0d7-9f03a327c766}</Project>
-    </ProjectReference>
     <ProjectReference Include="..\pluginLib\pluginLib.vcxproj">
       <Project>{76c6be45-6cd7-445d-8f29-4e89b230d7db}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\ExecutableTest\ExecutableTest.vcxproj">
-      <Project>{ff0805bb-7317-4d80-a233-c37f7c78e77f}</Project>
+    <ProjectReference Include="..\winext\winext\winext.vcxproj">
+      <Project>{f1c5ea41-cb30-4464-b215-26455d610b74}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="UserModePlatform.h" />
-    <ClInclude Include="TestsUtils.h" />
+    <ClInclude Include="DebugEvents.h" />
+    <ClInclude Include="ExtClass.h" />
+    <ClInclude Include="StringOutputCallbacks.h" />
+    <ClInclude Include="WindbgLogger.h" />
+    <ClInclude Include="WindbgPlatform.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DebugEvents.cpp" />
+    <ClCompile Include="ExtClass.cpp" />
+    <ClCompile Include="StringOutputCallbacks.cpp" />
+    <ClCompile Include="WindbgLogger.cpp" />
+    <ClCompile Include="WindbgPlatform.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="lldb.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

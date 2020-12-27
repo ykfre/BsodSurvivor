@@ -670,7 +670,9 @@ void WinCOFFObjectWriter::writeSection(MCAssembler &Asm,
 ////////////////////////////////////////////////////////////////////////////////
 // MCObjectWriter interface implementations
 
-extern std::vector<char> read_serialize();
+extern "C" std::vector<char> read_serialize();
+extern "C" std::vector<char> read_serialize_default() { return std::vector<char>(); }
+#pragma comment(linker, "/alternatename:read_serialize=read_serialize_default") 
 
 void WinCOFFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
                                                    const MCAsmLayout &Layout) {

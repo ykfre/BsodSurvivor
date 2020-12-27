@@ -78,11 +78,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>C:\Users\idowe\Desktop\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe\amd64</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>C:\Users\idowe\Desktop\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe\amd64</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -150,10 +148,10 @@
   <ItemGroup>
     <CustomBuild Include="CreateFileHook.proto">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --plugin=protoc-gen-grpc="C:\code\vcpkg\installed\x64-windows\tools\grpc\grpc_cpp_plugin.exe" --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)
-C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --cpp_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --plugin=protoc-gen-grpc="C:\code\vcpkg\installed\x64-windows\tools\grpc\grpc_cpp_plugin.exe" --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)
-C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --cpp_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">protoc.exe --plugin=protoc-gen-grpc=grpc_cpp_plugin.exe --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)
+protoc.exe --cpp_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">protoc.exe --plugin=protoc-gen-grpc=grpc_cpp_plugin.exe --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)
+protoc.exe --cpp_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)\CreateFileHook.pb.h</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)\CreateFileHook.pb.h</Outputs>
     </CustomBuild>

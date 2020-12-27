@@ -386,7 +386,7 @@ void serialize(CompilerInvocation &CI,
 
 }
 
-std::vector<char> read_serialize() {
+extern "C" std::vector<char> read_serialize() {
   return g_serailizeCompilerInvocation;
 }
 

@@ -620,13 +620,13 @@ namespace VSPackage.BsodSurvivorPlugin
                     {
                         var reply = client.Compile(new LinkCommandRequest
                         {
-                            ClangFilePath = @"C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe",
-                            LdPath = @"C:\code\llvm-project\temp\Release\bin\lld-link.exe",
-                            MasmPath = @"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\Hostx64\x64\ml64.exe",
+                            ClangFilePath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\bin\clang-cl.exe"),
+                            LdPath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\bin\lld-link.exe"),
+                            MasmPath = @"ml64.exe",
                             CompilationFlags = compilationFlags,
                             FilePath = sourceFile.FilePath,
                             LinkerFlags = "",
-                            ObjCopyPath = @"C:\Program Files\LLVM\bin\llvm-objcopy.exe"
+                            ObjCopyPath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\llvm-objcopy.exe")
 
                         });
                         while (await reply.ResponseStream.MoveNext())

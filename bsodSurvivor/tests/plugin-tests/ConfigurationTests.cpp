@@ -10,10 +10,6 @@ std::string JSON_DATA =
     "{"
     "\"executablePath\" : \"a.exe\","
     " \"executableModuleName\" : \"module\","
-    " \"callDestructorsFunctionName\" : \"callDestructorsFunctionName\","
-    " \"breakFunctionName\" : \"breakFunctionName\","
-    "\"allocateSpaceInStackFunctionName\" : "
-    "\"allocateSpaceInStackFunctionName\","
     "\"modulesNames\" : [ \"a\", \"b\" ],"
         "\"logCategories\" : [ \"a\", \"b\" ],"
     " \"serverPort\" : 5,"
@@ -29,10 +25,7 @@ TEST_F(ConfigurationTests, sanity) {
   auto res = config.loadFromString(JSON_DATA);
   ASSERT_TRUE(res);
   ASSERT_EQ(config.executablePath, "a.exe");
-  ASSERT_EQ(config.breakFunctionName, "breakFunctionName");
   ASSERT_EQ(config.executableModuleName, "module");
-  ASSERT_EQ(config.allocateSpaceInStackFunctionName,
-            "allocateSpaceInStackFunctionName");
 
   ASSERT_EQ(config.serverPort, 5);
   auto expectedModulesNames = std::vector<std::string>{"a", "b"};

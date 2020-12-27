@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <WindowsSdkDirInclude>C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km</WindowsSdkDirInclude>
+    <KmLibDirBase>C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\km</KmLibDirBase>
+    <KmLibDir Condition="'$(Platform)'=='x64'">$(KmLibDirBase)\x64</KmLibDir>
+    <KmLibDir Condition="'$(Platform)'=='Win32'">$(KmLibDirBase)\x86</KmLibDir>
+  </PropertyGroup>
+  <PropertyGroup>
+	<CLToolExe>$(BSOD_SURVIVOR_DIR)\bin\clang-cl.exe</CLToolExe>
+    <LinkToolExe>$(BSOD_SURVIVOR_DIR)\bin\lld-link.exe</LinkToolExe>
+    <LibraryPath>$(KmLibDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
+    <IncludePath></IncludePath>
+   </PropertyGroup>
+  
+  <ItemDefinitionGroup>
+    <ClCompile>
+	  <DebugInformationFormat Condition="'%(ClCompile.DebugInformationFormat)' == 'ProgramDatabase'">OldStyle</DebugInformationFormat>
+      <DebugInformationFormat Condition="'%(ClCompile.DebugInformationFormat)' == 'EditAndContinue'">OldStyle</DebugInformationFormat>
+      <AdditionalIncludeDirectories>$(WindowsSdkDirInclude);$(WindowsSdkDirInclude)\crt;$(WindowsSdkDirInclude)\..\shared</AdditionalIncludeDirectories>
+      <SupportJustMyCode>false</SupportJustMyCode>
+      <CallingConvention>StdCall</CallingConvention>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">_KERNEL_MODE;_WIN64;_AMD64_;AMD64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">_KERNEL_MODE;_X86_=1;i386=1;STD_CALL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <ExceptionHandling>Async</ExceptionHandling>
+	  <AdditionalOptions>-gdwarf -Xclang -fno-elide-constructors %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="WindowsSdkDirInclude">
+      <Value>$(WindowsSdkDirInclude)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>

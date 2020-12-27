@@ -20,7 +20,6 @@ public:
 };
 
 #define THROW() throw std::exception();
-bool g = 0;
 API void sanity(bool shouldCallDestructor) {
   auto a = []() {
     M m;
@@ -84,8 +83,7 @@ API void tempObjectsTest() {
 API void forLoopTest() {
   []() {
     M m{1};
-    for (int i = 0; i < m.returnSelfPtr()->a; i++)
-    {
+    for (int i = 0; i < m.returnSelfPtr()->a; i++) {
       BP();
     }
   }();
@@ -100,7 +98,6 @@ API void forLoopTest2() {
       a++;
     }
     BP();
-
   }();
   failTestIfFalse(g_counter == 7);
 }
@@ -109,7 +106,7 @@ API void forLoopTest3() {
   []() {
     M m{1};
     for (int i = 0; i < m.returnSelfPtr()->a; i++) {
-      M s { 3 };
+      M s{3};
       int a = 4;
       a += 1;
     }
@@ -162,7 +159,6 @@ API void scopeInScope4() {
       M r{4};
       BP();
       M j{3};
-
     }
   }();
   failTestIfFalse(g_counter == 5);
@@ -174,7 +170,6 @@ API void bpAfterFirstDestructor() {
     m.a = m.a;
     BP();
     M r{4};
-
   }();
   failTestIfFalse(g_counter == 1);
 }
@@ -249,14 +244,13 @@ API void returnFromFunctionTest() {
   auto f = []() {
     M m{4};
     m.a = 2;
-    if (g)
     BP();
     return m;
   }();
   failTestIfFalse(g_counter == 2);
 }
 
-  API void leafFunctionTest(bool shouldCallDestructor) {
+API void leafFunctionTest(bool shouldCallDestructor) {
   int a = 8;
   []() {
     M m;

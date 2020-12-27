@@ -1,0 +1,12 @@
+{
+  "executablePath": "C:\temp\te\llvm-project\temp\x64\Debug\clangDriverExample.sys",
+  "executableModuleName": "clangDriverExample",
+  "modulesNames": [
+    "hal",
+	"nt",
+	"fltmgr"
+  ],
+  "logCategories":["default"],
+  "serverPort":30051,
+  "shouldHaveAllocateSpaceInStackFunction":true,
+  }

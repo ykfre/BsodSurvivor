@@ -97,13 +97,15 @@
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
-    <LldLinkExecutable>C:\code\llvm-project\temp\Release\bin\lld-link.exe</LldLinkExecutable>
-    <ClangClExecutable>C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
+    <LldLinkExecutable>$(ProjectDir)\..\..\..\temp\Release\bin\lld-link.exe</LldLinkExecutable>
+    <ClangClExecutable>$(ProjectDir)\..\..\..\temp\Release\bin\clang-cl.exe</ClangClExecutable>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClangClExecutable>C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe</ClangClExecutable>
+    <ClangClExecutable>$(ProjectDir)\..\..\..\temp\Release\bin\clang-cl.exe</ClangClExecutable>
     <ClangClAdditionalOptions>-gdwarf -Xclang -fno-elide-constructors</ClangClAdditionalOptions>
-    <LldLinkExecutable>C:\code\llvm-project\temp\Release\bin\lld-link.exe</LldLinkExecutable>
+    <LldLinkExecutable>$(ProjectDir)\..\..\..\temp\Release\bin\lld-link.exe</LldLinkExecutable>
+    <UseClangCl>true</UseClangCl>
+    <UseLldLink>true</UseLldLink>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

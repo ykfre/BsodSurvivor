@@ -115,25 +115,17 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
   if (!parse("executableModuleName", root, executableModuleName)) {
     return false;
   }
-  if (!parse("breakFunctionName", root, breakFunctionName)) {
-    return false;
-  }
-
   if (!parse("serverPort", root, serverPort)) {
     return false;
   }
 
-  if (!parse("allocateSpaceInStackFunctionName", root,
-             allocateSpaceInStackFunctionName)) {
-    return false;
-  }
   if (!parse("modulesNames", root, modulesNames)) {
     return false;
   }
-  if (!parse("callDestructorsFunctionName", root,
-             callDestructorsFunctionName)) {
-    return false;
-  }
+  g_config.callDestructorsFunctionName = "CallDestructors";
+  g_config.breakFunctionName = "FunctionToBreak";
+  g_config.allocateSpaceInStackFunctionName =
+      "allocateSpaceInStackFunctionName";
 
   if (!parse("shouldHaveAllocateSpaceInStackFunction", root,
              shouldHaveAllocateSpaceInStackFunction)) {

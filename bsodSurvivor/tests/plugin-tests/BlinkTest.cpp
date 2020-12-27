@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include <iostream>
 #include <string>
+#include <filesystem>
 const std::string FIRST_CPP_2 =
     R"(
 #include <Windows.h>
@@ -89,10 +90,11 @@ public:
 
   LinkCommand::LinkCommandRequest getLinkCommandRequest() {
     LinkCommand::LinkCommandRequest request;
-    request.set_clangfilepath(
-        R"(C:\temp2\llvm-project\temp\RelWithDebInfo\bin\clang-cl.exe)");
-    request.set_objcopypath(R"(C:\Program Files\LLVM\bin\llvm-objcopy.exe)");
-    request.set_ldpath(R"(C:\code\llvm-project\temp\Release\bin\lld-link.exe)");
+    std::filesystem::path cwd = std::filesystem::current_path();
+    std::string clangDir = cwd.string() + "/../../../temp/Release/bin";
+    request.set_clangfilepath(clangDir + "/" + R"(clang-cl.exe)");
+    request.set_objcopypath(clangDir + "/" + R"(llvm-objcopy.exe)");
+    request.set_ldpath(clangDir + "/" + R"(lld-link.exe)");
     std::string cppFilePath = g_blink.getUniqueTempFilePath("a.cpp");
     request.set_filepath(cppFilePath);
     request.set_masmpath(R"(ml64.exe)");

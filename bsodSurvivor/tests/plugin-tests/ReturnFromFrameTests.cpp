@@ -7,7 +7,7 @@
 #include "ReturnFromFrameTests.h"
 #include "TestsUtils.h"
 #include "UserModePlatform.h"
-class ReturnFromFrameTests : public TestUtils {
+class ReturnFromFrameTests : public TestUtils { 
 public:
   void SetUp() override {
     tests::returnFromFrame ::g_frameTwoMet = false;

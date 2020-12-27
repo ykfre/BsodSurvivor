@@ -669,7 +669,7 @@ private:
 
         constexpr int _Numget_signoff = 22;
         constexpr int _Numget_xoff    = 24;
-        inline static const char _Src[]  = "0123456789ABCDEFabcdef-+Xx";
+        static const char _Src[]  = "0123456789ABCDEFabcdef-+Xx";
         _Elem _Atoms[sizeof(_Src)];
         const ctype<_Elem>& _Ctype_fac = _STD use_facet<ctype<_Elem>>(_Loc);
         _Ctype_fac.widen(_STD begin(_Src), _STD end(_Src), _Atoms);
@@ -782,7 +782,7 @@ private:
 
         constexpr int _Numget_signoff = 10;
         constexpr int _Numget_eoff    = 12;
-        inline static const char _Src[]  = "0123456789-+Ee";
+        static const char _Src[]  = "0123456789-+Ee";
         _Elem _Atoms[sizeof(_Src)];
         const ctype<_Elem>& _Ctype_fac = _STD use_facet<ctype<_Elem>>(_Iosbase.getloc());
         _Ctype_fac.widen(_STD begin(_Src), _STD end(_Src), _Atoms);
@@ -964,7 +964,7 @@ private:
         constexpr int _Numget_signoff = 22;
         constexpr int _Numget_xoff    = 24;
         constexpr int _Numget_poff    = 26;
-        inline static const char _Src[]  = "0123456789ABCDEFabcdef-+XxPp";
+        static const char _Src[]  = "0123456789ABCDEFabcdef-+XxPp";
         _Elem _Atoms[sizeof(_Src)];
         const ctype<_Elem>& _Ctype_fac = _STD use_facet<ctype<_Elem>>(_Iosbase.getloc());
         _Ctype_fac.widen(_STD begin(_Src), _STD end(_Src), _Atoms);

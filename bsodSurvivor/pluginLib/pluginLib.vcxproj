@@ -223,25 +223,22 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\temp\tools\lldb\source\Target\lldbTarget.vcxproj">
-      <Project>{94af363e-9f55-38dd-81a6-68120f2ca75e}</Project>
+      <Project>{09ddd88c-0495-38ee-af88-b382deac7e02}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\temp\tools\lldb\tools\lldb-test\lldb-test.vcxproj">
-      <Project>{83fb7447-c23f-3add-95f8-26ad9688ca9f}</Project>
+      <Project>{808d3257-50f7-39a9-85aa-c4a6448df53d}</Project>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="blink\LinkCommand.proto">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --cpp_out=$(ProjectDir)/blink -I=$(ProjectDir)/blink %(FullPath)
-C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --plugin=protoc-gen-grpc="C:\code\vcpkg\installed\x64-windows\tools\grpc\grpc_cpp_plugin.exe" --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --cpp_out=$(ProjectDir)/blink -I=$(ProjectDir)/blink %(FullPath)
-C:\code\vcpkg\packages\protobuf_x64-windows\tools\protobuf\protoc.exe --plugin=protoc-gen-grpc="C:\code\vcpkg\installed\x64-windows\tools\grpc\grpc_cpp_plugin.exe" --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">protoc.exe --cpp_out=$(ProjectDir)/blink -I=$(ProjectDir)/blink %(FullPath)
+protoc.exe --plugin=protoc-gen-grpc=grpc_cpp_plugin.exe --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">protoc.exe --cpp_out=$(ProjectDir)/blink -I=$(ProjectDir)/blink %(FullPath)
+protoc.exe --plugin=protoc-gen-grpc=grpc_cpp_plugin.exe --grpc_out=$(ProjectDir) -I=$(ProjectDir) %(FullPath)</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)\blink\LinkCommand.pb.h</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)\blink\LinkCommand.pb.h</Outputs>
     </CustomBuild>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\CreateFileHookDll\CreateFileHook.proto" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

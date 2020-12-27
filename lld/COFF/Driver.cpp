@@ -1952,7 +1952,12 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   // If we generated native object files from bitcode files, this resolves
   // references to the symbols we use from them.
   run();
-
+  while (true) {
+    symtab->importNeededObjectsForJumps();
+    if (!run()) {
+      break;
+    }
+  }
   // Resolve remaining undefined symbols and warn about imported locals.
   symtab->resolveRemainingUndefines();
   if (errorCount())
