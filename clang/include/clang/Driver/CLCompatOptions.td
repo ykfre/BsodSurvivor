@@ -74,6 +74,10 @@ def _SLASH_diagnostics_classic : CLFlag<"diagnostics:classic">,
 def _SLASH_D : CLJoinedOrSeparate<"D">, HelpText<"Define macro">,
   MetaVarName<"<macro[=value]>">, Alias<D>;
 def _SLASH_E : CLFlag<"E">, HelpText<"Preprocess to stdout">, Alias<E>;
+
+def _SLASH_CBSTRING : CLFlag<"cbstring">, HelpText<"">;
+def _SLASH_D1_IMPORT_NO_REGISTRY : CLFlag<"d1import_no_registry">, HelpText<"">;
+def _SLASH_D1_NO_TIME : CLFlag<"d1nodatetime">, HelpText<"">;
 def _SLASH_fp_except : CLFlag<"fp:except">, HelpText<"">, Alias<ftrapping_math>;
 def _SLASH_fp_except_ : CLFlag<"fp:except-">,
   HelpText<"">, Alias<fno_trapping_math>;

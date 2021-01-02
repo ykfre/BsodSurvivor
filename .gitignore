@@ -90,3 +90,8 @@ autoconf/autom4te.cache
 /**/*.CopyComplete
 /**/obj/**
 /**/bin/**
+/installer/BsodSurvivor-cache/**
+/**/**.sys
+/bsodSurvivor/clangDriverExample/x64/**
+/**/*log.txt
+/**/*.msi

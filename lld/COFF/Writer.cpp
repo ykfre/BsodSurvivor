@@ -282,6 +282,7 @@ private:
   OutputSection *didatSec;
   OutputSection *rsrcSec;
   OutputSection *relocSec;
+
   OutputSection *ctorsSec;
   OutputSection *dtorsSec;
 
@@ -881,7 +882,6 @@ void Writer::createSections() {
     PartialSection *pSec = it.second;
     StringRef name = getOutputSectionName(pSec->name);
     uint32_t outChars = pSec->characteristics;
-
     if (name == ".CRT") {
       // In link.exe, there is a special case for the I386 target where .CRT
       // sections are treated as if they have output characteristics DATA | R if
@@ -1782,12 +1782,36 @@ void Writer::insertCtorDtorSymbols() {
 // Handles /section options to allow users to overwrite
 // section attributes.
 void Writer::setSectionPermissions() {
+
+  
   for (auto &p : config->section) {
     StringRef name = p.first;
     uint32_t perm = p.second;
+    for (OutputSection *sec : outputSections) {
+      auto oldPermissions = sec->header.Characteristics;
+      if (!sec->name.startswith(".PAGE") &&
+          oldPermissions & IMAGE_SCN_MEM_READ && 
+          !(oldPermissions & IMAGE_SCN_MEM_DISCARDABLE)) {
+        sec->setPermissions(oldPermissions | IMAGE_SCN_MEM_NOT_PAGED);
+      }
+      if (oldPermissions == 0) {
+        sec->setPermissions(IMAGE_SCN_CNT_UNINITIALIZED_DATA |
+                            IMAGE_SCN_MEM_READ);
+      }
+    }
     for (OutputSection *sec : outputSections)
-      if (sec->name == name)
-        sec->setPermissions(perm);
+      if (sec->name == name) {
+        auto newPermissions = perm;
+        auto oldPerm = sec->header.Characteristics;
+        if (!((perm & IMAGE_SCN_MEM_EXECUTE) || (perm & IMAGE_SCN_MEM_WRITE) ||
+              (perm & IMAGE_SCN_MEM_READ))) {
+          newPermissions |=
+              ((oldPerm & IMAGE_SCN_MEM_EXECUTE) |
+               (oldPerm & IMAGE_SCN_MEM_WRITE) | 
+              (oldPerm & IMAGE_SCN_MEM_READ));
+        }
+        sec->setPermissions(newPermissions);
+      }
   }
 }
 

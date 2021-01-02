@@ -5,7 +5,7 @@
 
 #include "Crt.h"
 #include "ExpressionTests.h"
-
+#include "set"
 std::unique_ptr<ClassWithDestructor> retFunc() {
   return std::unique_ptr<ClassWithDestructor>();
 }
@@ -75,7 +75,7 @@ std::shared_ptr<int> returnShared() { return std::make_shared<int>(44); }
 API void sharedMemoryTest() {
 
   returnShared();
-  
+
   std::string expr2 =
       "std::shared_ptr<ClassWithDestructor>ms(new ClassWithDestructor(2));"
       "FAIL_TEST_IF_FALSE(2==ms->m_r);"
@@ -87,12 +87,11 @@ API void sharedMemoryTest() {
   "ms = returnShared();";
   RUN_EXPR(expr2);
   failTestIfFalse(g_counter != 0);
-  
 
   printf("%d", 5);
   std::shared_ptr<int> a;
   {
-      auto fs = a;
+    auto fs = a;
     bool b = fs == fs;
   }
   std::string expr = ""
@@ -114,6 +113,10 @@ API void sharedMemoryTest() {
 }
 
 API void uniquePtrTest() {
+  std::string expr3 =
+      "	std::unique_ptr<ClassWithDestructor[]> p(new ClassWithDestructor[2]);"
+      "p == p;";
+  RUN_EXPR(expr3);
   std::unique_ptr<int> a;
   const std::unique_ptr<int> d;
   std::string expr = ""
@@ -166,7 +169,6 @@ API void windowsApiTest() {
   failTestIfFalse(p.hThread == GetCurrentThread());
 }
 
-
 struct MyStruct {
   int a;
 };
@@ -174,12 +176,11 @@ struct MyStruct {
 API void mixStlWithDwarfData() {
   MyStruct str;
   str.a = str.a;
-  std::string expr2 =
-      "test::expression::MyStruct s;"
-      ""
-      "auto f = std::make_shared<test::expression::MyStruct>();"
-      "f = f;"
-      "";
+  std::string expr2 = "test::expression::MyStruct s;"
+                      ""
+                      "auto f = std::make_shared<test::expression::MyStruct>();"
+                      "f = f;"
+                      "";
   RUN_EXPR(expr2);
 }
 
@@ -196,4 +197,3 @@ API void allStl() {
 
 } // namespace expression
 } // namespace test
-

@@ -22,6 +22,7 @@ public:
                  const std::string &outputFilePath);
   std::vector<std::shared_ptr<LoadedDll>> getDynamicDlls() const;
   void resetDllToChange();
+  void resetSavedFiles();
   std::string getUniqueTempFilePath(const std::string &filePath,
                                     const std::string &prefix = "");
   std::shared_ptr<LoadedDll> getDllToChange() const;

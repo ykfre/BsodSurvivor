@@ -76,9 +76,9 @@ TEST_F(StlExpressionTests, uniquePtrTest) {
   std::thread t(test::expression::uniquePtrTest);
   executeExpression(t);
   executeExpression(t);
+  executeExpression(t);
   t.join();
 }
-
 
 TEST_F(StlExpressionTests, sharedMemoryTest) {
   std::thread t(test::expression::sharedMemoryTest);

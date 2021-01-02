@@ -90,7 +90,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
-    <TargetName>lldb</TargetName>
+    <TargetName>BsodSurvivor</TargetName>
   </PropertyGroup>
   <PropertyGroup Label="LLVM" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <UseLldLink>false</UseLldLink>

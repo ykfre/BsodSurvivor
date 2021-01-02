@@ -203,7 +203,12 @@ std::vector<char> LoadedDll::readDataImp(bool asVirtual) const {
         (DWORD)imageNTHeadersPointer->FileHeader.SizeOfOptionalHeader;
     sectionLocation += (DWORD)sizeof(IMAGE_SECTION_HEADER) * i;
     auto sectionHeader = (PIMAGE_SECTION_HEADER)sectionLocation;
-    if (sectionHeader->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) {
+    auto commandSectionName = ".command";
+    bool isDebugSection =
+        sectionHeader->Name[0] == '/' ||
+        0 == memcmp(commandSectionName, sectionHeader->Name,
+                    strlen(commandSectionName));
+    if (isDebugSection) {
       continue;
     }
     if (asVirtual) {

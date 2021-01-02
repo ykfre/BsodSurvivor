@@ -12,6 +12,7 @@
 const std::string FIRST_CPP_2 =
     R"(
 #include <Windows.h>
+
 namespace blink{
 extern int g;
 

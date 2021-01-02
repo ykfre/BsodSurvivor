@@ -12,6 +12,7 @@ inline int inlineFunc() { return 5; }
 
 class ClassWithDestructor {
 public:
+  ClassWithDestructor() {}
   ClassWithDestructor(int r);
   ClassWithDestructor(const ClassWithDestructor &other);
   ClassWithDestructor &operator=(const ClassWithDestructor &other);

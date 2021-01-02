@@ -1953,11 +1953,29 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   // references to the symbols we use from them.
   run();
   while (true) {
+    for (auto pair : config->alternateNames) {
+      StringRef from = pair.first;
+      StringRef to = pair.second;
+      Symbol *sym = symtab->find(from);
+      if (!sym)
+        continue;
+      if (auto *u = dyn_cast<Undefined>(sym))
+        if (!u->weakAlias)
+          u->weakAlias = symtab->addUndefined(to);
+    }
     symtab->importNeededObjectsForJumps();
     if (!run()) {
       break;
     }
   }
+  for (Export &e : config->exports) {
+    if (!e.forwardTo.empty())
+      continue;
+    e.sym = addUndefined(e.name);
+    if (!e.directives)
+      e.symbolName = mangleMaybe(e.sym);
+  }
+
   // Resolve remaining undefined symbols and warn about imported locals.
   symtab->resolveRemainingUndefines();
   if (errorCount())

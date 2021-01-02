@@ -79,6 +79,10 @@ def pdbstream : Joined<["/", "-", "/?", "-?"], "pdbstream:">,
 def section : P<"section", "Specify section attributes">;
 def stack   : P<"stack", "Size of the stack">;
 def stub    : P<"stub", "Specify DOS stub file">;
+def release    : F<"RELEASE">, HelpText<"Sets the Checksum in the header of an .exe file">;
+def pdbcompress    : F<"pdbcompress">, HelpText<"Pdb Compress">;
+def kernel    : F<"kernel">, HelpText<"The target is kernel">;
+def osversion    : P<"osversion", "The os version">;
 def subsystem : P<"subsystem", "Specify subsystem">;
 def timestamp : P<"timestamp", "Specify the PE header timestamp">;
 def version : P<"version", "Specify a version number in the PE header">;

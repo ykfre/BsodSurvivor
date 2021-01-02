@@ -1,5 +1,5 @@
 {
-  "executablePath": "C:\temp\te\llvm-project\temp\x64\Debug\clangDriverExample.sys",
+  "executablePath": "C:\\temp\\te\\llvm-project\\bsodSurvivor\\clangDriverExample\\x64\\Debug\\clangDriverExample\\clangDriverExample.sys",
   "executableModuleName": "clangDriverExample",
   "modulesNames": [
     "hal",
@@ -8,5 +8,5 @@
   ],
   "logCategories":["default"],
   "serverPort":30051,
-  "shouldHaveAllocateSpaceInStackFunction":true,
+  "shouldHaveAllocateSpaceInStackFunction":true
   }

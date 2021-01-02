@@ -230,7 +230,7 @@ std::string EXT_CLASS::getWindbgDir() const {
   auto modulePathSize = GetModuleFileNameA(
       currentModule, (char *)modulePath.c_str(), modulePath.size());
   modulePath.resize(modulePathSize + 1);
-  return std::filesystem::path(modulePath).parent_path().string();
+  return std::filesystem::path(modulePath).parent_path().string()+"\\winext";
 }
 
 std::string EXT_CLASS::getConfigFilePath() const {
@@ -291,7 +291,7 @@ EXT_COMMAND(expr, "EvaluateExpression",
   });
 }
 
-EXT_COMMAND(reloadconfig, "reload config", "") {
+EXT_COMMAND(reload_config, "reload config", "") {
   auto configFilePath = getConfigFilePath();
   if (!g_config.load(configFilePath)) {
     return;
@@ -299,19 +299,19 @@ EXT_COMMAND(reloadconfig, "reload config", "") {
   g_blink.resetDllToChange();
 }
 
-EXT_COMMAND(returnwithout, "return from current frame without destructor", "") {
+EXT_COMMAND(return_without, "return from current frame without destructor", "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, false);
   });
 }
 
-EXT_COMMAND(returnwith, "return from current frame with destructor", "") {
+EXT_COMMAND(return_with, "return from current frame with destructor", "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, true);
   });
 }
 
-EXT_COMMAND(returntoframewithout,
+EXT_COMMAND(return_to_frame_without,
             "return to the current frame without calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
@@ -322,7 +322,7 @@ EXT_COMMAND(returntoframewithout,
   });
 }
 
-EXT_COMMAND(returntoframewith,
+EXT_COMMAND(return_to_frame_with,
             "return to the current frame with calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
@@ -332,7 +332,7 @@ EXT_COMMAND(returntoframewith,
   });
 }
 
-EXT_COMMAND(discardexpr, "Discard current expression", "") {
+EXT_COMMAND(discard_expr, "Discard current expression", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
     auto thread = g_platform->getCurrentThread();
@@ -362,9 +362,13 @@ EXT_COMMAND(jump, "jump to line",
   });
 }
 
-EXT_COMMAND(reloadblinkmodules, "reload blink modules", "") {
+EXT_COMMAND(reload_blink_modules, "make windbg reload blink modules again", "") {
   g_platform->setCurrentThread(g_threadFactory->create(0));
   for (const auto &module : g_blink.getDynamicDlls()) {
     g_ExtInstance.onLoadDynamicModule(module);
   }
+}
+
+EXT_COMMAND(reset_saved_files, "reset saved files", "") {
+  g_blink.resetSavedFiles();
 }

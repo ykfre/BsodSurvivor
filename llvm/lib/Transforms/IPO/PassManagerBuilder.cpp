@@ -493,8 +493,9 @@ bool replaceFunctionsWithImp(Module &M) {
     if (f.isDLLImportDependent()) {
       continue;
     }
-
-    if (f.getName() == "__CxxFrameHandler3") {
+    if (f.getName() == "__CxxFrameHandler3" ||
+        f.getName() == "__CxxFrameHandler4"||
+        f.getName()=="__C_specific_handler") {
       continue;
     }
 
@@ -503,6 +504,9 @@ bool replaceFunctionsWithImp(Module &M) {
         f.getFunctionType(), GlobalValue::ExternalLinkage, f.getAddressSpace(),
         ("__jmp_" + f.getName()).str(), &M);
     FDecl->setAttributes(f.getAttributes());
+    if (f.hasPersonalityFn()) {
+      FDecl->setPersonalityFn(f.getPersonalityFn());
+    }
     FDecl->setCallingConv(f.getCallingConv());
     f.replaceNonMetadataUsesWith(FDecl);
   }

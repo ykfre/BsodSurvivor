@@ -3,16 +3,13 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="BsodSurvivorDriverCommon.props" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
-  <PropertyGroup>
-    <TargetExt>.sys</TargetExt>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
-      <SubSystem>Native</SubSystem>
-      <EntryPointSymbol>DriverEntry</EntryPointSymbol>
-      <AdditionalOptions>/nodefaultlib /wholearchive:$(BSOD_SURVIVOR_DIR)\lib\bsodSurvivorDriverLib.lib %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalDependencies>$(BSOD_SURVIVOR_DIR)\lib\bsodSurvivorDriverLib.lib;ntoskrnl.lib;hal.lib;fltmgr.lib;</AdditionalDependencies>
+      <AdditionalOptions>/nodefaultlib /wholearchive:"$(BSOD_SURVIVOR_DIR)\lib\bsodSurvivorDriverLib.lib" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>"$(BSOD_SURVIVOR_DIR)\lib\bsodSurvivorDriverLib.lib";%(AdditionalDependencies)</AdditionalDependencies>
+      <TreatLinkerWarningAsErrors>false</TreatLinkerWarningAsErrors>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup />

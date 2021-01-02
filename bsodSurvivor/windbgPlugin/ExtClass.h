@@ -16,15 +16,16 @@
 class EXT_CLASS : public ExtExtension {
 public:
   void Uninitialize() override;
-  EXT_COMMAND_METHOD(returnwithout);
-  EXT_COMMAND_METHOD(returnwith);
-  EXT_COMMAND_METHOD(returntoframewithout);
-  EXT_COMMAND_METHOD(returntoframewith);
+  EXT_COMMAND_METHOD(return_without);
+  EXT_COMMAND_METHOD(return_with);
+  EXT_COMMAND_METHOD(return_to_frame_without);
+  EXT_COMMAND_METHOD(return_to_frame_with);
   EXT_COMMAND_METHOD(expr);
   EXT_COMMAND_METHOD(jump);
-  EXT_COMMAND_METHOD(reloadblinkmodules);
-  EXT_COMMAND_METHOD(discardexpr);
-  EXT_COMMAND_METHOD(reloadconfig);
+  EXT_COMMAND_METHOD(reload_blink_modules);
+  EXT_COMMAND_METHOD(discard_expr);
+  EXT_COMMAND_METHOD(reload_config);
+  EXT_COMMAND_METHOD(reset_saved_files);
 
   void log(const std::string &output);
   HRESULT initializeThreadGlobals();

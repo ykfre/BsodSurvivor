@@ -18,6 +18,10 @@ extern "C" __declspec(dllexport) void FunctionToBreak() {
   }
 }
 
+extern "C" void __AbsoluteZero() {
+
+}
+
 #ifdef _WIN64
 extern "C" unsigned long long __stdcall __readcr8() {
   unsigned long long cr_val = 0;

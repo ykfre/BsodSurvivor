@@ -155,11 +155,11 @@ namespace VSPackage.BsodSurvivorPlugin
                     }
                     else if (configuredFilesList.Count > 0 && configuredFilesList[0].Files.Count > 0)
                     {
-                        AddTextToOutputWindow("Not linking, selected files count is greater than one");
+                        AddTextToOutputWindow("Not linking, selected c++ files count is greater than one");
                     }
                     else
                     {
-                        AddTextToOutputWindow("Not linking, selected files count isn't 1");
+                        AddTextToOutputWindow("Not linking, selected c++ files count isn't 1");
                     }
                 }
                 catch (Exception exception)
@@ -347,6 +347,7 @@ namespace VSPackage.BsodSurvivorPlugin
                         // non project selected
                         if (file != null)
                         {
+                            project.Save();
                             // document selected
                             SourceFile sourceFile = await CreateSourceFileAsync(file.FullPath, configuration, project);
                             AddEntry(currentConfiguredFiles, sourceFile);
@@ -463,11 +464,23 @@ namespace VSPackage.BsodSurvivorPlugin
                 Microsoft.Build.Evaluation.Project project2 = new Microsoft.Build.Evaluation.Project(Microsoft.Build.Construction.ProjectRootElement.Open(project.FullName, projectCollection), (IDictionary<string, string>)dictionary, (string)null, projectCollection);
                 foreach (var allEvaluatedItem in project2.AllEvaluatedItems)
                 {
-                    if (allEvaluatedItem.ItemType == "ClCompile" && allEvaluatedItem.EvaluatedInclude.ToLower() == Path.GetFileName(filePath).ToLower())
+                    if (allEvaluatedItem.ItemType == "ClCompile")
                     {
-                        var attribute = allEvaluatedItem.GetMetadataValue(attributeName);
+                        var evaluated = Path.Combine(project2.DirectoryPath, allEvaluatedItem.EvaluatedInclude);
+                        try
+                        {
+                            evaluated = Path.GetFullPath(evaluated);
+                        }
+                        catch (Exception)
+                        {
 
-                        return attribute;
+                        }
+                        if (evaluated.ToLower() == filePath.ToLower())
+                        {
+                            var attribute = allEvaluatedItem.GetMetadataValue(attributeName);
+
+                            return attribute;
+                        }
                     }
                 }
             }
@@ -476,11 +489,10 @@ namespace VSPackage.BsodSurvivorPlugin
 
         private async Task<SourceFile> CreateSourceFileAsync(string filePath, Configuration targetConfig, Project realProject)
         {
-            dynamic project = realProject.Object;
             try
             {
                 await JoinableTaskFactory.SwitchToMainThreadAsync();
-
+                dynamic project = realProject.Object;
                 String configurationName = targetConfig.ConfigurationName;
                 dynamic config = project.Configurations.Item(configurationName);
                 String toolSetName = "Win32";
@@ -516,10 +528,11 @@ namespace VSPackage.BsodSurvivorPlugin
                     {
                         sourceForAnalysis.AddMacro("_DEBUG");
                         sourceForAnalysis.AddMacro("_MT");
-                        if (1 == (int)tool.RuntimeLibrary)
+                        var runTimeLib = (int)tool.RuntimeLibrary;
+                        if (1 == runTimeLib || 0 == runTimeLib)
                         {
                         }
-                        else if (3 == (int)tool.RuntimeLibrary)
+                        else if (3 == runTimeLib)
                         {
                             sourceForAnalysis.AddMacro("_DLL");
                         }
@@ -609,7 +622,12 @@ namespace VSPackage.BsodSurvivorPlugin
                     string compilationFlags = "";
                     foreach (var include in sourceFile.IncludePaths)
                     {
-                        compilationFlags += "/imsvc\"" + include + "\"" + " ";
+                        var newInclude = include;
+                        if (newInclude.EndsWith("\\"))
+                        {
+                            newInclude = include.Substring(0, include.Length - 1);
+                        }
+                        compilationFlags += "/imsvc\"" + newInclude + "\"" + " ";
                     }
                     foreach (var define in sourceFile.Macros)
                     {
@@ -626,7 +644,7 @@ namespace VSPackage.BsodSurvivorPlugin
                             CompilationFlags = compilationFlags,
                             FilePath = sourceFile.FilePath,
                             LinkerFlags = "",
-                            ObjCopyPath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\llvm-objcopy.exe")
+                            ObjCopyPath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\bin\llvm-objcopy.exe")
 
                         });
                         while (await reply.ResponseStream.MoveNext())

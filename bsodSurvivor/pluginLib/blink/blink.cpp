@@ -125,6 +125,10 @@ void Blink::resetDllToChange() {
   m_dynamicDlls.clear();
   m_dllToChange.reset();
   setInUnload(false);
+  resetSavedFiles();
+}
+
+void Blink::resetSavedFiles() {
   try {
     std::scoped_lock lock(*m_originalFileToNewFileMutex);
 
@@ -241,8 +245,9 @@ Result Blink::link(const LinkCommandRequest *request,
   if (!result.m_success) {
     return result;
   }
-  // For now it isn't possible to free the module - as there is a need to FunctionToBreak function, but this function exist
-  // in dllToChange, need somehow to solve this.
+  // For now it isn't possible to free the module - as there is a need to
+  // FunctionToBreak function, but this function exist in dllToChange, need
+  // somehow to solve this.
   loadedDll->setShouldRelease(false);
   m_dynamicDlls.push_back(loadedDll);
   notifyDynamicModuleLoaded(loadedDll);
@@ -299,8 +304,9 @@ Blink::updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
       oldInfo[indexToChange] =
           newSymbols[needToReplaceOldSymbols[i].first].m_address;
     }
-    (void)g_platform->writeMemory(needToReplaceOldSymbols[0].second, oldInfo.data(),
-                            sizeof(size_t) * oldInfo.size());
+    (void)g_platform->writeMemory(needToReplaceOldSymbols[0].second,
+                                  oldInfo.data(),
+                                  sizeof(size_t) * oldInfo.size());
   }
   return Result();
 }
@@ -439,7 +445,7 @@ Result Blink::createAsmObjFile(const LinkCommandRequest *request,
                                const std::string &asmFileObjFilePath,
                                const std::string &asmFilePath) {
   std::string processOutput;
-  auto asmCommand = request->masmpath() + " /c /nologo /Zi /Fo" +
+  auto asmCommand = "\"" + request->masmpath() + "\"" + " /c /nologo /Zi /Fo" +
                     asmFileObjFilePath + " /W3 /errorReport:prompt  /Ta" +
                     asmFilePath;
   if (!createProcess(asmCommand, processOutput)) {
@@ -455,9 +461,8 @@ Result Blink::runLinkCommand(const LinkCommandRequest *request,
                              const std::string &objFilePath) {
   std::string ldLinkPath = request->ldpath();
   auto ldProcessCommand =
-      ldLinkPath + " " + asmFileObjFilePath + " " + objFilePath +
-      R"( /dll /debug:full /force:unresolved )" +
-      request->linkerflags() +
+      "\"" + ldLinkPath + "\"" + " " + asmFileObjFilePath + " " + objFilePath +
+      R"( /dll /debug:full /force:unresolved )" + request->linkerflags() +
       " /NODEFAULTLIB /noentry /out:" + wantedOutputDll;
   writeLog("starting to link " + ldProcessCommand);
   std::string processOutput;
@@ -553,6 +558,7 @@ Blink::loadDll(const std::string &localModuleFilePath,
   std::vector<char> localLoadedImage(
       std::max((size_t)imageSize, dllData.size()));
   memcpy(localLoadedImage.data(), dllData.data(), dllData.size());
+  std::optional<int> imageSizeToBe;
   for (int i = 0; i < imageNtHeaders->FileHeader.NumberOfSections; i++) {
     auto sectionHeaderLocationOffset =
         imageDosHeader->e_lfanew + sizeof(DWORD) +
@@ -561,10 +567,27 @@ Blink::loadDll(const std::string &localModuleFilePath,
     sectionHeaderLocationOffset += (DWORD)sizeof(IMAGE_SECTION_HEADER) * i;
     auto sectionHeaderLocationInDisk =
         (IMAGE_SECTION_HEADER *)(dllData.data() + sectionHeaderLocationOffset);
+    auto commandSectionName = ".command";
+    bool isDebugSection =
+        sectionHeaderLocationInDisk->Name[0] == '/' ||
+        0 == memcmp(commandSectionName, sectionHeaderLocationInDisk->Name,
+                    strlen(commandSectionName));
+    if (isDebugSection && !imageSizeToBe) {
+      imageSizeToBe = sectionHeaderLocationInDisk->VirtualAddress;
+    } else if (!isDebugSection) {
+      imageSizeToBe.reset();
+    }
     memcpy(localLoadedImage.data() +
                sectionHeaderLocationInDisk->VirtualAddress,
            dllData.data() + sectionHeaderLocationInDisk->PointerToRawData,
            sectionHeaderLocationInDisk->Misc.VirtualSize);
+  }
+  if (imageSizeToBe.has_value()) {
+    imageSize = *imageSizeToBe;
+    imageNtHeaders = (IMAGE_NT_HEADERS *)(localLoadedImage.data() +
+                                          imageDosHeader->e_lfanew);
+    imageNtHeaders->OptionalHeader.SizeOfImage = imageSize;
+    localLoadedImage.resize(imageSize);
   }
   auto loadedImage = g_platform->allocateMemory(imageSize);
   loadedDll = std::make_shared<LoadedDll>(
@@ -577,7 +600,7 @@ Blink::loadDll(const std::string &localModuleFilePath,
     return result;
   }
   if (!g_platform->writeMemory(loadedImage, localLoadedImage.data(),
-                          localLoadedImage.size())) {
+                               localLoadedImage.size())) {
     return Result();
   }
   result = updateSymbolsInNewObj(loadedDll, symbolsToImport, loadedImage,
@@ -586,7 +609,7 @@ Blink::loadDll(const std::string &localModuleFilePath,
     return result;
   }
   if (!g_platform->writeMemory(loadedImage, localLoadedImage.data(),
-                          localLoadedImage.size())) {
+                               localLoadedImage.size())) {
     return Result();
   }
   return result;
@@ -694,13 +717,14 @@ Result Blink::replaceIntrinsicsInObjFile(const LinkCommandRequest *request,
                                          const std::string &objFilePath) {
   const std::vector<std::string> intrinsicsToReplace = {"memset", "memmove",
                                                         "memcpy"};
-  std::string objCopyCommand = request->objcopypath() + " " + objFilePath;
+  std::string objCopyCommand =
+      "\"" + request->objcopypath() + "\"" + " " + objFilePath;
   for (const auto &intrinsic : intrinsicsToReplace) {
     objCopyCommand += " --redefine-sym " + intrinsic + "=__jmp_" + intrinsic;
   }
   std::string processOutput;
   if (!createProcess(objCopyCommand, processOutput)) {
-    return Result("failed running process" + objCopyCommand + " \n" +
+    return Result("failed running process " + objCopyCommand + " \n" +
                   objCopyCommand);
   }
   return Result();
@@ -711,14 +735,15 @@ Result Blink::compile(const LinkCommandRequest *request,
                       const std::string &outputFilePath) {
   std::string clangFilePath = request->clangfilepath();
   std::string processOutput;
-  std::string processCommand = clangFilePath + " /EHa /Od /Zi /GS- -gdwarf " +
+  std::string processCommand = "\"" + clangFilePath + "\"" +
+                               " /EHa /Od /Zi /GS- -gdwarf " +
                                request->compilationflags() + " -c " + "\"" +
                                filePath + "\"" + " -o " + outputFilePath;
   writeLog("starting to compile " + processCommand);
   auto workingDir =
       std::filesystem::path(request->filepath()).parent_path().string();
   if (!createProcess(processCommand, processOutput, workingDir)) {
-    return Result("failed running process" + processCommand + " \n" +
+    return Result("failed running process " + processCommand + " \n" +
                   processOutput);
   }
   writeLog(processOutput);

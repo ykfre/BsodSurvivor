@@ -15,12 +15,13 @@ EXPORTS
 ; Extension commands.
 ;--------------------------------------------------------------------
 
-    returnwithout
-    returnwith
-    returntoframewithout
-    returntoframewith
-    reloadblinkmodules
+    return_without
+    return_with
+    return_to_frame_without
+    return_to_frame_with
+    reload_blink_modules
     expr
     jump
-    discardexpr
-    reloadconfig
+    discard_expr
+    reload_config
+    reset_saved_files

@@ -53,6 +53,26 @@ class GreeterServiceImpl final : public CreateFileHook::Greeter::Service {
     OutputDebugStringA("called clear path data");
 
     std::lock_guard<std::mutex> lock(g_originalFileToNewFileMutex);
+    for (const auto &pair : g_originalFileToNewFile) {
+      auto filePath = pair.first;
+      SYSTEMTIME thesystemtime;
+      GetSystemTime(&thesystemtime);
+      // getthe handle to the file
+      HANDLE file = CreateFileA(filePath.c_str(), FILE_WRITE_ATTRIBUTES,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+      if (INVALID_HANDLE_VALUE == file) {
+        continue;
+      }
+      FILETIME thefiletime;
+
+      SystemTimeToFileTime(&thesystemtime, &thefiletime);
+      // set the filetime on the file
+      SetFileTime(file, (LPFILETIME)NULL, (LPFILETIME)NULL, &thefiletime);
+
+      // close our handle.
+      CloseHandle(file);
+    }
     g_originalFileToNewFile.clear();
     return Status::OK;
   }
@@ -76,7 +96,8 @@ void *createFileHook(wchar_t *fileName, _In_ DWORD dwDesiredAccess,
     if (g_originalFileToNewFile.end() !=
         g_originalFileToNewFile.find(absolutePath)) {
       OutputDebugStringA(
-          ("hooking file open to " + g_originalFileToNewFile[absolutePath]).c_str());
+          ("hooking file open to " + g_originalFileToNewFile[absolutePath])
+              .c_str());
       std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
       fileNameString =
           converter.from_bytes(g_originalFileToNewFile[absolutePath]);

@@ -125,7 +125,7 @@ bool parse(const std::string &name, const llvm::json::Object &root, T &out) {
   g_config.callDestructorsFunctionName = "CallDestructors";
   g_config.breakFunctionName = "FunctionToBreak";
   g_config.allocateSpaceInStackFunctionName =
-      "allocateSpaceInStackFunctionName";
+      "allocateSpaceInStack";
 
   if (!parse("shouldHaveAllocateSpaceInStackFunction", root,
              shouldHaveAllocateSpaceInStackFunction)) {

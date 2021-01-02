@@ -117,7 +117,6 @@ std::bitset<128> WindbgThread::getRegisterValue(const std::string &registerName,
 
   std::string registerNameLower = getCorrectRegisterName(registerName);
   DEBUG_VALUE value;
-
   HRESULT result = g_ExtInstance.t_registers->GetIndexByName(
       registerNameLower.c_str(), &index);
 
