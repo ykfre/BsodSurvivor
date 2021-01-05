@@ -79,8 +79,6 @@ you need to download the msi executable from https://github.com/ykfre/BsodSurviv
 
 and follow the installation guide in [here](Installer\ReadMe.md)
 
-
-
 # Windbg Commands
 
 - !**reload_config** - Reload config.json again.
@@ -99,11 +97,9 @@ and follow the installation guide in [here](Installer\ReadMe.md)
   BSOD_SURVIVOR_DIR - will be added to your environment variable after the [Installation](#Installation)
 
 
-
-
 # Configure Windbg
 
-## In order for the plugin to work correctly you need to do the following:
+### In order for the plugin to work correctly you need to do the following:
 
 - [ ] In {windbg_folder}/amd64/winext/config.json please edit it as the comments there instructing.
 
@@ -112,8 +108,6 @@ and follow the installation guide in [here](Installer\ReadMe.md)
   .load BsodSurvivor;.reload;ed nt!Kd_Default_Mask 8;bm nt!KeBugCheck*"
 
 - [ ] In your first ever plugin run - please let the plugin an access through Windows Defender firewall.
-
-
 
 # Supported Architectures
 
@@ -177,7 +171,7 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 
 # Open Source Acknowledgements
 
-blink - https://github.com/crosire/blink for pdb parser and some ideas.
+Blink - https://github.com/crosire/blink for pdb parser and some ideas.
 
 tenzen-llvm-project https://github.com/tentzen/llvm-project, for the implementation of sehs in llvm x64, which return of frame is based on.
 
