@@ -37,7 +37,6 @@
     <ROW Directory="msis_Dir" Directory_Parent="example_Dir" DefaultDir="msis"/>
     <ROW Directory="openmp_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="OPENMP~1|openmp_wrappers"/>
     <ROW Directory="ppc_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="PPC_WR~1|ppc_wrappers"/>
-    <ROW Directory="stl_Dir" Directory_Parent="APPDIR" DefaultDir="stl"/>
     <ROW Directory="windbg_Dir" Directory_Parent="APPDIR" DefaultDir="windbg"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiCompsComponent">
@@ -52,7 +51,6 @@
     <ROW Component="abseil_dll.dll" ComponentId="{94AFA027-32EF-40A2-B957-1C9295B7E3B1}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="abseil_dll.dll"/>
     <ROW Component="adxintrin.h" ComponentId="{743B46E5-30B3-4E06-897C-FDF58FAB90BF}" Directory_="include_Dir" Attributes="0" KeyPath="adxintrin.h" Type="0"/>
     <ROW Component="algorithm" ComponentId="{C5AD1112-6BF0-4038-8CE4-5D782DFB0E38}" Directory_="cuda_wrappers_Dir" Attributes="0" KeyPath="algorithm" Type="0"/>
-    <ROW Component="algorithm_1" ComponentId="{31B5850D-5120-4DB3-888C-29AE0923DD49}" Directory_="stl_Dir" Attributes="0" KeyPath="algorithm_1" Type="0"/>
     <ROW Component="cares.dll" ComponentId="{37B6AE8E-6752-4C46-85A7-E269F77EF1E2}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="cares.dll"/>
     <ROW Component="clang.exe" ComponentId="{D1262EB2-4835-4F1A-91C8-1127D5328DBA}" Directory_="bin_Dir" Attributes="256" KeyPath="clang.exe"/>
     <ROW Component="clang.exe_2" ComponentId="{4F7952C1-1409-4C88-A46D-88C26FAA5D12}" Directory_="bin_Dir" Attributes="256" KeyPath="clang.exe_2"/>
@@ -526,127 +524,6 @@
     <ROW File="vcruntime140_1.dll_1" Component_="vcruntime140_1.dll_1" FileName="VCRUNT~2.DLL|vcruntime140_1.dll" Attributes="0" SourcePath="..\external-dlls\vcruntime140_1.dll" SelfReg="false"/>
     <ROW File="BsodSurvivor.dll" Component_="BsodSurvivor.dll" FileName="BSODSU~1.DLL|BsodSurvivor.dll" Attributes="0" SourcePath="..\temp\x64\Release\BsodSurvivor.dll" SelfReg="false"/>
     <ROW File="BsodSurvivorExtension.vsix" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~1.VSI|BsodSurvivorExtension.vsix" Attributes="0" SourcePath="..\bsodSurvivor\visualStudioExtension\bin\Release\BsodSurvivorExtension.vsix" SelfReg="false"/>
-    <ROW File="algorithm_1" Component_="algorithm_1" FileName="ALGORI~1|algorithm" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\algorithm" SelfReg="false"/>
-    <ROW File="any" Component_="algorithm_1" FileName="any" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\any" SelfReg="false"/>
-    <ROW File="array" Component_="algorithm_1" FileName="array" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\array" SelfReg="false"/>
-    <ROW File="atomic" Component_="algorithm_1" FileName="atomic" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\atomic" SelfReg="false"/>
-    <ROW File="bit" Component_="algorithm_1" FileName="bit" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\bit" SelfReg="false"/>
-    <ROW File="bitset" Component_="algorithm_1" FileName="bitset" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\bitset" SelfReg="false"/>
-    <ROW File="cassert" Component_="algorithm_1" FileName="cassert" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cassert" SelfReg="false"/>
-    <ROW File="ccomplex" Component_="algorithm_1" FileName="ccomplex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ccomplex" SelfReg="false"/>
-    <ROW File="cctype" Component_="algorithm_1" FileName="cctype" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cctype" SelfReg="false"/>
-    <ROW File="cerrno" Component_="algorithm_1" FileName="cerrno" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cerrno" SelfReg="false"/>
-    <ROW File="cfenv" Component_="algorithm_1" FileName="cfenv" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cfenv" SelfReg="false"/>
-    <ROW File="cfloat" Component_="algorithm_1" FileName="cfloat" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cfloat" SelfReg="false"/>
-    <ROW File="charconv" Component_="algorithm_1" FileName="charconv" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\charconv" SelfReg="false"/>
-    <ROW File="chrono" Component_="algorithm_1" FileName="chrono" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\chrono" SelfReg="false"/>
-    <ROW File="cinttypes" Component_="algorithm_1" FileName="CINTTY~1|cinttypes" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cinttypes" SelfReg="false"/>
-    <ROW File="ciso646" Component_="algorithm_1" FileName="ciso646" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ciso646" SelfReg="false"/>
-    <ROW File="climits" Component_="algorithm_1" FileName="climits" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\climits" SelfReg="false"/>
-    <ROW File="clocale" Component_="algorithm_1" FileName="clocale" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\clocale" SelfReg="false"/>
-    <ROW File="cmath_1" Component_="algorithm_1" FileName="cmath" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cmath" SelfReg="false"/>
-    <ROW File="codecvt" Component_="algorithm_1" FileName="codecvt" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\codecvt" SelfReg="false"/>
-    <ROW File="compare" Component_="algorithm_1" FileName="compare" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\compare" SelfReg="false"/>
-    <ROW File="complex_1" Component_="algorithm_1" FileName="complex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\complex" SelfReg="false"/>
-    <ROW File="comutil.h" Component_="algorithm_1" FileName="comutil.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\comutil.h" SelfReg="false"/>
-    <ROW File="concepts" Component_="algorithm_1" FileName="concepts" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\concepts" SelfReg="false"/>
-    <ROW File="condition_variable" Component_="algorithm_1" FileName="CONDIT~1|condition_variable" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\condition_variable" SelfReg="false"/>
-    <ROW File="csetjmp" Component_="algorithm_1" FileName="csetjmp" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\csetjmp" SelfReg="false"/>
-    <ROW File="csignal" Component_="algorithm_1" FileName="csignal" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\csignal" SelfReg="false"/>
-    <ROW File="cstdalign" Component_="algorithm_1" FileName="CSTDAL~1|cstdalign" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdalign" SelfReg="false"/>
-    <ROW File="cstdarg" Component_="algorithm_1" FileName="cstdarg" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdarg" SelfReg="false"/>
-    <ROW File="cstdbool" Component_="algorithm_1" FileName="cstdbool" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdbool" SelfReg="false"/>
-    <ROW File="cstddef" Component_="algorithm_1" FileName="cstddef" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstddef" SelfReg="false"/>
-    <ROW File="cstdint" Component_="algorithm_1" FileName="cstdint" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdint" SelfReg="false"/>
-    <ROW File="cstdio" Component_="algorithm_1" FileName="cstdio" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdio" SelfReg="false"/>
-    <ROW File="cstdlib" Component_="algorithm_1" FileName="cstdlib" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstdlib" SelfReg="false"/>
-    <ROW File="cstring" Component_="algorithm_1" FileName="cstring" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cstring" SelfReg="false"/>
-    <ROW File="ctgmath" Component_="algorithm_1" FileName="ctgmath" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ctgmath" SelfReg="false"/>
-    <ROW File="ctime" Component_="algorithm_1" FileName="ctime" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ctime" SelfReg="false"/>
-    <ROW File="cuchar" Component_="algorithm_1" FileName="cuchar" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cuchar" SelfReg="false"/>
-    <ROW File="cwchar" Component_="algorithm_1" FileName="cwchar" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cwchar" SelfReg="false"/>
-    <ROW File="cwctype" Component_="algorithm_1" FileName="cwctype" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\cwctype" SelfReg="false"/>
-    <ROW File="deque" Component_="algorithm_1" FileName="deque" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\deque" SelfReg="false"/>
-    <ROW File="exception" Component_="algorithm_1" FileName="EXCEPT~1|exception" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\exception" SelfReg="false"/>
-    <ROW File="execution" Component_="algorithm_1" FileName="EXECUT~1|execution" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\execution" SelfReg="false"/>
-    <ROW File="expected.h" Component_="algorithm_1" FileName="expected.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\expected.h" SelfReg="false"/>
-    <ROW File="filesystem" Component_="algorithm_1" FileName="FILESY~1|filesystem" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\filesystem" SelfReg="false"/>
-    <ROW File="forward_list" Component_="algorithm_1" FileName="FORWAR~1|forward_list" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\forward_list" SelfReg="false"/>
-    <ROW File="fstream" Component_="algorithm_1" FileName="fstream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\fstream" SelfReg="false"/>
-    <ROW File="functional" Component_="algorithm_1" FileName="FUNCTI~1|functional" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\functional" SelfReg="false"/>
-    <ROW File="future" Component_="algorithm_1" FileName="future" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\future" SelfReg="false"/>
-    <ROW File="hash_map" Component_="algorithm_1" FileName="hash_map" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\hash_map" SelfReg="false"/>
-    <ROW File="hash_set" Component_="algorithm_1" FileName="hash_set" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\hash_set" SelfReg="false"/>
-    <ROW File="initializer_list" Component_="algorithm_1" FileName="INITIA~1|initializer_list" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\initializer_list" SelfReg="false"/>
-    <ROW File="iomanip" Component_="algorithm_1" FileName="iomanip" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\iomanip" SelfReg="false"/>
-    <ROW File="ios" Component_="algorithm_1" FileName="ios" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ios" SelfReg="false"/>
-    <ROW File="iosfwd" Component_="algorithm_1" FileName="iosfwd" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\iosfwd" SelfReg="false"/>
-    <ROW File="iostream" Component_="algorithm_1" FileName="iostream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\iostream" SelfReg="false"/>
-    <ROW File="istream" Component_="algorithm_1" FileName="istream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\istream" SelfReg="false"/>
-    <ROW File="iterator" Component_="algorithm_1" FileName="iterator" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\iterator" SelfReg="false"/>
-    <ROW File="limits" Component_="algorithm_1" FileName="limits" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\limits" SelfReg="false"/>
-    <ROW File="list" Component_="algorithm_1" FileName="list" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\list" SelfReg="false"/>
-    <ROW File="locale" Component_="algorithm_1" FileName="locale" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\locale" SelfReg="false"/>
-    <ROW File="map" Component_="algorithm_1" FileName="map" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\map" SelfReg="false"/>
-    <ROW File="memory" Component_="algorithm_1" FileName="memory" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\memory" SelfReg="false"/>
-    <ROW File="memory_resource" Component_="algorithm_1" FileName="MEMORY~1|memory_resource" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\memory_resource" SelfReg="false"/>
-    <ROW File="mutex" Component_="algorithm_1" FileName="mutex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\mutex" SelfReg="false"/>
-    <ROW File="new_3" Component_="algorithm_1" FileName="new" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\new" SelfReg="false"/>
-    <ROW File="numbers" Component_="algorithm_1" FileName="numbers" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\numbers" SelfReg="false"/>
-    <ROW File="numeric" Component_="algorithm_1" FileName="numeric" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\numeric" SelfReg="false"/>
-    <ROW File="optional" Component_="algorithm_1" FileName="optional" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\optional" SelfReg="false"/>
-    <ROW File="ostream" Component_="algorithm_1" FileName="ostream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ostream" SelfReg="false"/>
-    <ROW File="queue" Component_="algorithm_1" FileName="queue" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\queue" SelfReg="false"/>
-    <ROW File="random" Component_="algorithm_1" FileName="random" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\random" SelfReg="false"/>
-    <ROW File="ranges" Component_="algorithm_1" FileName="ranges" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ranges" SelfReg="false"/>
-    <ROW File="ratio" Component_="algorithm_1" FileName="ratio" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ratio" SelfReg="false"/>
-    <ROW File="regex" Component_="algorithm_1" FileName="regex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\regex" SelfReg="false"/>
-    <ROW File="scoped_allocator" Component_="algorithm_1" FileName="SCOPED~1|scoped_allocator" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\scoped_allocator" SelfReg="false"/>
-    <ROW File="set" Component_="algorithm_1" FileName="set" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\set" SelfReg="false"/>
-    <ROW File="shared_mutex" Component_="algorithm_1" FileName="SHARED~1|shared_mutex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\shared_mutex" SelfReg="false"/>
-    <ROW File="span" Component_="algorithm_1" FileName="span" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\span" SelfReg="false"/>
-    <ROW File="sstream" Component_="algorithm_1" FileName="sstream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\sstream" SelfReg="false"/>
-    <ROW File="stack" Component_="algorithm_1" FileName="stack" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\stack" SelfReg="false"/>
-    <ROW File="stdexcept" Component_="algorithm_1" FileName="STDEXC~1|stdexcept" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\stdexcept" SelfReg="false"/>
-    <ROW File="streambuf" Component_="algorithm_1" FileName="STREAM~1|streambuf" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\streambuf" SelfReg="false"/>
-    <ROW File="string" Component_="algorithm_1" FileName="string" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\string" SelfReg="false"/>
-    <ROW File="string_view" Component_="algorithm_1" FileName="STRING~1|string_view" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\string_view" SelfReg="false"/>
-    <ROW File="strstream" Component_="algorithm_1" FileName="STRSTR~1|strstream" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\strstream" SelfReg="false"/>
-    <ROW File="system_error" Component_="algorithm_1" FileName="SYSTEM~1|system_error" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\system_error" SelfReg="false"/>
-    <ROW File="thread" Component_="algorithm_1" FileName="thread" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\thread" SelfReg="false"/>
-    <ROW File="tuple" Component_="algorithm_1" FileName="tuple" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\tuple" SelfReg="false"/>
-    <ROW File="type_traits" Component_="algorithm_1" FileName="TYPE_T~1|type_traits" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\type_traits" SelfReg="false"/>
-    <ROW File="typeindex" Component_="algorithm_1" FileName="TYPEIN~1|typeindex" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\typeindex" SelfReg="false"/>
-    <ROW File="typeinfo" Component_="algorithm_1" FileName="typeinfo" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\typeinfo" SelfReg="false"/>
-    <ROW File="unordered_map" Component_="algorithm_1" FileName="UNORDE~1|unordered_map" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\unordered_map" SelfReg="false"/>
-    <ROW File="unordered_set" Component_="algorithm_1" FileName="UNORDE~2|unordered_set" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\unordered_set" SelfReg="false"/>
-    <ROW File="utility" Component_="algorithm_1" FileName="utility" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\utility" SelfReg="false"/>
-    <ROW File="valarray" Component_="algorithm_1" FileName="valarray" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\valarray" SelfReg="false"/>
-    <ROW File="variant" Component_="algorithm_1" FileName="variant" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\variant" SelfReg="false"/>
-    <ROW File="vector" Component_="algorithm_1" FileName="vector" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\vector" SelfReg="false"/>
-    <ROW File="version" Component_="algorithm_1" FileName="version" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\version" SelfReg="false"/>
-    <ROW File="xfacet" Component_="algorithm_1" FileName="xfacet" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xfacet" SelfReg="false"/>
-    <ROW File="xhash" Component_="algorithm_1" FileName="xhash" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xhash" SelfReg="false"/>
-    <ROW File="xiosbase" Component_="algorithm_1" FileName="xiosbase" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xiosbase" SelfReg="false"/>
-    <ROW File="xlocale" Component_="algorithm_1" FileName="xlocale" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocale" SelfReg="false"/>
-    <ROW File="xlocbuf" Component_="algorithm_1" FileName="xlocbuf" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocbuf" SelfReg="false"/>
-    <ROW File="xlocinfo" Component_="algorithm_1" FileName="xlocinfo" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocinfo" SelfReg="false"/>
-    <ROW File="xlocmes" Component_="algorithm_1" FileName="xlocmes" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocmes" SelfReg="false"/>
-    <ROW File="xlocmon" Component_="algorithm_1" FileName="xlocmon" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocmon" SelfReg="false"/>
-    <ROW File="xlocnum" Component_="algorithm_1" FileName="xlocnum" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xlocnum" SelfReg="false"/>
-    <ROW File="xloctime" Component_="algorithm_1" FileName="xloctime" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xloctime" SelfReg="false"/>
-    <ROW File="xmemory" Component_="algorithm_1" FileName="xmemory" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xmemory" SelfReg="false"/>
-    <ROW File="xstddef" Component_="algorithm_1" FileName="xstddef" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xstddef" SelfReg="false"/>
-    <ROW File="xstring" Component_="algorithm_1" FileName="xstring" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xstring" SelfReg="false"/>
-    <ROW File="xtr1common" Component_="algorithm_1" FileName="XTR1CO~1|xtr1common" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xtr1common" SelfReg="false"/>
-    <ROW File="xtree" Component_="algorithm_1" FileName="xtree" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xtree" SelfReg="false"/>
-    <ROW File="xutility" Component_="algorithm_1" FileName="xutility" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xutility" SelfReg="false"/>
-    <ROW File="xxamp.h" Component_="algorithm_1" FileName="xxamp.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xxamp.h" SelfReg="false"/>
-    <ROW File="xxamp_inl.h" Component_="algorithm_1" FileName="XXAMP_~1.H|xxamp_inl.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\xxamp_inl.h" SelfReg="false"/>
-    <ROW File="ymath.h" Component_="algorithm_1" FileName="ymath.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\ymath.h" SelfReg="false"/>
-    <ROW File="yvals.h" Component_="algorithm_1" FileName="yvals.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\yvals.h" SelfReg="false"/>
-    <ROW File="yvals_core.h" Component_="algorithm_1" FileName="YVALS_~1.H|yvals_core.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\yvals_core.h" SelfReg="false"/>
-    <ROW File="zmmintrin.h" Component_="algorithm_1" FileName="ZMMINT~1.H|zmmintrin.h" Attributes="0" SourcePath="..\bsodSurvivor\tests\ExecutableTest\stl\zmmintrin.h" SelfReg="false"/>
     <ROW File="bsodSurvivorDriverLib.lib" Component_="AllocateSpaceInStack.asm" FileName="BSODSU~1.LIB|bsodSurvivorDriverLib.lib" Attributes="0" SourcePath="..\temp\x64\Release\bsodSurvivorDriverLib.lib" SelfReg="false"/>
     <ROW File="BsodSurvivorDriver.props" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~1.PRO|BsodSurvivorDriver.props" Attributes="0" SourcePath="..\bsodSurvivor\props\BsodSurvivorDriver.props" SelfReg="false"/>
     <ROW File="BsodSurvivorDriverCommon.props" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~2.PRO|BsodSurvivorDriverCommon.props" Attributes="0" SourcePath="..\bsodSurvivor\props\BsodSurvivorDriverCommon.props" SelfReg="false"/>
@@ -774,7 +651,6 @@
     <ROW Feature_="MainFeature" Component_="BsodSurvivor.dll"/>
     <ROW Feature_="MainFeature" Component_="EasyHook64.dll"/>
     <ROW Feature_="MainFeature" Component_="BsodSurvivorExtension.vsix"/>
-    <ROW Feature_="MainFeature" Component_="algorithm_1"/>
     <ROW Feature_="MainFeature" Component_="libcrypto1_1x64.dll"/>
     <ROW Feature_="MainFeature" Component_="abseil_dll.dll"/>
     <ROW Feature_="MainFeature" Component_="libprotobuf.dll"/>
