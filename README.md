@@ -12,11 +12,11 @@ These are the major components off the project:
 
 1. Update source code / global variables  in debugging without any need to unload the driver or reboot the computer, by compiling the wanted changed file and link the created obj file with the already loaded code in memory , and then replace the functions which were in the old obj by the new functions which are in the new obj, (for now even if the functions are the same).
 
-   You will need to use [Bsod Survivor Visual Studio Plugin](#Installation) (and not only Windbg Plugin as all the other components) in order to  use this feature.
+   You will need to use [Bsod Survivor Visual Studio Plugin](#installation) (and not only Windbg Plugin as all the other components) in order to  use this feature.
 
-   Please read the [limitations.](#Updating Driver Code In Runtime Limitations)
+   Please read the [limitations.](#updating-driver-code-in-runtime-limitations)
 
-2. Change the program state to be in the state before the current function was called - useful for continue the program even from some BSODs or making the same function called again but with a changed code. (See [Example](#Example))
+2. Change the program state to be in the state before the current function was called - useful for continue the program even from some BSODs or making the same function called again but with a changed code. (See [Example](#example))
 
    This is done by calling the needed destructors in the current function, and return to the registers state of the calling function
 
@@ -31,7 +31,7 @@ These are the major components off the project:
 
 First we load a driver
 
-![](readme-pics\loaded.png)
+![](readme-pics/loaded.png)
 
 as you can see I accidently called a function(realEntry) which doesn't do anything, its run is infinite in fact, and I can't even unload this driver.
 
@@ -41,43 +41,43 @@ first I go to Visual Studio to change and activate the dynamic linking in runtim
 
 This is the result
 
-![](readme-pics\acivate_link_in_runtime.PNG)
+![](readme-pics/acivate_link_in_runtime.PNG)
 
 as you can see I added DriverUnload to the code, and this is not an infinite loop anymore.
 
 Then I return to Windbg and run **!return_with** (return_with is returning from the current function and calling needed destructors, without continue the function- so it should be safe to be used) in the Windbg command window , in order to return to the previous function and rerun the function which we were inside
 
-![](readme-pics\after_return.PNG)
+![](readme-pics/after_return.PNG)
 
 we are now after the call to realEntry, but we wants to run realEntry  again, so I am jumping to line 14 - using **!jump 14**
 
-![](readme-pics\after_jump.PNG)
+![](readme-pics/after_jump.PNG)
 
 and now I can just step into the function(F11) and continue debugging my new code as a regular code.
 
-![](readme-pics\after_step_into.PNG)
+![](readme-pics/after_step_into.PNG)
 
 and finally let's see how we can continue the program - even if we got BSOD:
 
 First let's get a driver which do a BSOD:
 
-![](readme-pics\bsod.png)
+![](readme-pics/bsod.png)
 
 as you can see we accessed variable a where variable a has a value of nullptr, and that caused a BSOD.
 
 lets "survive" this, by using !return_to_frame_with, which returns from frame 0 to the selected frame.
 
-![](readme-pics\after_return_from_bsod.PNG)
+![](readme-pics/after_return_from_bsod.PNG)
 
 and now  we can continue the program as usual by changing the value of a (by windbg command),  or we can just do what we did previously and change this function code, and rerun it with the changed code.
 
-Please be noted that I added in advance a breakpoint in nt!KeBugCheck* in order for break the program before it will changed to DISPATCH_LEVEL because of the BSOD, my recommendation is for you to always configure Windbg to break in those functions by "bm nt!KeBugCheck* " command, please See it in the [Configure Windbg](#Configure Windbg)
+Please be noted that I added in advance a breakpoint in nt!KeBugCheck* in order for break the program before it will changed to DISPATCH_LEVEL because of the BSOD, my recommendation is for you to always configure Windbg to break in those functions by "bm nt!KeBugCheck* " command, please See it in the [Configure Windbg](#configure-windbg)
 
 # Installation
 
 you need to download the msi executable from https://github.com/ykfre/BsodSurvivor
 
-and follow the installation guide in [here](Installer\ReadMe.md)
+and follow the installation guide in [here](Installer/ReadMe.md).
 
 # Windbg Commands
 
@@ -94,7 +94,7 @@ and follow the installation guide in [here](Installer\ReadMe.md)
 
 - [ ] In order for getting all the above functionality you need to use ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriverCommon.props for libs, and ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriver.props  for drivers when you are compiling your driver.
 
-  BSOD_SURVIVOR_DIR - will be added to your environment variable after the [Installation](#Installation)
+  BSOD_SURVIVOR_DIR - will be added to your environment variable after the [Installation](#installation)
 
 
 # Configure Windbg
@@ -124,7 +124,7 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 - The vm must be stopped before you run any feature, and you must be sure the operation of the feature ended before you continue your run  (There will be an informative log).
 - Some Antiviruses may for some reason block some operations of your local Windbg -please add Windbg and the plugin to the white list of those antiviruses if some blocking window appears. 
 
-## Updating Driver Code In Runtime - Limitations
+## Updating Driver Code In Runtime Limitations
 
 - Changes of functions are taking affect only on the next rerun of a function - meaning if you are already in a function when you debugged, before you linked, you must return from this function/call it again in order for the changes to take affect.
 
