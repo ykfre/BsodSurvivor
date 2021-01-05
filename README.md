@@ -138,6 +138,8 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 
 - For now we support only changing one cpp/c file (and via that its headers).
 
+- Can't link with code which isn't reside in memory/ is in the source file which you change, meaning mostly that if you are using libs, your program should be linked with /wholearchive with them, please be note that this isn't necessary to libs of exported dlls like ntos, fltmgr and so on, because their functions are exported by drivers which are loaded in the memory.
+
 - Changes in a const static variable/static function (not static methods)/function in anonymous namespace/lambdas are taking affect only on the next run of this function from a changed regular function(not the mentioned functions), for example, let's say this is the code which is running:
 
   ```c++
