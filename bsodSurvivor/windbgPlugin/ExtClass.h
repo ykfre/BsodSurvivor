@@ -20,10 +20,8 @@ public:
   EXT_COMMAND_METHOD(return_with);
   EXT_COMMAND_METHOD(return_to_frame_without);
   EXT_COMMAND_METHOD(return_to_frame_with);
-  EXT_COMMAND_METHOD(expr);
   EXT_COMMAND_METHOD(jump);
   EXT_COMMAND_METHOD(reload_dynamic_modules);
-  EXT_COMMAND_METHOD(discard_expr);
   EXT_COMMAND_METHOD(reload_config);
   EXT_COMMAND_METHOD(reset_saved_files);
 

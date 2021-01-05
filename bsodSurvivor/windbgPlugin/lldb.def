@@ -20,8 +20,6 @@ EXPORTS
     return_to_frame_without
     return_to_frame_with
     reload_dynamic_modules
-    expr
     jump
-    discard_expr
     reload_config
     reset_saved_files

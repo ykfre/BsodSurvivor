@@ -264,32 +264,6 @@ bool EXT_CLASS::isKernelDebugger() {
   t_control->GetDebuggeeType(&Class, &Qualifier);
   return DEBUG_CLASS_KERNEL == Class;
 }
-#include <iostream>
-EXT_COMMAND(expr, "EvaluateExpression",
-            "{custom}{;x;expression;the expression or a file to read from the expression, must be a file if the epression is larger than one line}") {
-  auto scriptFilePathPointer = GetUnnamedArgStr(0);
-  std::string scriptFilePath = scriptFilePathPointer;
-  std::cout << scriptFilePath;
-  executeCommand([this, scriptFilePath](CommonCommandArgs &args) {
-    std::string expressionValue = scriptFilePath;
-    auto expression = readFile(scriptFilePath);
-    if (expression) {
-      expressionValue =
-          std::string(expression.value().begin(), expression.value().end());
-    }
-    auto thread = g_platform->getCurrentThread();
-    auto currentFrame = thread->getRegisterValue("$frame", 0).to_ullong();
-    auto res = commands::executeExpression(
-        args, std::string{expressionValue.begin(), expressionValue.end()});
-    abortIfFalse(
-        SUCCEEDED(g_ExtInstance.t_control->Execute(
-            DEBUG_OUTCTL_THIS_CLIENT,
-            std::string(".frame /r " + std::to_string(currentFrame)).c_str(),
-            0)),
-        ".frame failed");
-    return res;
-  });
-}
 
 EXT_COMMAND(reload_config, "reload config.json again", "") {
   auto configFilePath = getConfigFilePath();
@@ -329,19 +303,6 @@ EXT_COMMAND(return_to_frame_with,
     auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
         args, thread->getRegisterValue("$frame", 0).to_ulong(), true);
-  });
-}
-
-EXT_COMMAND(discard_expr, "Discard current expression if exists , this operation is not calling needed destructors.", "") {
-  executeCommand([](CommonCommandArgs &args) {
-    args.selectedFrameIndex = 0;
-    auto thread = g_platform->getCurrentThread();
-    if (!g_functionRunManager.isWaitingForFunctionToEnd(
-            thread->getThreadId())) {
-      writeLog("no active expression to discard");
-    }
-    g_functionRunManager.notifyFunctionEnded(thread->getThreadId());
-    return true;
   });
 }
 
