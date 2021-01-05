@@ -77,7 +77,7 @@ Please be noted that I added in advance a breakpoint in nt!KeBugCheck* in order 
 
 you need to download the msi executable from https://github.com/ykfre/BsodSurvivor
 
-and follow the installation guide in [here](Installer/ReadMe.md).
+and follow the installation guide in [here](installer/README.md).
 
 # Windbg Commands
 
