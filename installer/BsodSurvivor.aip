@@ -34,6 +34,7 @@
     <ROW Directory="example_Dir" Directory_Parent="APPDIR" DefaultDir="example"/>
     <ROW Directory="include_Dir" Directory_Parent="__Dir" DefaultDir="include"/>
     <ROW Directory="lib_Dir" Directory_Parent="APPDIR" DefaultDir="lib"/>
+    <ROW Directory="msis_Dir" Directory_Parent="example_Dir" DefaultDir="msis"/>
     <ROW Directory="openmp_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="OPENMP~1|openmp_wrappers"/>
     <ROW Directory="ppc_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="PPC_WR~1|ppc_wrappers"/>
     <ROW Directory="stl_Dir" Directory_Parent="APPDIR" DefaultDir="stl"/>
@@ -72,8 +73,10 @@
     <ROW Component="lldb.exe" ComponentId="{A41317C5-C625-4DAE-9A0B-DA2067578F97}" Directory_="bin_Dir" Attributes="256" KeyPath="lldb.exe"/>
     <ROW Component="lldbdotest" ComponentId="{D3221310-F8BA-429F-9FAA-3E81439F72AE}" Directory_="bin_Dir" Attributes="0" KeyPath="lldbdotest" Type="0"/>
     <ROW Component="lldlink.exe" ComponentId="{EA6A01CE-369C-4591-9CD8-F7D19E4369C8}" Directory_="bin_Dir" Attributes="256" KeyPath="lldlink.exe"/>
+    <ROW Component="llvmdwarfdump.exe" ComponentId="{F9B9AD17-69D8-4DF3-BA32-42AA7F6D8E8F}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmdwarfdump.exe"/>
     <ROW Component="llvmobjcopy.exe" ComponentId="{A916B82F-B139-4ED0-A27E-D5252FF3DCBD}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmobjcopy.exe"/>
     <ROW Component="llvmtblgen.exe" ComponentId="{6ADA4554-3DF4-414F-A048-7DE930626A63}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmtblgen.exe"/>
+    <ROW Component="module.modulemap" ComponentId="{1BE85D3E-CDAA-4F5F-ADA7-5EC6DF15FDFC}" Directory_="msis_Dir" Attributes="0" KeyPath="module.modulemap_2" Type="0"/>
     <ROW Component="msvcp140.dll" ComponentId="{C49BD98B-18A8-4756-BFB1-60812CE13EE0}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="msvcp140.dll"/>
     <ROW Component="msvcp140.dll_1" ComponentId="{171CA70B-0D9F-41FB-9EBD-71D1358CDEC5}" Directory_="bin_Dir" Attributes="256" KeyPath="msvcp140.dll_1"/>
     <ROW Component="re2.dll" ComponentId="{FA51A8FF-911C-4C25-94E4-75D4535842B9}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="re2.dll"/>
@@ -665,9 +668,10 @@
     <ROW File="clangDriverExample.vcxproj" Component_="clangDriverExample.sln" FileName="CLANGD~1.VCX|clangDriverExample.vcxproj" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.vcxproj" SelfReg="false"/>
     <ROW File="clangDriverExample.vcxproj.filters" Component_="clangDriverExample.sln" FileName="CLANGD~1.FIL|clangDriverExample.vcxproj.filters" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.vcxproj.filters" SelfReg="false"/>
     <ROW File="Main.cpp" Component_="clangDriverExample.sln" FileName="Main.cpp" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\Main.cpp" SelfReg="false"/>
-    <ROW File="module.modulemap_1" Component_="clangDriverExample.sln" FileName="MODULE~1.MOD|module.modulemap" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\module.modulemap" SelfReg="false"/>
-    <ROW File="stdafx.h" Component_="clangDriverExample.sln" FileName="stdafx.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\stdafx.h" SelfReg="false"/>
-    <ROW File="Vector.h" Component_="clangDriverExample.sln" FileName="Vector.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\Vector.h" SelfReg="false"/>
+    <ROW File="llvmdwarfdump.exe" Component_="llvmdwarfdump.exe" FileName="LLVM-D~1.EXE|llvm-dwarfdump.exe" Attributes="0" SourcePath="..\temp\Release\bin\llvm-dwarfdump.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="module.modulemap_2" Component_="module.modulemap" FileName="MODULE~1.MOD|module.modulemap" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\module.modulemap" SelfReg="false"/>
+    <ROW File="stdafx.h" Component_="module.modulemap" FileName="stdafx.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\stdafx.h" SelfReg="false"/>
+    <ROW File="Vector.h" Component_="module.modulemap" FileName="Vector.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\Vector.h" SelfReg="false"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.BootstrOptComponent">
     <ROW BootstrOptKey="GlobalOptions" DownloadFolder="[AppDataFolder][|Manufacturer]\[|ProductName]\prerequisites" Options="2"/>
@@ -783,7 +787,9 @@
     <ROW Feature_="MainFeature" Component_="zlib1.dll"/>
     <ROW Feature_="MainFeature" Component_="cares.dll"/>
     <ROW Feature_="MainFeature" Component_="ReadMe.md"/>
+    <ROW Feature_="MainFeature" Component_="llvmdwarfdump.exe"/>
     <ROW Feature_="MainFeature" Component_="clangDriverExample.sln"/>
+    <ROW Feature_="MainFeature" Component_="module.modulemap"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiInstExSeqComponent">
     <ROW Action="AI_DOWNGRADE" Condition="AI_NEWERPRODUCTFOUND AND (UILevel &lt;&gt; 5)" Sequence="210"/>

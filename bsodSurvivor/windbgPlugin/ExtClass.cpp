@@ -266,7 +266,7 @@ bool EXT_CLASS::isKernelDebugger() {
 }
 #include <iostream>
 EXT_COMMAND(expr, "EvaluateExpression",
-            "{custom}{;x;expressionFilePath;the file path of the expression}") {
+            "{custom}{;x;expression;the expression or a file to read from the expression, must be a file if the epression is larger than one line}") {
   auto scriptFilePathPointer = GetUnnamedArgStr(0);
   std::string scriptFilePath = scriptFilePathPointer;
   std::cout << scriptFilePath;
@@ -291,7 +291,7 @@ EXT_COMMAND(expr, "EvaluateExpression",
   });
 }
 
-EXT_COMMAND(reload_config, "reload config", "") {
+EXT_COMMAND(reload_config, "reload config.json again", "") {
   auto configFilePath = getConfigFilePath();
   if (!g_config.load(configFilePath)) {
     return;
@@ -299,20 +299,20 @@ EXT_COMMAND(reload_config, "reload config", "") {
   g_blink.resetDllToChange();
 }
 
-EXT_COMMAND(return_without, "return from current frame without destructor", "") {
+EXT_COMMAND(return_without, "return from current frame without calling destructors", "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, false);
   });
 }
 
-EXT_COMMAND(return_with, "return from current frame with destructor", "") {
+EXT_COMMAND(return_with, "return from current frame with calling destructors", "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, true);
   });
 }
 
 EXT_COMMAND(return_to_frame_without,
-            "return to the current frame without calling destrcutors", "") {
+            "return to the selected frame without calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
 
@@ -323,7 +323,7 @@ EXT_COMMAND(return_to_frame_without,
 }
 
 EXT_COMMAND(return_to_frame_with,
-            "return to the current frame with calling destrcutors", "") {
+            "return to the selected frame with calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
     auto thread = g_platform->getCurrentThread();
@@ -332,7 +332,7 @@ EXT_COMMAND(return_to_frame_with,
   });
 }
 
-EXT_COMMAND(discard_expr, "Discard current expression", "") {
+EXT_COMMAND(discard_expr, "Discard current expression if exists , this operation is not calling needed destructors.", "") {
   executeCommand([](CommonCommandArgs &args) {
     args.selectedFrameIndex = 0;
     auto thread = g_platform->getCurrentThread();
@@ -345,7 +345,7 @@ EXT_COMMAND(discard_expr, "Discard current expression", "") {
   });
 }
 
-EXT_COMMAND(jump, "jump to line",
+EXT_COMMAND(jump, " Jump to a previous line in the same function, including calling needed destructors",
             "{;s;lineNumber;line number in decimal representation}") {
   auto raw = GetUnnamedArgStr(0);
   std::istringstream ss(raw);
@@ -362,7 +362,7 @@ EXT_COMMAND(jump, "jump to line",
   });
 }
 
-EXT_COMMAND(reload_blink_modules, "make windbg reload blink modules again", "") {
+EXT_COMMAND(reload_dynamic_modules, "Make Windbg reload dynamic modules again, useful when you did .reload /f and Windbg removed the dynamic modules.", "") {
   g_platform->setCurrentThread(g_threadFactory->create(0));
   for (const auto &module : g_blink.getDynamicDlls()) {
     g_ExtInstance.onLoadDynamicModule(module);

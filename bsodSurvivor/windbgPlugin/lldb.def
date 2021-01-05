@@ -19,7 +19,7 @@ EXPORTS
     return_with
     return_to_frame_without
     return_to_frame_with
-    reload_blink_modules
+    reload_dynamic_modules
     expr
     jump
     discard_expr

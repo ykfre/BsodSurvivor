@@ -405,10 +405,10 @@ Register FastISel::getRegForValue(const Value *V,
     return FuncInfo.InitializeRegForValue(V);
   auto debugLoc = DbgLoc;
   SavePoint SaveInsertPt = enterLocalValueArea();
-  if (shouldSaveDebug) {
+  if (shouldSaveDebug || (V && llvm::isa<GlobalValue>(V))) {
     DbgLoc = debugLoc;
-  
   }
+
   // Materialize the value in a register. Emit any instructions in the
   // local value area.
   Reg = materializeRegForValue(V, VT);

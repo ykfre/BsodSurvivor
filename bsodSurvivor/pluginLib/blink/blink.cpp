@@ -582,13 +582,6 @@ Blink::loadDll(const std::string &localModuleFilePath,
            dllData.data() + sectionHeaderLocationInDisk->PointerToRawData,
            sectionHeaderLocationInDisk->Misc.VirtualSize);
   }
-  if (imageSizeToBe.has_value()) {
-    imageSize = *imageSizeToBe;
-    imageNtHeaders = (IMAGE_NT_HEADERS *)(localLoadedImage.data() +
-                                          imageDosHeader->e_lfanew);
-    imageNtHeaders->OptionalHeader.SizeOfImage = imageSize;
-    localLoadedImage.resize(imageSize);
-  }
   auto loadedImage = g_platform->allocateMemory(imageSize);
   loadedDll = std::make_shared<LoadedDll>(
       dllName, loadedImage, LoadedDll::LoadedDynamically::DYNAMIC);

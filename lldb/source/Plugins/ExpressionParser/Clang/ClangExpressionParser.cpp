@@ -921,10 +921,15 @@ bool getCompileSettingsFromSection(CompilerInstance &CI, std::string wanted_obj_
       index += size;
     }
   }
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
+  LLDB_LOGF(log, "failed to find %s", wanted_obj_path.c_str());
   return false;
 }
 
 bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Target &target, CompilerInstance& CI) {
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
+
+  LLDB_LOGF(log, "trying getting settings for %s", exe_path.c_str());
   std::ifstream is(exe_path, std::ifstream::binary);
   if (is) {
     // get length of file:
@@ -957,6 +962,7 @@ bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Ta
           auto comp_unit = context.comp_unit;
           if (nullptr != comp_unit) {
             auto comp_path = comp_unit->GetPrimaryFile().GetPath();
+            LLDB_LOGF(log, "trying getting settings from %s", comp_path.c_str());
             return getCompileSettingsFromSection(CI, comp_path, serialized_command);
           }
         }
@@ -1249,14 +1255,8 @@ ClangExpressionParser::ClangExpressionParser(
                      ->GetFileSpec()
                      .GetPath();
     }
-    bool isSucceededToHaveSettingsFromSection = getCompileSettingsFromSection(
+    getCompileSettingsFromSection(
         exe_path, *exe_scope->CalculateTarget(), *m_compiler);
-    Log *log2(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
-    if (log2) {
-      if (!isSucceededToHaveSettingsFromSection) {
-        log2->Warning("There is no llvm_command section in the pe file\n");
-      }
-    }
   }
   // Register the support for object-file-wrapped Clang modules.
   auto PCHOps = m_compiler->getPCHContainerOperations();

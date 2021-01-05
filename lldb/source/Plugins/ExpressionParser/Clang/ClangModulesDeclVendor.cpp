@@ -874,9 +874,6 @@ ClangModulesDeclVendor::Create(Target &target) {
   bool isSucceededToHaveSettingsFromSection =
       getCompileSettingsFromSection(exe_path, target, *instance);
 
-  if (!isSucceededToHaveSettingsFromSection && log) {
-    log->Warning("There is no llvm_command section in the pe file\n");
-  }
   std::unique_ptr<clang::FrontendAction> action(new clang::SyntaxOnlyAction);
 
   instance->setTarget(clang::TargetInfo::CreateTargetInfo(

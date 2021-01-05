@@ -1,17 +1,26 @@
-#include "stdafx.h"
+#include "msis/stdafx.h"
 volatile int *g = nullptr;
 
+void *operator new(size_t sz) { return ExAllocatePool(NonPagedPool, sz); }
+void *operator new[](size_t sz) { return ExAllocatePool(NonPagedPool, sz); }
 
+void operator delete(void *ptr) noexcept { ExFreePool(ptr); }
+
+void operator delete[](void *ptr) { return ExFreePool(ptr); }
 
 VOID DriverUnload(IN PDRIVER_OBJECT pDriverObject) {
   __debugbreak();
   return;
 }
+
 NTSTATUS realEntry(IN PDRIVER_OBJECT pDriverObject,
                    IN PUNICODE_STRING pRegistryPath) {
+  auto r = g;
   __debugbreak();
   pDriverObject->DriverUnload = DriverUnload;
   __debugbreak();
+  Vector<int> s;
+  s.push_back(5);
   UNICODE_STRING uniName;
   OBJECT_ATTRIBUTES objAttr = {};
   objAttr = objAttr;
@@ -38,11 +47,9 @@ NTSTATUS realEntry(IN PDRIVER_OBJECT pDriverObject,
 
   return STATUS_SUCCESS;
 }
+
 extern "C" NTSTATUS DriverEntry(IN PDRIVER_OBJECT pDriverObject,
                                 IN PUNICODE_STRING pRegistryPath) {
-  __debugbreak();
-  //
-  realEntry(pDriverObject, pRegistryPath);
-  return STATUS_SUCCESS;
 
+  return realEntry(pDriverObject, pRegistryPath);
 } // end DriverEntry()

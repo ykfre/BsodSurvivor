@@ -8,8 +8,8 @@
 #include "Api/SystemInitializerFull.h"
 #include "CommonCommandArgs.h"
 #include "Config.h"
-#include "LLdbUtils.h"
 #include "FunctionRunManager.h"
+#include "LLdbUtils.h"
 #include "Logger.h"
 #include "MCJIT.h"
 #include "MyRegisterContext.h"
@@ -484,7 +484,7 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
       return true;
     };
   }
-  
+
   lldb_private::Platform::SetHostPlatform(
       lldb::PlatformSP(new Platform2(true, commonCommandArgs)));
   CommonCommandInitializerValues commonCommandInitializerValues;
@@ -552,6 +552,10 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
   if (currentModule) {
     commonCommandInitializerValues.exeCtxScope->CalculateProcess()->setPath(
         (*currentModule)->GetFileSpec().GetPath());
+  } else {
+    std::stringstream ss;
+    ss << "failed to find module for pc " << std::hex << pc;
+    writeLog(ss.str());
   }
   commonCommandInitializerValues.targetSp->GetProcessSP() =
       commonCommandInitializerValues.exeCtxScope->CalculateProcess();

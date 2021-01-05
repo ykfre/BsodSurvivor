@@ -183,6 +183,8 @@ TEST_F(BlinkTests, sanity) {
 
 const std::string BLINK_EXPR_CPP1 = R"(
 namespace blinkExpr {
+int global1 = 2;
+const char *constGlobal = "89";
 void functionInNewModule1(){};
 class M
 {

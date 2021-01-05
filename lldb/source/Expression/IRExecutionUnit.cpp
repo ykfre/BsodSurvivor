@@ -30,6 +30,7 @@
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Symbol/Variable.h"
 #include <algorithm>
 #include "lldb/../../source/Plugins/Language/CPlusPlus/CPlusPlusLanguage.h"
 #include "lldb/../../source/Plugins/ObjectFile/JIT/ObjectFileJIT.h"
@@ -799,9 +800,29 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
       // references to this symbol.
       symbol_was_missing_weak = true;      
       auto symbolContexts = sc_list.SymbolContexts();
+      bool shouldReverseSymbols = false;
+      if (sc_list.GetSize() > 0) {
+        SymbolContext candidate_sc;
+        sc_list.GetContextAtIndex(0, candidate_sc);
+        if (sc.function) {
+          shouldReverseSymbols = true;
+        }
+        shouldReverseSymbols = true;
+        
+        if (sc.variable) {
+          if (auto type = sc.variable->GetType()) {
+            shouldReverseSymbols = type->GetForwardCompilerType().IsConst();
+          }
+        }
+        
+      }
       for (size_t i = sc_list.GetSize(); i != 0;i--) {
         SymbolContext candidate_sc;
-        sc_list.GetContextAtIndex(i-1, candidate_sc);
+        size_t neededIndex = sc_list.GetSize() - i;
+        if (shouldReverseSymbols) {
+          neededIndex = i - 1;
+        }
+        sc_list.GetContextAtIndex(neededIndex, candidate_sc);
         // Only symbols can be weak undefined:
         if (!candidate_sc.symbol)
           symbol_was_missing_weak = false;

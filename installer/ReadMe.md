@@ -1,4 +1,4 @@
-# What is Bsod Survivor
+What is Bsod Survivor
 
 This project aims to facilitate debugging kernel drivers.
 
@@ -6,19 +6,31 @@ This project aims to facilitate debugging kernel drivers.
 
  click on "visual studio\BsodSurvivorExtension.vsix"
 
-# Install Windbg X plugin
+after that please [add a shortuct](https://www.vitoshacademy.com/visual-studio-how-to-create-a-custom-shortcut/) to "Link With Loaded Driver" in Visual Studio by
 
-The is currently only support for Windbg X, not the old one.
+ adding a shortuct to Tool.LinkWithLoadedDriver
 
-**Run** python windbg/copy_windbg_files.py ${windbg_folder_path} 
+# Install Windbg Preview plugin
 
-where windbg_folder_path is the root path of Windbg X folder in your computer, for example:
+**There is currently only support for Windbg Preview, not the old one.**
 
-C:\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe
+- [ ] Make sure that ml64.exe directory is in your PATH environment variable.**
 
-**Please note** - that you will need to copy the windbg folder to a path where you have write access in order for the python script to succeed.
+  For example make sure  - **C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\Hostx64\x64 is** in your PATH environment variable.
 
-**You should also make sure that ml64.exe directory is in your PATH environment variable.**
+- [ ] You will need to copy the windbg folder to a path where you have write access in order for the next steps to work.
 
-For example  - **C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.27.29110\bin\Hostx64\x64 is** in your PATH environment variable.
+- [ ] **Run** python.exe windbg/copy_windbg_files.py ${windbg_folder_path} 
+
+  where windbg_folder_path is the root path of Windbg X folder in your computer, for example:
+
+  C:\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe
+
+- [ ] In Virtual KD, please configure it to use Custom Command: "{windbg_path}\DbgX.Shell.exe" -k com:pipe,resets=0,reconnect,port=\\.\pipe\kd_{vm_name} -c ".load BsodSurvivor;.reload;ed nt!Kd_Default_Mask 8;bm nt!KeBugCheck*"
+
+  for example: "C:\Users\idowe\Desktop\Microsoft.WinDbg_1.2007.6001.0_neutral__8wekyb3d8bbwe\DbgX.Shell.exe" -k com:pipe,resets=0,reconnect,port=\\.\pipe\kd_Windows_7_x64_(5) -c ".load BsodSurvivor;.reload;ed nt!Kd_Default_Mask 8;bm nt!KeBugCheck*".
+
+- [ ] In your first plugin run - please let the plugin access windows defender firewall.
+
+  
 
