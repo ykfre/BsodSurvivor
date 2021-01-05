@@ -32,9 +32,3 @@ after that please [add a shortuct](https://www.vitoshacademy.com/visual-studio-h
 
 - [ ] In your first plugin run - please let the plugin access windows defender firewall.
 
-
-# Open Source Acknowledgements
-
-blink - https://github.com/crosire/blink for pdb parser and some ideas.
-
-tenzen-llvm-project https://github.com/tentzen/llvm-project, for the implementation of sehs in llvm x64.

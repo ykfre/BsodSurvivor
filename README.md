@@ -175,5 +175,11 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 
   You should place them in different files from the file which you want to change.
 
+# Open Source Acknowledgements
+
+blink - https://github.com/crosire/blink for pdb parser and some ideas.
+
+tenzen-llvm-project https://github.com/tentzen/llvm-project, for the implementation of sehs in llvm x64, which return of frame is based on.
+
 
 
