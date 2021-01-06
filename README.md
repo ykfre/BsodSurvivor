@@ -4,11 +4,7 @@ Tired of always telling yourself when you got a BSOD that what if I could just r
 Or want to add a conditional breakpoint easily to some function you have like if(g_counter == 8) {__debugbreak();} without any need to unload the driver?
 Or even just update almost any code of a function you want without driver unloading.
 
-This project is fork of LLVM 10.
-
-This project is in beta version 0.1.0
-
-The project is composed from Visual Studio plugin, Windbg plugin, and changes to lldb/Clang/LLD.
+**This project is for you!!**
 
 These are the major components off the project:
 
@@ -26,7 +22,12 @@ These are the major components off the project:
 
    Useful in order to reexamine what some code do again and again.
 
-   
+
+This project is a fork of LLVM 10.
+
+This project is in beta version 0.1.0
+
+The project is composed from Visual Studio plugin, Windbg plugin, and changes to LLDB/Clang/LLD.
 
 
 # Example
