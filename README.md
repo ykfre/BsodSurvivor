@@ -1,12 +1,14 @@
 # BSOD Survivor
 
-This project aims to facilitate debugging a kernel driver in windows.
+Tired of always telling yourself when you got a BSOD that what if I could just return to the caller function which caused the BSOD, and change its args? or just do any change? and instead of that you need to do the tiersome reboot/revert to the machine, attach Windbg again to the machine, and hope it isn't some statistically bug?
+Or want to add a conditional breakpoint easily to some function you have like if(g_counter == 8) {__debugbreak();} without any need to unload the driver?
+Or even just update almost any code of a function you want without driver unloading.
 
 This project is fork of LLVM 10.
 
 This project is in beta version 0.1.0
 
-The project is composed from Visual Studio plugin, Windbg plugin, and changes to lldb/clang/lld.
+The project is composed from Visual Studio plugin, Windbg plugin, and changes to lldb/Clang/LLD.
 
 These are the major components off the project:
 
