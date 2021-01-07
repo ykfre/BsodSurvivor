@@ -29,6 +29,10 @@
 using namespace lldb;
 using namespace lldb_private;
 
+thread_local void *t_bpAddress = nullptr;
+
+thread_local llvm::Optional<std::function<bool()>> t_callAllocateStack;
+
 // ThreadPlanCallFunction: Plan to call a single function
 bool ThreadPlanCallFunction::ConstructorSetup(
     Thread &thread, ABI *&abi, lldb::addr_t &start_load_addr,
@@ -49,8 +53,24 @@ bool ThreadPlanCallFunction::ConstructorSetup(
   Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_STEP));
 
   SetBreakpoints();
-
-  m_function_sp = thread.GetRegisterContext()->GetSP() - abi->GetRedZoneSize();
+  if (!thread.CheckpointThreadState(m_stored_thread_state)) {
+    m_constructor_errors.Printf("Setting up ThreadPlanCallFunction, failed to "
+                                "checkpoint thread state.");
+    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.", static_cast<void *>(this),
+              m_constructor_errors.GetData());
+    return false;
+  }
+  size_t allocatedSpaceInStackByUs = 0;
+  if (t_callAllocateStack) {
+    if (!t_callAllocateStack.getValue()()) {
+      LLDB_LOGF(log, "Failed allocate space in stack");
+      return false;
+    }
+    allocatedSpaceInStackByUs = 160;
+  }
+  
+  m_function_sp = thread.GetRegisterContext()->GetSP() +
+                  allocatedSpaceInStackByUs - abi->GetRedZoneSize();
   // If we can't read memory at the point of the process where we are planning
   // to put our function, we're not going to get any further...
   Status error;
@@ -64,30 +84,29 @@ bool ThreadPlanCallFunction::ConstructorSetup(
     return false;
   }
 
-  llvm::Expected<Address> start_address = GetTarget().GetEntryPointAddress();
-  if (!start_address) {
-    m_constructor_errors.Printf(
-        "%s", llvm::toString(start_address.takeError()).c_str());
-    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.", static_cast<void *>(this),
-              m_constructor_errors.GetData());
-    return false;
+  if (nullptr == t_bpAddress) {
+    llvm::Expected<Address> start_address = GetTarget().GetEntryPointAddress();
+    if (!start_address) {
+      m_constructor_errors.Printf(
+          "%s", llvm::toString(start_address.takeError()).c_str());
+      LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.",
+                static_cast<void *>(this), m_constructor_errors.GetData());
+      return false;
+    }
+      m_start_addr = *start_address;
+  } else {
+    m_start_addr = lldb_private::Address((size_t)t_bpAddress);
   }
 
-  m_start_addr = *start_address;
   start_load_addr = m_start_addr.GetLoadAddress(&GetTarget());
 
+  
   // Checkpoint the thread state so we can restore it later.
   if (log && log->GetVerbose())
     ReportRegisterState("About to checkpoint thread before function call.  "
                         "Original register state was:");
 
-  if (!thread.CheckpointThreadState(m_stored_thread_state)) {
-    m_constructor_errors.Printf("Setting up ThreadPlanCallFunction, failed to "
-                                "checkpoint thread state.");
-    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): %s.", static_cast<void *>(this),
-              m_constructor_errors.GetData());
-    return false;
-  }
+
   function_load_addr = m_function_addr.GetLoadAddress(&GetTarget());
 
   return true;
@@ -196,7 +215,7 @@ void ThreadPlanCallFunction::DoTakedown(bool success) {
                 "register state",
                 static_cast<void *>(this));
     }
-    SetPlanComplete(success);
+  SetPlanComplete(success);
     ClearBreakpoints();
     if (log && log->GetVerbose())
       ReportRegisterState("Restoring thread state after function call.  "

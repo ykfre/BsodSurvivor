@@ -1658,7 +1658,8 @@ protected:
     Status error;
     ThreadSP thread_sp = m_exe_ctx.GetThreadSP();
     const bool broadcast = true;
-    error = thread_sp->ReturnFromFrame(frame_sp, return_valobj_sp, broadcast);
+    error = thread_sp->ReturnFromFrame(frame_sp, return_valobj_sp, m_exe_ctx,
+                                       broadcast);
     if (!error.Success()) {
       result.AppendErrorWithFormat(
           "Error returning from frame %d of thread %d: %s.", frame_idx,

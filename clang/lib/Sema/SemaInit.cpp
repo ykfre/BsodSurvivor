@@ -9,7 +9,7 @@
 // This file implements semantic analysis for initializers.
 //
 //===----------------------------------------------------------------------===//
-
+#include <iostream>
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/ExprCXX.h"
@@ -5821,7 +5821,6 @@ void InitializationSequence::InitializeFrom(Sema &S,
   }
 
   assert(S.getLangOpts().CPlusPlus);
-
   //     - If the destination type is a (possibly cv-qualified) class type:
   if (DestType->isRecordType()) {
     //     - If the initialization is direct-initialization, or if it is

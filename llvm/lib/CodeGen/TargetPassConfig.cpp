@@ -894,7 +894,40 @@ static cl::opt<RegisterRegAlloc::FunctionPassCtor, false,
                RegisterPassParser<RegisterRegAlloc>>
     RegAlloc("regalloc", cl::Hidden, cl::init(&useDefaultRegisterAllocator),
              cl::desc("Register allocator to use"));
+#include <iostream>
+/// BranchFolderPass - Wrap branch folder in a machine function pass.
+class RemoveSetLoadFunctionPass : public MachineFunctionPass {
+public:
+  static char ID;
 
+  explicit RemoveSetLoadFunctionPass() : MachineFunctionPass(ID) {}
+  StringRef getPassName() const override { return "RemoveSetLoadFunctionPass"; }
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    bool changed = false;
+    for (auto &b : MF) {
+      std::vector<MachineInstr *> instrsToRemove;
+      for (auto &inst : b) {
+        for (const auto &operand : inst.operands()) {
+          if (operand.isGlobal()) {
+            auto symbolName = operand.getGlobal()->getName();
+            if (std::string(symbolName).find("myCallBeforeSetLoad") != -1) {
+              instrsToRemove.push_back(&inst);
+              break;
+            }
+          }
+        }
+      }
+      for (auto &inst : instrsToRemove) {
+        b.remove_instr(inst);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+};
+
+char RemoveSetLoadFunctionPass::ID = 0;
 /// Add the complete set of target-independent postISel code generator passes.
 ///
 /// This can be read as the standard order of major LLVM CodeGen stages. Stages
@@ -1039,6 +1072,7 @@ void TargetPassConfig::addMachinePasses() {
   if (TM->getBBSectionsType() != llvm::BasicBlockSection::None)
     addPass(llvm::createBBSectionsPreparePass(TM->getBBSectionsFuncListBuf()));
 
+  addPass(new RemoveSetLoadFunctionPass());
   // Add passes that directly emit MI after all other MI passes.
   addPreEmitPass2();
 

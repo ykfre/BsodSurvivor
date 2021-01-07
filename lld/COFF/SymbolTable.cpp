@@ -390,6 +390,7 @@ void SymbolTable::reportUnresolvable() {
                        &BitcodeFile::instances);
 }
 
+
 void SymbolTable::resolveRemainingUndefines() {
   SmallPtrSet<Symbol *, 8> undefs;
   DenseMap<Symbol *, Symbol *> localImports;
@@ -426,11 +427,32 @@ void SymbolTable::resolveRemainingUndefines() {
       Symbol *imp = find(name.substr(strlen("__imp_")));
       if (imp && isa<Defined>(imp)) {
         auto *d = cast<Defined>(imp);
-        replaceSymbol<DefinedLocalImport>(sym, name, d);
+        bool isFunc = true;
+        replaceSymbol<DefinedLocalImport>(sym, name, d, isFunc);
+        if (sym)
         localImportChunks.push_back(cast<DefinedLocalImport>(sym)->getChunk());
         localImports[sym] = d;
         continue;
       }
+    }
+
+    if (name.startswith("__jmp_")) {
+    auto *imp = find(name.substr(strlen("__jmp_")));
+      if (imp && isa<Defined>(imp)) {
+        auto *d = cast<Defined>(imp);
+          auto impSymbolName =
+            new std::string(("__my_imp_" + imp->getName()).str());
+          auto impSymbol = symtab->addUndefined(*impSymbolName);
+          replaceSymbol<DefinedLocalImport>(impSymbol, impSymbol->getName(), d,
+                                            false);
+          replaceSymbol<FunctionJumperSymbol>(sym, name, cast < DefinedLocalImport>(impSymbol));
+          localImportChunks.push_back(
+              cast<DefinedLocalImport>(impSymbol)->getChunk());
+          localImports[impSymbol] = d;
+          functionJumpersChunks.push_back(
+              cast<FunctionJumperSymbol>(sym)->getChunk());
+          continue;
+        } 
     }
 
     // We don't want to report missing Microsoft precompiled headers symbols.
@@ -449,8 +471,33 @@ void SymbolTable::resolveRemainingUndefines() {
   }
 
   reportProblemSymbols(
-      undefs, config->warnLocallyDefinedImported ? &localImports : nullptr,
+      undefs, nullptr,
       ObjFile::instances, /* bitcode files no longer needed */ nullptr);
+}
+
+
+
+bool SymbolTable::importNeededObjectsForJumps() {
+  SmallPtrSet<Symbol *, 8> undefs;
+  DenseMap<Symbol *, Symbol *> localImports;
+  bool shouldContinueTOSearchNeededObjects = false;
+
+  for (auto &i : symMap) {
+    Symbol *sym = i.second;
+    auto *undef = dyn_cast<Undefined>(sym);
+    if (!undef)
+      continue;
+    if (!sym->isUsedInRegularObj)
+      continue;
+    auto name = undef->getName();
+    if (name.startswith("__jmp_")) {
+      auto *imp = find(name.substr(strlen("__jmp_")));
+      if (imp && imp->isLazy()) {
+        forceLazy(imp);
+      }
+    }
+  }
+  return shouldContinueTOSearchNeededObjects;
 }
 
 std::pair<Symbol *, bool> SymbolTable::insert(StringRef name) {

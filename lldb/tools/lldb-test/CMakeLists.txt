@@ -1,6 +1,6 @@
 get_property(LLDB_ALL_PLUGINS GLOBAL PROPERTY LLDB_PLUGINS)
 
-add_lldb_tool(lldb-test
+add_lldb_library(lldb-test
   FormatUtil.cpp
   lldb-test.cpp
   SystemInitializerTest.cpp

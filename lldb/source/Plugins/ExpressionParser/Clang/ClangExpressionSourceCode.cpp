@@ -36,41 +36,7 @@ const llvm::StringRef ClangExpressionSourceCode::g_prefix_file_name = PREFIX_NAM
 
 const char *ClangExpressionSourceCode::g_expression_prefix =
 "#line 1 \"" PREFIX_NAME R"("
-#ifndef offsetof
-#define offsetof(t, d) __builtin_offsetof(t, d)
-#endif
-#ifndef NULL
-#define NULL (__null)
-#endif
-#ifndef Nil
-#define Nil (__null)
-#endif
-#ifndef nil
-#define nil (__null)
-#endif
-#ifndef YES
-#define YES ((BOOL)1)
-#endif
-#ifndef NO
-#define NO ((BOOL)0)
-#endif
-typedef __INT8_TYPE__ int8_t;
-typedef __UINT8_TYPE__ uint8_t;
-typedef __INT16_TYPE__ int16_t;
-typedef __UINT16_TYPE__ uint16_t;
-typedef __INT32_TYPE__ int32_t;
-typedef __UINT32_TYPE__ uint32_t;
-typedef __INT64_TYPE__ int64_t;
-typedef __UINT64_TYPE__ uint64_t;
-typedef __INTPTR_TYPE__ intptr_t;
-typedef __UINTPTR_TYPE__ uintptr_t;
-typedef __SIZE_TYPE__ size_t;
-typedef __PTRDIFF_TYPE__ ptrdiff_t;
-typedef unsigned short unichar;
-extern "C"
-{
-    int printf(const char * __restrict, ...);
-}
+
 )";
 
 namespace {
@@ -295,20 +261,20 @@ void ClangExpressionSourceCode::AddLocalVariableDecls(
 bool ClangExpressionSourceCode::GetText(
     std::string &text, ExecutionContext &exe_ctx, bool add_locals,
     bool force_add_all_locals, llvm::ArrayRef<std::string> modules) const {
-  const char *target_specific_defines = "typedef signed char BOOL;\n";
+  const char *target_specific_defines = "";
   std::string module_macros;
 
   Target *target = exe_ctx.GetTargetPtr();
   if (target) {
     if (target->GetArchitecture().GetMachine() == llvm::Triple::aarch64 ||
         target->GetArchitecture().GetMachine() == llvm::Triple::aarch64_32) {
-      target_specific_defines = "typedef bool BOOL;\n";
+      target_specific_defines = "";
     }
     if (target->GetArchitecture().GetMachine() == llvm::Triple::x86_64) {
       if (lldb::PlatformSP platform_sp = target->GetPlatform()) {
         static ConstString g_platform_ios_simulator("ios-simulator");
         if (platform_sp->GetPluginName() == g_platform_ios_simulator) {
-          target_specific_defines = "typedef bool BOOL;\n";
+          target_specific_defines = "";
         }
       }
     }

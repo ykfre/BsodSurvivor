@@ -8,7 +8,7 @@
 
 #ifndef liblldb_RegisterContextWindows_H_
 #define liblldb_RegisterContextWindows_H_
-
+#include <Windows.h>
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/lldb-forward.h"
 

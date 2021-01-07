@@ -977,10 +977,10 @@ bool SymbolFileDWARF::ParseImportedModules(
 
   for (DWARFDIE child_die = die.GetFirstChild(); child_die;
        child_die = child_die.GetSibling()) {
-    if (child_die.Tag() != DW_TAG_imported_declaration)
+    if (child_die.Tag() != DW_TAG_module)
       continue;
 
-    DWARFDIE module_die = child_die.GetReferencedDIE(DW_AT_import);
+    DWARFDIE module_die = child_die;
     if (module_die.Tag() != DW_TAG_module)
       continue;
 

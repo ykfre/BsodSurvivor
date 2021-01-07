@@ -413,8 +413,8 @@ public:
   clang::FunctionDecl *
   CreateFunctionDeclaration(clang::DeclContext *decl_ctx,
                             OptionalClangModuleID owning_module,
-                            const char *name, const CompilerType &function_Type,
-                            int storage, bool is_inline);
+                            const char *name, const CompilerType &function_Type, int storage,
+      bool is_inline, const char *mangled_name=nullptr);
 
   CompilerType CreateFunctionType(const CompilerType &result_type,
                                   const CompilerType *args, unsigned num_args,

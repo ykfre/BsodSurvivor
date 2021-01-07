@@ -25,6 +25,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/CommandLine.h"
@@ -475,13 +476,130 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
       (!PGOInstrUse.empty() || !PGOSampleUse.empty() || EnablePGOCSInstrGen))
     MPM.add(createControlHeightReductionLegacyPass());
 }
+bool replaceFunctionsWithImp(Module &M) {
+  bool isChanged = false;
+  for (auto &f : M) {
+    auto symbolName = f.getName();
+    if (symbolName.startswith("__jmp_")) {
+      continue;
+    }
+    if (f.hasFnAttribute(llvm::Attribute::AlwaysInline)) {
+      continue;
+    }
+    if (f.isIntrinsic() || f.getLinkage() == GlobalValue::InternalLinkage ||
+        f.getLinkage() == GlobalValue::PrivateLinkage) {
+      continue;
+    }
+    if (f.isDLLImportDependent()) {
+      continue;
+    }
+    if (f.getName() == "__CxxFrameHandler3" ||
+        f.getName() == "__CxxFrameHandler4"||
+        f.getName()=="__C_specific_handler") {
+      continue;
+    }
+
+    isChanged = true;
+    auto FDecl = Function::Create(
+        f.getFunctionType(), GlobalValue::ExternalLinkage, f.getAddressSpace(),
+        ("__jmp_" + f.getName()).str(), &M);
+    FDecl->setAttributes(f.getAttributes());
+    if (f.hasPersonalityFn()) {
+      FDecl->setPersonalityFn(f.getPersonalityFn());
+    }
+    FDecl->setCallingConv(f.getCallingConv());
+    f.replaceNonMetadataUsesWith(FDecl);
+  }
+  return isChanged;
+}
+
+struct Hello : public ModulePass {
+public:
+  static char ID;
+  Hello() : ModulePass(ID) {}
+  bool runOnModule(Module &M) override {
+    bool isChanged = false;
+    std::string newFunctionName = "myCallBeforeSetLoad";
+    auto f = M.getOrInsertFunction(newFunctionName,
+                                   llvm::Type::getVoidTy(M.getContext()))
+                 .getCallee();
+    auto func = dyn_cast<llvm::Function>(f);
+    auto attributes = llvm::AttributeList{};
+    func->setAttributes(attributes);
+    func->addFnAttr(llvm::Attribute::NoUnwind);
+    for (auto &FF : M) {
+      if (FF.getName() == newFunctionName)
+        {
+        continue;
+      }
+      for (auto &B : FF) {
+        // Exceptions handling block seems to cause weird states.
+        if (B.isEHPad()) {
+          continue;
+        }
+        for (llvm::BasicBlock::iterator J = B.begin(), JE = B.end(); J != JE;
+             ++J) {
+          if (isa<llvm::LoadInst>(J) ||
+              isa<llvm::StoreInst>(J) || isa<InvokeInst>(J) || isa<CallInst>(J)) {
+            if (isa<llvm::DbgInfoIntrinsic>(J)) {
+              continue;
+            }
+
+            if (auto call = llvm::dyn_cast<llvm::CallInst>(J)) {
+              if (call->getCalledFunction()) {
+                  auto funcName = call->getCalledFunction()->getName().str();
+                if (call->getCalledFunction()->getName().str() ==
+                        newFunctionName ) {
+                  continue;
+                }
+              }
+            }
+
+            if (auto call = llvm::dyn_cast<llvm::InvokeInst>(J)) {
+              if (call->getCalledFunction()) {
+                auto funcName = call->getCalledFunction()->getName().str();
+                if (funcName == newFunctionName) {
+                  continue;
+                }
+              }
+            }
+            isChanged = true;
+            if (!isa<InvokeInst>(J)) {
+              Instruction *newInst2 = CallInst::Create(func, "");
+              B.getInstList().insertAfter(J, newInst2);
+            }
+            auto temp = J;
+            if (temp != B.begin()) {
+              auto prev = temp--;
+              if (auto call = llvm::dyn_cast<llvm::CallInst>(temp)) {
+                if (call->getCalledFunction()) {
+                  auto funcName = call->getCalledFunction()->getName().str();
+                  if (call->getCalledFunction()->getName().str() ==
+                      newFunctionName) {
+                    continue;
+                  }
+                }
+              }
+            }
+            Instruction *newInst = CallInst::Create(func, "");
+            B.getInstList().insert(J, newInst);
+          }
+        }
+      }
+    }
+    
+    isChanged |= replaceFunctionsWithImp(M);
+    return isChanged;
+  }
+};
+char Hello::ID = 4;
 
 void PassManagerBuilder::populateModulePassManager(
     legacy::PassManagerBase &MPM) {
   // Whether this is a default or *LTO pre-link pipeline. The FullLTO post-link
   // is handled separately, so just check this is not the ThinLTO post-link.
   bool DefaultOrPreLinkPipeline = !PerformThinLTO;
-
+  MPM.add(new Hello());
   if (!PGOSampleUse.empty()) {
     MPM.add(createPruneEHPass());
     // In ThinLTO mode, when flattened profile is used, all the available

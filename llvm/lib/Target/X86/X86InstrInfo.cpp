@@ -3749,7 +3749,8 @@ void X86InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
       (Subtarget.getFrameLowering()->getStackAlign() >= Alignment) ||
       RI.canRealignStack(MF);
   unsigned Opc = getLoadRegOpcode(DestReg, RC, isAligned, Subtarget);
-  addFrameReference(BuildMI(MBB, MI, DebugLoc(), get(Opc), DestReg), FrameIdx);
+  auto mi = BuildMI(MBB, MI, MI->getDebugLoc(), get(Opc), DestReg);
+  addFrameReference(mi, FrameIdx);
 }
 
 bool X86InstrInfo::analyzeCompare(const MachineInstr &MI, Register &SrcReg,

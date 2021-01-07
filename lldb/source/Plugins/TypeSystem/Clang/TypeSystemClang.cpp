@@ -1999,7 +1999,7 @@ TypeSystemClang::GetDeclarationName(const char *name,
 FunctionDecl *TypeSystemClang::CreateFunctionDeclaration(
     clang::DeclContext *decl_ctx, OptionalClangModuleID owning_module,
     const char *name, const CompilerType &function_clang_type, int storage,
-    bool is_inline) {
+    bool is_inline, const char *mangled_name) {
   FunctionDecl *func_decl = nullptr;
   ASTContext &ast = getASTContext();
   if (!decl_ctx)
@@ -2019,6 +2019,9 @@ FunctionDecl *TypeSystemClang::CreateFunctionDeclaration(
   func_decl->setHasWrittenPrototype(hasWrittenPrototype);
   func_decl->setConstexprKind(isConstexprSpecified ? CSK_constexpr
                                                    : CSK_unspecified);
+  if (!mangled_name) {
+    func_decl->addAttr(OpenCLKernelAttr::Create(ast));
+  }
   SetOwningModule(func_decl, owning_module);
   if (func_decl)
     decl_ctx->addDecl(func_decl);

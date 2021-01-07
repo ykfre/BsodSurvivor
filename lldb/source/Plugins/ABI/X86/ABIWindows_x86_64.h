@@ -22,6 +22,11 @@ public:
                           lldb::addr_t returnAddress,
                           llvm::ArrayRef<lldb::addr_t> args) const override;
 
+    bool PrepareTrivialCall(lldb_private::Thread &thread, lldb::addr_t sp,
+                          lldb::addr_t functionAddress,
+                          lldb::addr_t returnAddress, llvm::Type &prototype,
+                          llvm::ArrayRef<CallArgument> args) const override;
+
   bool GetArgumentValues(lldb_private::Thread &thread,
                          lldb_private::ValueList &values) const override;
 
@@ -78,7 +83,9 @@ public:
   uint32_t GetPluginVersion() override;
 
 protected:
-  void CreateRegisterMapIfNeeded();
+  lldb::ValueObjectSP
+  GetReturnValueObjectImpl(lldb_private::Thread &thread,
+                           llvm::Type &retType) const override;
 
   lldb::ValueObjectSP
   GetReturnValueObjectSimple(lldb_private::Thread &thread,

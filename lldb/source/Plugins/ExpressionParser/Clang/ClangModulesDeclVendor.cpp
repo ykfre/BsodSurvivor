@@ -6,7 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/Decl.h"
+#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
+
 #include "clang/Basic/TargetInfo.h"
+#include "lldb/Core/Module.h"
+#include "clang/AST/DeclBase.h"
+#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
@@ -18,6 +24,8 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Threading.h"
+#include <iostream>
+#include <mutex>
 
 #include "ClangHost.h"
 #include "ClangModulesDeclVendor.h"
@@ -35,7 +43,7 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/StreamString.h"
-
+#include "lldb/Target/Target.h"
 #include <memory>
 #include <mutex>
 
@@ -92,11 +100,13 @@ public:
   bool AddModulesForCompileUnit(CompileUnit &cu, ModuleVector &exported_modules,
                                 Stream &error_stream) override;
 
-  uint32_t FindDecls(ConstString name, bool append, uint32_t max_matches,
+  uint32_t FindDecls(clang::DeclContext *context, ConstString name, bool append,
+                     uint32_t max_matches,
                      std::vector<CompilerDecl> &decls) override;
 
   void ForEachMacro(const ModuleVector &modules,
                     std::function<bool(const std::string &)> handler) override;
+
 private:
   void
   ReportModuleExportsHelper(std::set<ClangModulesDeclVendor::ModuleID> &exports,
@@ -251,7 +261,7 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
   }
 
   clang::HeaderSearch &HS =
-    m_compiler_instance->getPreprocessor().getHeaderSearchInfo();
+      m_compiler_instance->getPreprocessor().getHeaderSearchInfo();
 
   if (module.search_path) {
     auto path_begin = llvm::sys::path::begin(module.search_path.GetStringRef());
@@ -259,9 +269,7 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
     auto sysroot_begin = llvm::sys::path::begin(module.sysroot.GetStringRef());
     auto sysroot_end = llvm::sys::path::end(module.sysroot.GetStringRef());
     // FIXME: Use C++14 std::equal(it, it, it, it) variant once it's available.
-    bool is_system_module = (std::distance(path_begin, path_end) >=
-                             std::distance(sysroot_begin, sysroot_end)) &&
-                            std::equal(sysroot_begin, sysroot_end, path_begin);
+    bool is_system_module = false;
     // No need to inject search paths to modules in the sysroot.
     if (!is_system_module) {
       auto error = [&]() {
@@ -279,7 +287,7 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
       auto *file = HS.lookupModuleMapFile(*dir, is_framework);
       if (!file)
         return error();
-      if (!HS.loadModuleMapFile(file, is_system))
+      if (HS.loadModuleMapFile(file, is_system))
         return error();
     }
   }
@@ -297,54 +305,53 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
     clang::SourceManager &source_manager =
         m_compiler_instance->getASTContext().getSourceManager();
 
-    for (ConstString path_component : module.path) {
-      clang_path.push_back(std::make_pair(
-          &m_compiler_instance->getASTContext().Idents.get(
-              path_component.GetStringRef()),
-          source_manager.getLocForStartOfFile(source_manager.getMainFileID())
-              .getLocWithOffset(m_source_location_index++)));
-    }
+for (ConstString path_component : module.path) {
+    clang_path.push_back(std::make_pair(
+        &m_compiler_instance->getASTContext().Idents.get(
+            path_component.GetStringRef()),
+        source_manager.getLocForStartOfFile(source_manager.getMainFileID())
+        .getLocWithOffset(m_source_location_index++)));
+}
   }
 
-  StoringDiagnosticConsumer *diagnostic_consumer =
-      static_cast<StoringDiagnosticConsumer *>(
+  StoringDiagnosticConsumer* diagnostic_consumer =
+      static_cast<StoringDiagnosticConsumer*>(
           m_compiler_instance->getDiagnostics().getClient());
 
   diagnostic_consumer->ClearDiagnostics();
 
-  clang::Module *top_level_module = DoGetModule(clang_path.front(), false);
-
+  clang::Module* top_level_module = DoGetModule(clang_path.front(), false);
   if (!top_level_module) {
-    diagnostic_consumer->DumpDiagnostics(error_stream);
-    error_stream.Printf("error: Couldn't load top-level module %s\n",
-                        module.path.front().AsCString());
-    return false;
-  }
-
-  clang::Module *submodule = top_level_module;
-
-  for (auto &component : llvm::ArrayRef<ConstString>(module.path).drop_front()) {
-    submodule = submodule->findSubmodule(component.GetStringRef());
-    if (!submodule) {
       diagnostic_consumer->DumpDiagnostics(error_stream);
-      error_stream.Printf("error: Couldn't load submodule %s\n",
-                          component.GetCString());
+      error_stream.Printf("error: Couldn't load top-level module %s\n",
+          module.path.front().AsCString());
       return false;
-    }
   }
 
-  clang::Module *requested_module = DoGetModule(clang_path, true);
+  clang::Module* submodule = top_level_module;
 
+  for (auto& component :
+      llvm::ArrayRef<ConstString>(module.path).drop_front()) {
+      submodule = submodule->findSubmodule(component.GetStringRef());
+      if (!submodule) {
+          diagnostic_consumer->DumpDiagnostics(error_stream);
+          error_stream.Printf("error: Couldn't load submodule %s\n",
+              component.GetCString());
+          return false;
+      }
+  }
+
+  clang::Module* requested_module = DoGetModule(clang_path, true);
   if (requested_module != nullptr) {
-    if (exported_modules) {
-      ReportModuleExports(*exported_modules, requested_module);
-    }
+      if (exported_modules) {
+          ReportModuleExports(*exported_modules, requested_module);
+      }
 
-    m_imported_modules[imported_module] = requested_module;
+      m_imported_modules[imported_module] = requested_module;
 
-    m_enabled = true;
+      m_enabled = true;
 
-    return true;
+      return true;
   }
 
   return false;
@@ -352,40 +359,177 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
 
 bool ClangModulesDeclVendor::LanguageSupportsClangModules(
     lldb::LanguageType language) {
-  switch (language) {
-  default:
-    return false;
-  case lldb::LanguageType::eLanguageTypeC:
-  case lldb::LanguageType::eLanguageTypeC11:
-  case lldb::LanguageType::eLanguageTypeC89:
-  case lldb::LanguageType::eLanguageTypeC99:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_03:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_11:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_14:
-  case lldb::LanguageType::eLanguageTypeObjC:
-  case lldb::LanguageType::eLanguageTypeObjC_plus_plus:
-    return true;
-  }
+    switch (language) {
+    default:
+        return false;
+    case lldb::LanguageType::eLanguageTypeC:
+    case lldb::LanguageType::eLanguageTypeC11:
+    case lldb::LanguageType::eLanguageTypeC89:
+    case lldb::LanguageType::eLanguageTypeC99:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_03:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_11:
+    case lldb::LanguageType::eLanguageTypeC_plus_plus_14:
+    case lldb::LanguageType::eLanguageTypeObjC:
+    case lldb::LanguageType::eLanguageTypeObjC_plus_plus:
+        return true;
+    }
 }
 
 bool ClangModulesDeclVendorImpl::AddModulesForCompileUnit(
-    CompileUnit &cu, ClangModulesDeclVendor::ModuleVector &exported_modules,
-    Stream &error_stream) {
-  if (LanguageSupportsClangModules(cu.GetLanguage())) {
-    for (auto &imported_module : cu.GetImportedModules())
-      if (!AddModule(imported_module, &exported_modules, error_stream))
-        return false;
-  }
-  return true;
+    CompileUnit& cu, ClangModulesDeclVendor::ModuleVector& exported_modules,
+    Stream& error_stream) {
+    if (LanguageSupportsClangModules(cu.GetLanguage())) {
+        for (auto& imported_module : cu.GetImportedModules())
+            if (!AddModule(imported_module, &exported_modules, error_stream))
+                return false;
+    }
+    return true;
 }
 
 // ClangImporter::lookupValue
+class ExampleVisitor : public clang::RecursiveASTVisitor<ExampleVisitor> {
+public:
+    ExampleVisitor(const std::string& wantedDeclName, clang::DeclContext* context) {
+        m_wantedDeclName = wantedDeclName;
+        m_context = context;
+    }
 
-uint32_t
-ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
-                                      uint32_t max_matches,
-                                      std::vector<CompilerDecl> &decls) {
+    std::vector<clang::NamedDecl*> getWatnedDecls(clang::ASTContext& AST) {
+        if (s_cached_decls.empty()) {
+            TraverseAST(AST);
+        }
+
+        std::vector<clang::NamedDecl*> wanted_decls;
+        for (const auto& decl : s_cached_decls) {
+
+
+      auto context = m_context;
+      auto declContext = decl->getDeclContext();
+      auto shouldMoveToNextDecl = false;
+      while (context && declContext) {
+        if ((nullptr != llvm::dyn_cast < clang::NamespaceDecl>(context)) !=
+            (nullptr != llvm::dyn_cast < clang::NamespaceDecl>(declContext))) {
+          break;
+        } else if (llvm::dyn_cast<clang::NamespaceDecl>(context)) {
+          if (llvm::dyn_cast<clang::NamedDecl>(context)
+                  ->getDeclName()
+                  .isIdentifier()) {
+            if (llvm::dyn_cast<clang::NamespaceDecl>(context)->getName() !=
+                llvm::dyn_cast<clang::NamespaceDecl>(declContext)->getName()) {
+              shouldMoveToNextDecl = true;
+              break;
+            }
+          }
+        } else {
+          break;
+        }
+        context = context->getParent();
+        declContext = declContext->getParent();
+      }
+      if (shouldMoveToNextDecl) {
+        continue;
+      }
+      if (auto var = llvm::dyn_cast<clang::ClassTemplateDecl>(decl)) {
+        if (var->isThisDeclarationADefinition()) {
+          if (m_wantedDeclName == var->getTemplatedDecl()->getName().str()) {
+            wanted_decls.push_back(decl);
+          }
+        }
+      } else if (auto var = llvm::dyn_cast<
+                     clang::ClassTemplatePartialSpecializationDecl>(decl)) {
+        if (var->isThisDeclarationADefinition()) {
+
+          auto templated = var->getSpecializedTemplate()->getTemplatedDecl();
+          if (m_wantedDeclName == templated->getName()) {
+            wanted_decls.push_back(decl);
+          }
+        }
+      } else if (auto var =
+                     llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(
+                         decl)) {
+        if (var->isThisDeclarationADefinition()) {
+
+          auto templated = var->getSpecializedTemplate()
+                               ->getTemplatedDecl()
+                               ->getName()
+                               .str();
+          if (m_wantedDeclName == templated) {
+            wanted_decls.push_back(decl);
+          }
+        }
+      } else {
+        if (decl->getDeclName().isIdentifier() && m_wantedDeclName == decl->getName()) {
+          wanted_decls.push_back(decl);
+        }
+      }
+    }
+    return wanted_decls;
+  }
+
+   bool TraverseCXXRecordDecl(clang::CXXRecordDecl *decl) {
+
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
+        decl->isThisDeclarationADefinition()) {
+      s_cached_decls.push_back(decl);
+    }
+    return clang::RecursiveASTVisitor<ExampleVisitor>::TraverseCXXRecordDecl(decl);
+  }
+
+  bool TraverseClassTemplateDecl(clang::ClassTemplateDecl *decl) {
+
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
+        decl->isThisDeclarationADefinition()) {
+      s_cached_decls.push_back(decl);
+    }
+    return clang::RecursiveASTVisitor<
+        ExampleVisitor>::TraverseClassTemplateDecl(decl);
+  }
+
+  bool TraverseClassTemplatePartialSpecializationDecl(
+      clang::ClassTemplatePartialSpecializationDecl *decl) {
+
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
+        decl->isThisDeclarationADefinition()) {
+      s_cached_decls.push_back(decl);
+    }
+    return clang::RecursiveASTVisitor<
+        ExampleVisitor>::TraverseClassTemplatePartialSpecializationDecl(decl);
+  }
+
+  bool TraverseClassTemplateSpecializationDecl(
+      clang::ClassTemplateSpecializationDecl *decl) {
+
+    if (decl && dynamic_cast<clang::NamedDecl *>(decl) &&
+        decl->isThisDeclarationADefinition()) {
+      s_cached_decls.push_back(decl);
+    }
+    return clang::RecursiveASTVisitor<
+        ExampleVisitor>::TraverseClassTemplateSpecializationDecl(decl);
+  }
+
+   bool TraverseDecl(clang::Decl *decl) {
+    if (decl && llvm::dyn_cast<clang::FunctionDecl>(decl) &&
+        (!llvm::dyn_cast<clang::CXXMethodDecl>(decl) ||
+         (nullptr != decl->getDeclContext() &&
+          llvm::dyn_cast<clang::NamespaceDecl>(decl->getDeclContext())))) {
+      if (llvm::dyn_cast<clang::NamedDecl>(decl)) {
+        s_cached_decls.push_back(llvm::dyn_cast<clang::NamedDecl>(decl));
+      }
+    }
+
+    return clang::RecursiveASTVisitor<ExampleVisitor>::TraverseDecl(decl);
+  }
+  std::string m_wantedDeclName;
+  clang::DeclContext *m_context = nullptr;
+  thread_local static std::vector<clang::NamedDecl *> s_cached_decls;
+};
+
+thread_local std::vector<clang::NamedDecl *> ExampleVisitor::s_cached_decls;
+
+uint32_t ClangModulesDeclVendorImpl::FindDecls(
+    clang::DeclContext *context, ConstString name, bool append,
+    uint32_t max_matches, std::vector<CompilerDecl> &decls) {
   if (!m_enabled) {
     return 0;
   }
@@ -395,6 +539,10 @@ ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
 
   clang::IdentifierInfo &ident =
       m_compiler_instance->getASTContext().Idents.get(name.GetStringRef());
+
+  ExampleVisitor example(name.GetStringRef().str(), context);
+  auto wanted_decls =
+      example.getWatnedDecls(m_compiler_instance->getASTContext());
 
   clang::LookupResult lookup_result(
       m_compiler_instance->getSema(), clang::DeclarationName(&ident),
@@ -406,8 +554,12 @@ ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
           m_compiler_instance->getASTContext().getTranslationUnitDecl()));
 
   uint32_t num_matches = 0;
+  std::vector<clang::NamedDecl *> decls_result(lookup_result.begin(),
+                                               lookup_result.end());
+  decls_result.insert(decls_result.begin(), wanted_decls.begin(),
+                      wanted_decls.end());
 
-  for (clang::NamedDecl *named_decl : lookup_result) {
+  for (clang::NamedDecl *named_decl : decls_result) {
     if (num_matches >= max_matches)
       return num_matches;
 
@@ -597,6 +749,9 @@ ClangModulesDeclVendorImpl::DoGetModule(clang::ModuleIdPath path,
 
 static const char *ModuleImportBufferName = "LLDBModulesMemoryBuffer";
 
+extern bool getCompileSettingsFromSection(const std::string &exe_path, lldb_private::Target &target,
+                     clang::CompilerInstance &CI);
+
 lldb_private::ClangModulesDeclVendor *
 ClangModulesDeclVendor::Create(Target &target) {
   // FIXME we should insure programmatically that the expression parser's
@@ -706,6 +861,18 @@ ClangModulesDeclVendor::Create(Target &target) {
   instance->createFileManager(FileSystem::Instance().GetVirtualFileSystem());
   instance->setDiagnostics(diagnostics_engine.get());
   instance->setInvocation(invocation);
+  auto PCHOps = instance->getPCHContainerOperations();
+  PCHOps->registerWriter(std::make_unique<clang::ObjectFilePCHContainerWriter>());
+  PCHOps->registerReader(std::make_unique<clang::ObjectFilePCHContainerReader>());
+  if (!target.CalculateProcess()) {
+    return nullptr;
+  }
+  std::string exe_path = target.CalculateProcess()->getPath();
+  if (exe_path.empty()) {
+    exe_path = target.GetExecutableModule()->GetFileSpec().GetPath();
+  }
+  bool isSucceededToHaveSettingsFromSection =
+      getCompileSettingsFromSection(exe_path, target, *instance);
 
   std::unique_ptr<clang::FrontendAction> action(new clang::SyntaxOnlyAction);
 
@@ -720,7 +887,7 @@ ClangModulesDeclVendor::Create(Target &target) {
   if (!action->BeginSourceFile(*instance,
                                instance->getFrontendOpts().Inputs[0]))
     return nullptr;
-
+  
   instance->getPreprocessor().enableIncrementalProcessing();
 
   instance->createASTReader();
@@ -734,10 +901,13 @@ ClangModulesDeclVendor::Create(Target &target) {
   instance->getPreprocessor().EnterMainSourceFile();
   parser->Initialize();
 
+   
+
+  
+
   clang::Parser::DeclGroupPtrTy parsed;
 
-  while (!parser->ParseTopLevelDecl(parsed))
-    ;
+  while (!parser->ParseTopLevelDecl(parsed));
 
   return new ClangModulesDeclVendorImpl(std::move(diagnostics_engine),
                                         std::move(invocation),

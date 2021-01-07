@@ -148,7 +148,7 @@ LLVMUserExpression::DoExecute(DiagnosticManager &diagnostic_manager,
                                 __FUNCTION__);
       return lldb::eExpressionSetupError;
     }
-
+    
     lldb::ThreadPlanSP call_plan_sp(new ThreadPlanCallUserExpression(
         exe_ctx.GetThreadRef(), wrapper_address, args, options,
         shared_ptr_to_me));
@@ -245,7 +245,7 @@ LLVMUserExpression::DoExecute(DiagnosticManager &diagnostic_manager,
 
   if (FinalizeJITExecution(diagnostic_manager, exe_ctx, result,
                            function_stack_bottom, function_stack_top)) {
-    return lldb::eExpressionCompleted;
+  return lldb::eExpressionCompleted;
   } else {
     return lldb::eExpressionResultUnavailable;
   }

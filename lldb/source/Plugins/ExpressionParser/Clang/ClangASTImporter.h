@@ -195,6 +195,9 @@ public:
       setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
     }
 
+        llvm::Expected<clang::Decl *> handleStdHandler(clang::Decl *From);
+    llvm::Expected<clang::Decl *> handleTemplate(clang::Decl *From);
+
     /// Scope guard that attaches a CxxModuleHandler to an ASTImporterDelegate
     /// and deattaches it at the end of the scope. Supports being used multiple
     /// times on the same ASTImporterDelegate instance in nested scopes.

@@ -21,7 +21,7 @@ std::vector<CompilerType> DeclVendor::FindTypes(ConstString name,
   // TypeSystem.
   std::vector<CompilerType> ret;
   std::vector<CompilerDecl> decls;
-  if (FindDecls(name, /*append*/ true, max_matches, decls))
+  if (FindDecls(nullptr,name, /*append*/ true, max_matches, decls))
     for (auto decl : decls)
       if (auto type =
               decl.GetTypeSystem()->GetTypeForDecl(decl.GetOpaqueDecl()))

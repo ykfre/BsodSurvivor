@@ -14,6 +14,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <memory>
+#include <iostream>
 
 namespace llvm {
 class raw_pwrite_stream;

@@ -216,6 +216,110 @@ static void calculateStateNumbersForInvokes(const Function *Fn,
   }
 }
 
+// See comments below for calculateSEHStateForBlocks().
+// State - incoming State of normal paths
+void llvm::calculateCXXStateForBlocks(const BasicBlock* BB, int State,
+  WinEHFuncInfo& EHInfo)
+{
+  if (EHInfo.BlockToStateMap.count(BB) && EHInfo.BlockToStateMap[BB] <= State)
+    return;  // skip already visited or EHPad
+  const llvm::Instruction* I = BB->getFirstNonPHI();
+  const llvm::Instruction* TI = BB->getTerminator();
+  if (I->isEHPad())
+    State = EHInfo.EHPadStateMap[I];
+  EHInfo.BlockToStateMap[BB] = State;  // Record state, also flag visiting
+
+  if ((isa<CleanupReturnInst>(TI) || isa<CatchReturnInst>(TI)) &&
+    State > 0) {
+    // Retrive the new State
+    State = EHInfo.CxxUnwindMap[State].ToState;  // Retrive next State
+  }
+  else if (isa<InvokeInst>(TI)) {
+    const Value* Callee(cast<InvokeInst>(TI)->getCalledFunction());
+    const Function* Fn = dyn_cast<Function>(Callee);
+    if (Fn && Fn->isIntrinsic() &&
+      (Fn->getIntrinsicID() == Intrinsic::eha_scope_begin ||
+        Fn->getIntrinsicID() == Intrinsic::seh_try_begin))
+      // Retrive the new State from eha_scope_begin
+      State = EHInfo.InvokeStateMap[cast<InvokeInst>(TI)];
+    else if (Fn && Fn->isIntrinsic() &&
+      (Fn->getIntrinsicID() == Intrinsic::eha_scope_end ||
+        Fn->getIntrinsicID() == Intrinsic::seh_try_end)) {
+      // Handle the case of emitting too much of seh.try.end which is probably
+      // for now base class destructor.
+      if (State < 0) {
+        return;
+      }
+      // end of current state, retrive new state from UnwindMap
+      State = EHInfo.CxxUnwindMap[State].ToState;
+    }
+  }
+  // Continue traveling successors recursively
+  for (auto* SuccBB : successors(BB)) {
+    calculateCXXStateForBlocks(SuccBB, State, EHInfo);
+  }
+}
+
+// The central theory of this routine is based on the following:
+//   A _try scope is always a SEME (Single Entry Multiple Exits) region
+//     as jumping into a _try is not allowed
+//   The single entry must start with a seh_try_begin() invoke with a
+//     correct State number that is the initial state of the SEME.
+//   Through control-flow, state number is propagated into all blocks.
+//   Side exits marked by seh_try_end() will unwind to parent state via
+//     existing SEHUnwindMap[].
+//   Side exits can ONLY jump into parent scopes (lower state number).
+//   Thus, when a block succeeds various states from its predecessors,
+//     the lowest State triumphs others.
+//   If some exits flow to unreachable, propagation on those paths terminate,
+//     not affecting remaining blocks.
+void llvm::calculateSEHStateForBlocks(const BasicBlock* BB, int State,
+  WinEHFuncInfo& EHInfo)
+{
+  if (EHInfo.BlockToStateMap.count(BB) && EHInfo.BlockToStateMap[BB] <= State)
+    return;  // skip already visited by lower State
+
+  const llvm::Instruction* I = BB->getFirstNonPHI();
+  const llvm::Instruction* TI = BB->getTerminator();
+  if (I->isEHPad())
+    State = EHInfo.EHPadStateMap[I];
+  EHInfo.BlockToStateMap[BB] = State;  // Record state
+
+  if (isa<CatchPadInst>(I) && isa<CatchReturnInst>(TI)) {
+    const Constant* FilterOrNull =
+      cast<Constant>(cast<CatchPadInst>(I)->getArgOperand(0)->stripPointerCasts());
+    const Function* Filter = dyn_cast<Function>(FilterOrNull);
+    if (!Filter || !Filter->getName().startswith("__IsLocalUnwind"))
+      State = EHInfo.SEHUnwindMap[State].ToState;  // Retrive next State
+  }
+  else if ((isa<CleanupReturnInst>(TI) || isa<CatchReturnInst>(TI)) &&
+    State > 0) {
+    // Retrive the new State.
+    State = EHInfo.SEHUnwindMap[State].ToState;  // Retrive next State
+  }
+  else if (isa<InvokeInst>(TI)) {
+    const Value *Callee(cast<InvokeInst>(TI)->getCalledFunction());
+    const Function* Fn = dyn_cast<Function>(Callee);
+    if (Fn && Fn->isIntrinsic() && Fn->getIntrinsicID() == Intrinsic::seh_try_begin)
+      // Retrive the new State from seh_try_begin
+      State = EHInfo.InvokeStateMap[cast<InvokeInst>(TI)];
+    else if (Fn && Fn->isIntrinsic() &&
+             Fn->getIntrinsicID() == Intrinsic::seh_try_end) {
+      // Handle the case of emitting too much of seh.try.end which is probably
+      // for now base class destructor.
+      if (State < 0) {
+        return;
+      }
+      // end of current state, retrive new state from UnwindMap
+      State = EHInfo.SEHUnwindMap[State].ToState;
+    }
+  }
+  // Continue traveling successors recursively
+  for (auto* SuccBB : successors(BB)) {
+    calculateSEHStateForBlocks(SuccBB, State, EHInfo);
+  }
+}
+
 // Given BB which ends in an unwind edge, return the EHPad that this BB belongs
 // to. If the unwind edge came from an invoke, return null.
 static const BasicBlock *getEHPadFromPredecessor(const BasicBlock *BB,
@@ -255,6 +359,7 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
     }
     int TryLow = addUnwindMapEntry(FuncInfo, ParentState, nullptr);
     FuncInfo.EHPadStateMap[CatchSwitch] = TryLow;
+
     for (const BasicBlock *PredBlock : predecessors(BB))
       if ((PredBlock = getEHPadFromPredecessor(PredBlock,
                                                CatchSwitch->getParentPad())))
@@ -276,6 +381,7 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
 
     for (const auto *CatchPad : Handlers) {
       FuncInfo.FuncletBaseStateMap[CatchPad] = CatchLow;
+      FuncInfo.EHPadStateMap[CatchPad] = CatchLow;
       for (const User *U : CatchPad->users()) {
         const auto *UserI = cast<Instruction>(U);
         if (auto *InnerCatchSwitch = dyn_cast<CatchSwitchInst>(UserI)) {
@@ -309,7 +415,7 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
     auto *CleanupPad = cast<CleanupPadInst>(FirstNonPHI);
 
     // It's possible for a cleanup to be visited twice: it might have multiple
-    // cleanupret instructions.
+    // cleanupret invokeInstructionsToRemove.
     if (FuncInfo.EHPadStateMap.count(CleanupPad))
       return;
 
@@ -384,6 +490,7 @@ static void calculateSEHStateNumbers(WinEHFuncInfo &FuncInfo,
 
     // Everything in the __try block uses TryState as its parent state.
     FuncInfo.EHPadStateMap[CatchSwitch] = TryState;
+    FuncInfo.EHPadStateMap[CatchPad] = TryState;
     LLVM_DEBUG(dbgs() << "Assigning state #" << TryState << " to BB "
                       << CatchPadBB->getName() << '\n');
     for (const BasicBlock *PredBlock : predecessors(BB))
@@ -414,7 +521,7 @@ static void calculateSEHStateNumbers(WinEHFuncInfo &FuncInfo,
     auto *CleanupPad = cast<CleanupPadInst>(FirstNonPHI);
 
     // It's possible for a cleanup to be visited twice: it might have multiple
-    // cleanupret instructions.
+    // cleanupret invokeInstructionsToRemove.
     if (FuncInfo.EHPadStateMap.count(CleanupPad))
       return;
 
@@ -464,6 +571,12 @@ void llvm::calculateSEHStateNumbers(const Function *Fn,
   }
 
   calculateStateNumbersForInvokes(Fn, FuncInfo);
+  
+  bool IsEHa = Fn->getParent()->getModuleFlag("eh-asynch");
+  if (IsEHa) {
+    const BasicBlock * EntryBB = &(Fn->getEntryBlock());
+    calculateSEHStateForBlocks(EntryBB, -1, FuncInfo);
+  }
 }
 
 void llvm::calculateWinCXXEHStateNumbers(const Function *Fn,
@@ -482,6 +595,12 @@ void llvm::calculateWinCXXEHStateNumbers(const Function *Fn,
   }
 
   calculateStateNumbersForInvokes(Fn, FuncInfo);
+
+  bool IsEHa = Fn->getParent()->getModuleFlag("eh-asynch");
+  if (IsEHa) {
+    const BasicBlock * EntryBB = &(Fn->getEntryBlock());
+    calculateCXXStateForBlocks(EntryBB, -1, FuncInfo);
+  }
 }
 
 static int addClrEHHandler(WinEHFuncInfo &FuncInfo, int HandlerParentState,
@@ -745,7 +864,7 @@ void WinEHPrepare::demotePHIsOnFunclets(Function &F,
 
 void WinEHPrepare::cloneCommonBlocks(Function &F) {
   // We need to clone all blocks which belong to multiple funclets.  Values are
-  // remapped throughout the funclet to propagate both the new instructions
+  // remapped throughout the funclet to propagate both the new invokeInstructionsToRemove
   // *and* the new basic blocks themselves.
   for (auto &Funclets : FuncletBlocks) {
     BasicBlock *FuncletPadBB = Funclets.first;
@@ -770,7 +889,7 @@ void WinEHPrepare::cloneCommonBlocks(Function &F) {
                               << "\' for funclet \'" << FuncletPadBB->getName()
                               << "\'.\n");
 
-      // Create a new basic block and copy instructions into it!
+      // Create a new basic block and copy invokeInstructionsToRemove into it!
       BasicBlock *CBB =
           CloneBasicBlock(BB, VMap, Twine(".for.", FuncletPadBB->getName()));
       // Insert the clone immediately after the original to ensure determinism
@@ -818,10 +937,10 @@ void WinEHPrepare::cloneCommonBlocks(Function &F) {
                               << "\'.\n");
     }
 
-    // Loop over all of the instructions in this funclet, fixing up operand
+    // Loop over all of the invokeInstructionsToRemove in this funclet, fixing up operand
     // references as we go.  This uses VMap to do all the hard work.
     for (BasicBlock *BB : BlocksInFunclet)
-      // Loop over all instructions, fixing each one as we find it...
+      // Loop over all invokeInstructionsToRemove, fixing each one as we find it...
       for (Instruction &I : *BB)
         RemapInstruction(&I, VMap,
                          RF_IgnoreMissingLocals | RF_NoModuleLevelChanges);
@@ -995,7 +1114,7 @@ void WinEHPrepare::removeImplausibleInstructions(Function &F) {
           changeToUnreachable(&I, /*UseLLVMTrap=*/false);
         }
 
-        // There are no more instructions in the block (except for unreachable),
+        // There are no more invokeInstructionsToRemove in the block (except for unreachable),
         // we are done.
         break;
       }
@@ -1055,8 +1174,35 @@ void WinEHPrepare::verifyPreparedFunclets(Function &F) {
   }
 }
 #endif
-
+#include <ostream>
+#include <fstream>
 bool WinEHPrepare::prepareExplicitEH(Function &F) {
+  
+    std::vector<llvm::InvokeInst *> invokeInstructionsToRemove;
+    for (auto &block : F) {
+      for (auto &inst : block) {
+        if (dyn_cast<llvm::InvokeInst>(&inst) &&
+            dyn_cast<llvm::InvokeInst>(&inst)
+                    ->getUnwindDest()
+                    ->getTerminator() == nullptr) {
+          invokeInstructionsToRemove.push_back(dyn_cast<llvm::InvokeInst>(&inst));
+
+        }
+      }
+    }
+
+    for (auto &invokeInstToRemove : invokeInstructionsToRemove) {
+      CallInst *NewCall = createCallMatchingInvoke(invokeInstToRemove);
+      NewCall->takeName(invokeInstToRemove);
+      NewCall->insertBefore(invokeInstToRemove);
+      invokeInstToRemove->replaceAllUsesWith(NewCall);
+
+      // Follow the call by a branch to the normal destination.
+      BasicBlock *NormalDestBB = invokeInstToRemove->getNormalDest();
+      BranchInst::Create(NormalDestBB, invokeInstToRemove);
+      invokeInstToRemove->eraseFromParent();
+    }
+  
   // Remove unreachable blocks.  It is not valuable to assign them a color and
   // their existence can trick us into thinking values are alive when they are
   // not.
@@ -1268,4 +1414,8 @@ void WinEHFuncInfo::addIPToStateRange(const InvokeInst *II,
   LabelToStateMap[InvokeBegin] = std::make_pair(InvokeStateMap[II], InvokeEnd);
 }
 
+void WinEHFuncInfo::addIPToStateRange(int State, MCSymbol * InvokeBegin,
+  MCSymbol * InvokeEnd) {
+  LabelToStateMap[InvokeBegin] = std::make_pair(State, InvokeEnd);
+}
 WinEHFuncInfo::WinEHFuncInfo() {}

@@ -51,7 +51,7 @@
 
 using namespace clang;
 using namespace sema;
-
+extern bool g_is_lldb_execution;
 namespace {
   class UnqualUsingEntry {
     const DeclContext *Nominated;
@@ -564,8 +564,13 @@ void LookupResult::resolveKind() {
     if (isa<UnresolvedUsingValueDecl>(D)) {
       HasUnresolved = true;
     } else if (isa<TagDecl>(D)) {
-      if (HasTag)
-        Ambiguous = true;
+      if (HasTag) {
+        if (g_is_lldb_execution) {
+          Ambiguous = false;
+        } else {
+          Ambiguous = true;
+        }
+      }
       UniqueTagIndex = I;
       HasTag = true;
     } else if (isa<FunctionTemplateDecl>(D)) {
@@ -586,7 +591,11 @@ void LookupResult::resolveKind() {
           continue;
         }
 
-        Ambiguous = true;
+        if (g_is_lldb_execution) {
+          Ambiguous = false;
+        } else {
+          Ambiguous = true;
+        }
       }
       HasNonFunction = D;
     }
@@ -610,8 +619,13 @@ void LookupResult::resolveKind() {
             getContextForScopeMatching(OtherDecl)) &&
         canHideTag(OtherDecl))
       Decls[UniqueTagIndex] = Decls[--N];
-    else
-      Ambiguous = true;
+    else {
+      if (g_is_lldb_execution) {
+        Ambiguous = false;
+      } else {
+        Ambiguous = true;
+      }
+    }
   }
 
   // FIXME: This diagnostic should really be delayed until we're done with
@@ -622,8 +636,13 @@ void LookupResult::resolveKind() {
 
   Decls.set_size(N);
 
-  if (HasNonFunction && (HasFunction || HasUnresolved))
-    Ambiguous = true;
+  if (HasNonFunction && (HasFunction || HasUnresolved)) {
+    if (g_is_lldb_execution) {
+      Ambiguous = false;
+    } else {
+      Ambiguous = true;
+    }
+  }
 
   if (Ambiguous)
     setAmbiguous(LookupResult::AmbiguousReference);

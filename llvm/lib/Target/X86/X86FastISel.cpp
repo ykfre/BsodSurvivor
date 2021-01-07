@@ -773,9 +773,10 @@ bool X86FastISel::handleConstantAddresses(const Value *V, X86AddressMode &AM) {
         StubAM.GV = GV;
         StubAM.GVOpFlags = GVFlags;
 
+        auto debugLoc = DbgLoc;
         // Prepare for inserting code in the local-value area.
         SavePoint SaveInsertPt = enterLocalValueArea();
-
+        DbgLoc = debugLoc;
         if (TLI.getPointerTy(DL) == MVT::i64) {
           Opc = X86::MOV64rm;
           RC  = &X86::GR64RegClass;
@@ -1316,7 +1317,6 @@ bool X86FastISel::X86SelectLoad(const Instruction *I) {
     return false;
 
   const Value *Ptr = LI->getPointerOperand();
-
   X86AddressMode AM;
   if (!X86SelectAddress(Ptr, AM))
     return false;
@@ -3288,7 +3288,7 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
       if (!isTypeLegal(Val->getType(), VT) ||
           (VT.isVector() && VT.getVectorElementType() == MVT::i1))
         return false;
-      ResultReg = getRegForValue(Val);
+      ResultReg = getRegForValue(Val, true);
     }
 
     if (!ResultReg)

@@ -46,6 +46,7 @@ autoconf/autom4te.cache
 /CMakeSettings.json
 # CLion project configuration
 /.idea
+/temp
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
@@ -55,3 +56,42 @@ autoconf/autom4te.cache
 .vs
 # clangd index
 .clangd
+**.pdb
+**/*.lib
+**/*.ilk
+**/*.dll
+**/*.exe
+**/*.til
+**/*id1
+**/*id2
+**/*.nam
+**/*.obj
+**/*.idb
+**/*.enc
+**/*unsuccessfulbuild
+**/*lastbuildstate
+**/*.sh
+**/*.tlog
+**/*.vcxproj.filters
+**/*.vcxproj.user
+/**/*.log
+/**/*.recipe
+/**/*.exp
+/**/*FileListAbsolute.txt
+/**/googletest/**/*.py
+/**/googletest/**/*.md
+/**/googletest/**/*.bazel
+/**/googlemock/**/*.md
+/**/*googlemock/**/*.py
+/**/*googletest/samples/**
+/**/*googlemock/samples/**
+/**/*.id0
+/temp2/**
+/**/*.CopyComplete
+/**/obj/**
+/**/bin/**
+/installer/BsodSurvivor-cache/**
+/**/**.sys
+/bsodSurvivor/clangDriverExample/x64/**
+/**/*log.txt
+/**/*.msi

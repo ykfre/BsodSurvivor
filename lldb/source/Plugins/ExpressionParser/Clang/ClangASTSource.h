@@ -10,7 +10,7 @@
 #define LLDB_SOURCE_PLUGINS_EXPRESSIONPARSER_CLANG_CLANGASTSOURCE_H
 
 #include <set>
-
+#include <vector>
 #include "Plugins/ExpressionParser/Clang/ClangASTImporter.h"
 #include "Plugins/ExpressionParser/Clang/NameSearchContext.h"
 #include "lldb/Symbol/CompilerType.h"
@@ -220,7 +220,10 @@ public:
                                         clang::DeclarationName Name) override {
       return m_original.FindExternalVisibleDeclsByName(DC, Name);
     }
-
+    bool findByModules(clang::DeclContext *context, ConstString name,
+                       std::vector<clang::NamedDecl *> &decls) {
+      return m_original.findByModules(context, name, decls);
+    }
     void FindExternalLexicalDecls(
         const clang::DeclContext *DC,
         llvm::function_ref<bool(clang::Decl::Kind)> IsKindWeWant,
@@ -251,7 +254,6 @@ public:
       return m_original.StartTranslationUnit(Consumer);
     }
 
-  private:
     ClangASTSource &m_original;
   };
 
@@ -286,6 +288,9 @@ protected:
   void FindExternalVisibleDecls(NameSearchContext &context,
                                 lldb::ModuleSP module,
                                 CompilerDeclContext &namespace_decl);
+
+  bool findByModules(clang::DeclContext *context, ConstString name,
+                     std::vector<clang::NamedDecl *> &decls);
 
   /// Find all Objective-C methods matching a given selector.
   ///

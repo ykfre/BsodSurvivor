@@ -20,7 +20,8 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
-
+#include "llvm/Support/FileSystem.h"
+#include <fstream>
 using namespace lldb;
 using namespace lldb_private;
 
@@ -421,6 +422,18 @@ bool CommandObjectExpression::EvaluateExpression(llvm::StringRef expr,
   StackFrame *frame = exe_ctx.GetFramePtr();
 
   const EvaluateExpressionOptions options = GetEvalOptions(*target);
+  std::ifstream is(expr.str(), std::ifstream::binary);
+  std::string temp;
+  if (is) {
+    // get length of file:
+    is.seekg(0, is.end);
+    int length = is.tellg();
+    is.seekg(0, is.beg);
+    std::vector<char> real_expr(length);
+    is.read(real_expr.data(), real_expr.size());
+    temp = std::string(real_expr.begin(), real_expr.end());
+    expr = llvm::StringRef(temp);
+  }
   ExpressionResults success = target->EvaluateExpression(
       expr, frame, result_valobj_sp, options, &m_fixed_expression);
 

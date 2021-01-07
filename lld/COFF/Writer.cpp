@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Writer.h"
+#include "FiXChecksum.h"
 #include "Config.h"
 #include "DLL.h"
 #include "InputFiles.h"
@@ -65,10 +66,10 @@ $ nasm -fbin /tmp/DOSProgram.asm -o /tmp/DOSProgram.bin
 $ xxd -i /tmp/DOSProgram.bin
 */
 static unsigned char dosProgram[] = {
-  0x0e, 0x1f, 0xba, 0x0e, 0x00, 0xb4, 0x09, 0xcd, 0x21, 0xb8, 0x01, 0x4c,
-  0xcd, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6f, 0x67, 0x72,
-  0x61, 0x6d, 0x20, 0x63, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65,
-  0x20, 0x72, 0x75, 0x6e, 0x20, 0x69, 0x6e, 0x20, 0x44, 0x4f, 0x53, 0x20,
+    0x0e, 0x1f, 0xba, 0x0e, 0x00, 0xb4, 0x09, 0xcd, 0x21, 0xb8, 0x01, 0x4c,
+    0xcd, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6f, 0x67, 0x72,
+    0x61, 0x6d, 0x20, 0x63, 0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65,
+    0x20, 0x72, 0x75, 0x6e, 0x20, 0x69, 0x6e, 0x20, 0x44, 0x4f, 0x53, 0x20,
   0x6d, 0x6f, 0x64, 0x65, 0x2e, 0x24, 0x00, 0x00
 };
 static_assert(sizeof(dosProgram) % 8 == 0,
@@ -102,7 +103,7 @@ public:
   void writeTo(uint8_t *b) const override {
     auto *d = reinterpret_cast<debug_directory *>(b);
 
-    for (const std::pair<COFF::DebugType, Chunk *>& record : records) {
+    for (const std::pair<COFF::DebugType, Chunk *> &record : records) {
       Chunk *c = record.second;
       OutputSection *os = c->getOutputSection();
       uint64_t offs = os->getFileOff() + (c->getRVA() - os->getRVA());
@@ -281,6 +282,7 @@ private:
   OutputSection *didatSec;
   OutputSection *rsrcSec;
   OutputSection *relocSec;
+
   OutputSection *ctorsSec;
   OutputSection *dtorsSec;
 
@@ -614,7 +616,7 @@ void Writer::run() {
 
   if (fileSize > UINT32_MAX)
     fatal("image size (" + Twine(fileSize) + ") " +
-        "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
+          "exceeds maximum allowable size (" + Twine(UINT32_MAX) + ")");
 
   openFile(config->outputFile);
   if (config->is64()) {
@@ -642,6 +644,9 @@ void Writer::run() {
   ScopedTimer t2(diskCommitTimer);
   if (auto e = buffer->commit())
     fatal("failed to write the output file: " + toString(std::move(e)));
+  if(!fixChecksum(config->outputFile)) {
+    fatal("failed to fix the checksum of the output file: ");
+  }
 }
 
 static StringRef getOutputSectionName(StringRef name) {
@@ -877,7 +882,6 @@ void Writer::createSections() {
     PartialSection *pSec = it.second;
     StringRef name = getOutputSectionName(pSec->name);
     uint32_t outChars = pSec->characteristics;
-
     if (name == ".CRT") {
       // In link.exe, there is a special case for the I386 target where .CRT
       // sections are treated as if they have output characteristics DATA | R if
@@ -925,10 +929,15 @@ void Writer::createMiscChunks() {
     }
   }
 
+  // Create thunks for function jumpers symbols.
+  for (Chunk *c : symtab->functionJumpersChunks) {
+    textSec->addChunk(c);
+  }
+
   // Create thunks for locally-dllimported symbols.
   if (!symtab->localImportChunks.empty()) {
     for (Chunk *c : symtab->localImportChunks)
-      rdataSec->addChunk(c);
+      dataSec->addChunk(c);
   }
 
   // Create Debug Information Chunks
@@ -1559,7 +1568,10 @@ static void maybeAddAddressTakenFunction(SymbolRVASet &addressTakenSyms,
     // Thunks are always code, include them.
     addSymbolToRVASet(addressTakenSyms, cast<Defined>(s));
     break;
-
+  case Symbol::FunctionJumperKind:
+    // Thunks are always code, include them.
+    addSymbolToRVASet(addressTakenSyms, cast<Defined>(s));
+    break;
   case Symbol::DefinedRegularKind: {
     // This is a regular, defined, symbol from a COFF file. Mark the symbol as
     // address taken if the symbol type is function and it's in an executable
@@ -1770,12 +1782,36 @@ void Writer::insertCtorDtorSymbols() {
 // Handles /section options to allow users to overwrite
 // section attributes.
 void Writer::setSectionPermissions() {
+
+  
   for (auto &p : config->section) {
     StringRef name = p.first;
     uint32_t perm = p.second;
+    for (OutputSection *sec : outputSections) {
+      auto oldPermissions = sec->header.Characteristics;
+      if (!sec->name.startswith(".PAGE") &&
+          oldPermissions & IMAGE_SCN_MEM_READ && 
+          !(oldPermissions & IMAGE_SCN_MEM_DISCARDABLE)) {
+        sec->setPermissions(oldPermissions | IMAGE_SCN_MEM_NOT_PAGED);
+      }
+      if (oldPermissions == 0) {
+        sec->setPermissions(IMAGE_SCN_CNT_UNINITIALIZED_DATA |
+                            IMAGE_SCN_MEM_READ);
+      }
+    }
     for (OutputSection *sec : outputSections)
-      if (sec->name == name)
-        sec->setPermissions(perm);
+      if (sec->name == name) {
+        auto newPermissions = perm;
+        auto oldPerm = sec->header.Characteristics;
+        if (!((perm & IMAGE_SCN_MEM_EXECUTE) || (perm & IMAGE_SCN_MEM_WRITE) ||
+              (perm & IMAGE_SCN_MEM_READ))) {
+          newPermissions |=
+              ((oldPerm & IMAGE_SCN_MEM_EXECUTE) |
+               (oldPerm & IMAGE_SCN_MEM_WRITE) | 
+              (oldPerm & IMAGE_SCN_MEM_READ));
+        }
+        sec->setPermissions(newPermissions);
+      }
   }
 }
 

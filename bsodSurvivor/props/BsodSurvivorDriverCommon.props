@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup>
+    <CLToolExe>$(BSOD_SURVIVOR_DIR)\bin\clang-cl.exe</CLToolExe>
+    <LinkToolExe>$(BSOD_SURVIVOR_DIR)\bin\lld-link.exe</LinkToolExe>
+  </PropertyGroup>
+  
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnabled>false</VcpkgEnabled>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Driver_SpectreMitigation>false</Driver_SpectreMitigation>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <DebugInformationFormat Condition="'%(ClCompile.DebugInformationFormat)' == 'ProgramDatabase'">OldStyle</DebugInformationFormat>
+      <DebugInformationFormat Condition="'%(ClCompile.DebugInformationFormat)' == 'EditAndContinue'">OldStyle</DebugInformationFormat>
+      <SupportJustMyCode>false</SupportJustMyCode>
+      <CallingConvention>StdCall</CallingConvention>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ExceptionHandling>Async</ExceptionHandling>
+      <AdditionalOptions>-Wno-unused-command-line-argument -gdwarf -Xclang -fno-elide-constructors %(AdditionalOptions)</AdditionalOptions>
+      <ControlFlowGuard>false</ControlFlowGuard>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

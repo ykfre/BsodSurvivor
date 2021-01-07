@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Target/Target.h"
+#include "lldb/lldb-private.h"
 #include "Plugins/ExpressionParser/Clang/ClangModulesDeclVendor.h"
 #include "lldb/Breakpoint/BreakpointIDList.h"
 #include "lldb/Breakpoint/BreakpointPrecondition.h"
@@ -204,7 +205,7 @@ const lldb::ProcessSP &Target::CreateProcess(ListenerSP listener_sp,
 }
 
 const lldb::ProcessSP &Target::GetProcessSP() const { return m_process_sp; }
-
+lldb::ProcessSP &Target::GetProcessSP() { return m_process_sp; }
 lldb::REPLSP Target::GetREPL(Status &err, lldb::LanguageType language,
                              const char *repl_options, bool can_create) {
   if (language == eLanguageTypeUnknown) {
@@ -2309,13 +2310,14 @@ Target *Target::GetTargetFromContexts(const ExecutionContext *exe_ctx_ptr,
   return target;
 }
 
+extern bool g_is_lldb_execution;
 ExpressionResults Target::EvaluateExpression(
     llvm::StringRef expr, ExecutionContextScope *exe_scope,
     lldb::ValueObjectSP &result_valobj_sp,
     const EvaluateExpressionOptions &options, std::string *fixed_expression,
     ValueObject *ctx_obj) {
   result_valobj_sp.reset();
-
+  g_is_lldb_execution = true;
   ExpressionResults execution_results = eExpressionSetupError;
 
   if (expr.empty())
@@ -2362,7 +2364,16 @@ ExpressionResults Target::EvaluateExpression(
     execution_results = UserExpression::Evaluate(exe_ctx, options, expr, prefix,
                                                  result_valobj_sp, error,
                                                  fixed_expression, ctx_obj);
+    lldb_private::Log *log(lldb_private::GetLogIfAnyCategoriesSet(
+        LIBLLDB_LOG_EXPRESSIONS | LIBLLDB_LOG_STEP));
+    if (log) {
+      if (!error.Success()) {
+        LLDB_LOGF(log,
+                  "== Failed evaluate expression %s ==", error.AsCString());
+      }
+    }
   }
+
 
   return execution_results;
 }

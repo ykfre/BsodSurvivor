@@ -58,6 +58,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
@@ -1298,6 +1299,39 @@ bool SelectionDAGISel::PrepareEHLandingPad() {
   return true;
 }
 
+// Mark and Report IPToState for each Block under IsEHa
+void SelectionDAGISel::ReportIPToStateForBlocks(MachineFunction * MF)
+{
+  MachineModuleInfo & MMI = MF->getMMI();
+  llvm::WinEHFuncInfo * EHInfo = MF->getWinEHFuncInfo();
+  if (!EHInfo)
+    return;
+  for (auto MBBI = MF->begin(); MBBI != MF->end(); ++MBBI) {
+    MachineBasicBlock * MBB = &*MBBI;
+    const BasicBlock * BB = MBB->getBasicBlock();
+    int State = EHInfo->BlockToStateMap[BB];
+    if (true) {
+      // Report IP range only for blocks with Faulty inst
+      MCSymbol * BeginLabel = MMI.getContext().createTempSymbol();
+      MCSymbol * EndLabel = MMI.getContext().createTempSymbol();
+      EHInfo->addIPToStateRange(State, BeginLabel, EndLabel);
+      
+      // Insert EH Labels
+      auto MBBb = MBB->getFirstNonPHI();
+      BuildMI(*MBB, MBBb, SDB->getCurDebugLoc(),
+        TII->get(TargetOpcode::EH_LABEL)).addSym(BeginLabel);
+      auto MBBe = MBB->instr_end();
+      MachineInstr * MIb = &*(--MBBe);
+      // insert before (possible multiple) terminators
+      while (MIb->isTerminator())
+        MIb = &*(--MBBe);
+      ++MBBe;
+      BuildMI(*MBB, MBBe, SDB->getCurDebugLoc(),
+        TII->get(TargetOpcode::EH_LABEL)).addSym(EndLabel);
+    }
+  }
+}
+
 /// isFoldedOrDeadInstruction - Return true if the specified instruction is
 /// side-effect free and is either dead or folded into a generated instruction.
 /// Return false if it needs to be emitted.
@@ -1626,6 +1660,10 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
     FuncInfo->PHINodesToUpdate.clear();
     ElidedArgCopyInstrs.clear();
   }
+
+  // IsEHa: Report Block State under -EHa
+  if (Fn.getParent()->getModuleFlag("eh-asynch"))
+    ReportIPToStateForBlocks(MF);
 
   SP.copyToMachineFrameInfo(MF->getFrameInfo());
 

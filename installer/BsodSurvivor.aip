@@ -1,0 +1,700 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<DOCUMENT Type="Advanced Installer" CreateVersion="17.5" version="17.5" Modules="simple" RootPath="." Language="en" Id="{162A3199-2D9E-46BB-9BC9-550D6A0141DD}">
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiPropsComponent">
+    <ROW Property="AI_BITMAP_DISPLAY_MODE" Value="0"/>
+    <ROW Property="ALLUSERS" Value="1"/>
+    <ROW Property="ARPCOMMENTS" Value="This installer database contains the logic and data required to install [|ProductName]." ValueLocId="*"/>
+    <ROW Property="CTRLS" Value="1"/>
+    <ROW Property="Manufacturer" Value="Debugger"/>
+    <ROW Property="ProductCode" Value="1033:{9781F033-8209-4433-AC61-64CC6E8C1717} " Type="16"/>
+    <ROW Property="ProductLanguage" Value="1033"/>
+    <ROW Property="ProductName" Value="BsodSurvivor"/>
+    <ROW Property="ProductVersion" Value="0.1.0" Type="32"/>
+    <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND"/>
+    <ROW Property="UpgradeCode" Value="{DAD974B6-ED63-4B28-92D2-024222FFCC50}"/>
+    <ROW Property="VIEWREADME" Value="1" Type="4"/>
+    <ROW Property="WindowsType9X" MultiBuildValue="DefaultBuild:Windows 9x/ME" ValueLocId="-"/>
+    <ROW Property="WindowsType9XDisplay" MultiBuildValue="DefaultBuild:Windows 9x/ME" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT40" MultiBuildValue="DefaultBuild:Windows NT 4.0" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT40Display" MultiBuildValue="DefaultBuild:Windows NT 4.0" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT50" MultiBuildValue="DefaultBuild:Windows 2000" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT50Display" MultiBuildValue="DefaultBuild:Windows 2000" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT5X" MultiBuildValue="DefaultBuild:Windows XP/2003" ValueLocId="-"/>
+    <ROW Property="WindowsTypeNT5XDisplay" MultiBuildValue="DefaultBuild:Windows XP/2003" ValueLocId="-"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiDirsComponent">
+    <ROW Directory="APPDIR" Directory_Parent="TARGETDIR" DefaultDir="APPDIR:." IsPseudoRoot="1"/>
+    <ROW Directory="NewFolder_Dir" Directory_Parent="windbg_Dir" DefaultDir="EXTERN~1|external dlls"/>
+    <ROW Directory="TARGETDIR" DefaultDir="SourceDir"/>
+    <ROW Directory="VisualStudio_Dir" Directory_Parent="APPDIR" DefaultDir="VISUAL~1|visual studio"/>
+    <ROW Directory="__Dir" Directory_Parent="clang_Dir" DefaultDir="110~1.0|11.0.0"/>
+    <ROW Directory="bin_Dir" Directory_Parent="APPDIR" DefaultDir="bin"/>
+    <ROW Directory="clang_Dir" Directory_Parent="lib_Dir" DefaultDir="clang"/>
+    <ROW Directory="cuda_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="CUDA_W~1|cuda_wrappers"/>
+    <ROW Directory="example_Dir" Directory_Parent="APPDIR" DefaultDir="example"/>
+    <ROW Directory="include_Dir" Directory_Parent="__Dir" DefaultDir="include"/>
+    <ROW Directory="lib_Dir" Directory_Parent="APPDIR" DefaultDir="lib"/>
+    <ROW Directory="msis_Dir" Directory_Parent="example_Dir" DefaultDir="msis"/>
+    <ROW Directory="openmp_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="OPENMP~1|openmp_wrappers"/>
+    <ROW Directory="ppc_wrappers_Dir" Directory_Parent="include_Dir" DefaultDir="PPC_WR~1|ppc_wrappers"/>
+    <ROW Directory="windbg_Dir" Directory_Parent="APPDIR" DefaultDir="windbg"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCompsComponent">
+    <ROW Component="APPDIR" ComponentId="{53BA3195-6BFC-42AE-8B01-67F7C986D89C}" Directory_="APPDIR" Attributes="0"/>
+    <ROW Component="AllocateSpaceInStack.asm" ComponentId="{E87EEE94-1CE9-42FC-AA11-B82A52401420}" Directory_="lib_Dir" Attributes="0" KeyPath="clangAnalysis.lib" Type="0"/>
+    <ROW Component="BsodSurvivor.dll" ComponentId="{74268D5F-068E-42EA-B642-0BC26A64F845}" Directory_="windbg_Dir" Attributes="256" KeyPath="BsodSurvivor.dll"/>
+    <ROW Component="BsodSurvivorExtension.vsix" ComponentId="{ED7000A6-F536-4291-848B-41F7E3249B0F}" Directory_="VisualStudio_Dir" Attributes="0" KeyPath="BsodSurvivorExtension.vsix" Type="0"/>
+    <ROW Component="CreateFileHookDll.dll" ComponentId="{C392B690-2DF3-44A8-9FE5-FA20658665AF}" Directory_="windbg_Dir" Attributes="256" KeyPath="CreateFileHookDll.dll"/>
+    <ROW Component="EasyHook64.dll" ComponentId="{340CCBCA-40E5-4480-ABDB-EF6344790422}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="EasyHook64.dll"/>
+    <ROW Component="ProductInformation" ComponentId="{77756CD2-7601-48A3-A235-888A2D581933}" Directory_="APPDIR" Attributes="4" KeyPath="Version"/>
+    <ROW Component="ReadMe.md" ComponentId="{61BE62D2-3E47-4F58-9770-3630CFED37E2}" Directory_="APPDIR" Attributes="0" KeyPath="ReadMe.md" Type="0"/>
+    <ROW Component="abseil_dll.dll" ComponentId="{94AFA027-32EF-40A2-B957-1C9295B7E3B1}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="abseil_dll.dll"/>
+    <ROW Component="adxintrin.h" ComponentId="{743B46E5-30B3-4E06-897C-FDF58FAB90BF}" Directory_="include_Dir" Attributes="0" KeyPath="adxintrin.h" Type="0"/>
+    <ROW Component="algorithm" ComponentId="{C5AD1112-6BF0-4038-8CE4-5D782DFB0E38}" Directory_="cuda_wrappers_Dir" Attributes="0" KeyPath="algorithm" Type="0"/>
+    <ROW Component="cares.dll" ComponentId="{37B6AE8E-6752-4C46-85A7-E269F77EF1E2}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="cares.dll"/>
+    <ROW Component="clang.exe" ComponentId="{D1262EB2-4835-4F1A-91C8-1127D5328DBA}" Directory_="bin_Dir" Attributes="256" KeyPath="clang.exe"/>
+    <ROW Component="clang.exe_2" ComponentId="{4F7952C1-1409-4C88-A46D-88C26FAA5D12}" Directory_="bin_Dir" Attributes="256" KeyPath="clang.exe_2"/>
+    <ROW Component="clangDriverExample.sln" ComponentId="{CA36967E-0E31-448A-98BD-28D7FC0A6DD3}" Directory_="example_Dir" Attributes="0" KeyPath="clangDriverExample.sln" Type="0"/>
+    <ROW Component="clangcl.exe" ComponentId="{BC89FE0C-A9B7-462B-9AD1-C51D7949231A}" Directory_="bin_Dir" Attributes="256" KeyPath="clangcl.exe"/>
+    <ROW Component="clangcpp.exe" ComponentId="{E0FC3714-BE9A-42F7-B80A-F7452F0CFEC3}" Directory_="bin_Dir" Attributes="256" KeyPath="clangcpp.exe"/>
+    <ROW Component="cmath" ComponentId="{0DEA28B6-22FF-4242-8308-B9243FE4E150}" Directory_="openmp_wrappers_Dir" Attributes="0" KeyPath="cmath" Type="0"/>
+    <ROW Component="config.json" ComponentId="{5A97A63F-1BF1-4313-8EA2-029FA4893510}" Directory_="windbg_Dir" Attributes="0" KeyPath="config.json" Type="0"/>
+    <ROW Component="emmintrin.h" ComponentId="{912C40B3-2E3A-4D8A-A83E-4DB743E48761}" Directory_="ppc_wrappers_Dir" Attributes="0" KeyPath="emmintrin.h_2" Type="0"/>
+    <ROW Component="ld.lld.exe" ComponentId="{0070BDDE-88F3-4BBF-BDDD-4C9C5D20130B}" Directory_="bin_Dir" Attributes="256" KeyPath="ld.lld.exe"/>
+    <ROW Component="ld64.lld.exe" ComponentId="{1870E801-3E9C-4069-889F-11712414BD8A}" Directory_="bin_Dir" Attributes="256" KeyPath="ld64.lld.exe"/>
+    <ROW Component="libcrypto1_1x64.dll" ComponentId="{C6644ACA-4CB7-4686-BACA-1CA8F70D5B54}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="libcrypto1_1x64.dll"/>
+    <ROW Component="liblldb.dll" ComponentId="{073CC07E-2D97-4163-B789-EC573FD108E6}" Directory_="bin_Dir" Attributes="256" KeyPath="liblldb.dll"/>
+    <ROW Component="libprotobuf.dll" ComponentId="{D3EBD0EF-E4DE-4677-B0A8-D164583A7858}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="libprotobuf.dll"/>
+    <ROW Component="libprotobuflite.dll" ComponentId="{5A400F8C-9229-473A-888A-4B828BF0919D}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="libprotobuflite.dll"/>
+    <ROW Component="libssl1_1x64.dll" ComponentId="{7DDED1C0-A3E5-423E-AD09-09D495D7087D}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="libssl1_1x64.dll"/>
+    <ROW Component="lld.exe" ComponentId="{E6AE6878-3B3A-482C-8D2A-5FE35B1A7199}" Directory_="bin_Dir" Attributes="256" KeyPath="lld.exe"/>
+    <ROW Component="lldb.exe" ComponentId="{A41317C5-C625-4DAE-9A0B-DA2067578F97}" Directory_="bin_Dir" Attributes="256" KeyPath="lldb.exe"/>
+    <ROW Component="lldbdotest" ComponentId="{D3221310-F8BA-429F-9FAA-3E81439F72AE}" Directory_="bin_Dir" Attributes="0" KeyPath="lldbdotest" Type="0"/>
+    <ROW Component="lldlink.exe" ComponentId="{EA6A01CE-369C-4591-9CD8-F7D19E4369C8}" Directory_="bin_Dir" Attributes="256" KeyPath="lldlink.exe"/>
+    <ROW Component="llvmdwarfdump.exe" ComponentId="{F9B9AD17-69D8-4DF3-BA32-42AA7F6D8E8F}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmdwarfdump.exe"/>
+    <ROW Component="llvmobjcopy.exe" ComponentId="{A916B82F-B139-4ED0-A27E-D5252FF3DCBD}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmobjcopy.exe"/>
+    <ROW Component="llvmtblgen.exe" ComponentId="{6ADA4554-3DF4-414F-A048-7DE930626A63}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmtblgen.exe"/>
+    <ROW Component="module.modulemap" ComponentId="{1BE85D3E-CDAA-4F5F-ADA7-5EC6DF15FDFC}" Directory_="msis_Dir" Attributes="0" KeyPath="stdafx.h" Type="0"/>
+    <ROW Component="msvcp140.dll" ComponentId="{C49BD98B-18A8-4756-BFB1-60812CE13EE0}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="msvcp140.dll"/>
+    <ROW Component="msvcp140.dll_1" ComponentId="{171CA70B-0D9F-41FB-9EBD-71D1358CDEC5}" Directory_="bin_Dir" Attributes="256" KeyPath="msvcp140.dll_1"/>
+    <ROW Component="re2.dll" ComponentId="{FA51A8FF-911C-4C25-94E4-75D4535842B9}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="re2.dll"/>
+    <ROW Component="vcruntime140.dll" ComponentId="{4488B7AD-36AE-4AD2-9959-031BD48731D5}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="vcruntime140.dll"/>
+    <ROW Component="vcruntime140.dll_1" ComponentId="{18A0E956-5CC6-41B1-BA4B-5A70990497FA}" Directory_="bin_Dir" Attributes="256" KeyPath="vcruntime140.dll_1"/>
+    <ROW Component="vcruntime140_1.dll" ComponentId="{5961E215-AA86-4EFC-9413-B23466EB00DD}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="vcruntime140_1.dll"/>
+    <ROW Component="vcruntime140_1.dll_1" ComponentId="{3C7E9D85-736D-4912-B625-93B2F26AB7BC}" Directory_="bin_Dir" Attributes="256" KeyPath="vcruntime140_1.dll_1"/>
+    <ROW Component="zlib1.dll" ComponentId="{BE12F0EF-2FFC-4059-89C3-DF941DF0BCF4}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="zlib1.dll"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatsComponent">
+    <ROW Feature="MainFeature" Title="MainFeature" Description="Description" Display="1" Level="1" Directory_="APPDIR" Attributes="0"/>
+    <ATTRIBUTE name="CurrentFeature" value="MainFeature"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFilesComponent">
+    <ROW File="clang.exe" Component_="clang.exe" FileName="CLANG_~1.EXE|clang++.exe" Attributes="0" SourcePath="..\temp\Release\bin\clang++.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="clangcl.exe" Component_="clangcl.exe" FileName="clang-cl.exe" Attributes="0" SourcePath="..\temp\Release\bin\clang-cl.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="clangcpp.exe" Component_="clangcpp.exe" FileName="CLANG-~1.EXE|clang-cpp.exe" Attributes="0" SourcePath="..\temp\Release\bin\clang-cpp.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="clang.exe_2" Component_="clang.exe_2" FileName="clang.exe" Attributes="0" SourcePath="..\temp\Release\bin\clang.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="ld.lld.exe" Component_="ld.lld.exe" FileName="LDLLD~1.EXE|ld.lld.exe" Attributes="0" SourcePath="..\temp\Release\bin\ld.lld.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="ld64.lld.exe" Component_="ld64.lld.exe" FileName="LD64LL~1.EXE|ld64.lld.exe" Attributes="0" SourcePath="..\temp\Release\bin\ld64.lld.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="liblldb.dll" Component_="liblldb.dll" FileName="liblldb.dll" Attributes="0" SourcePath="..\temp\Release\bin\liblldb.dll" SelfReg="false"/>
+    <ROW File="lldlink.exe" Component_="lldlink.exe" FileName="lld-link.exe" Attributes="0" SourcePath="..\temp\Release\bin\lld-link.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="lld.exe" Component_="lld.exe" FileName="lld.exe" Attributes="0" SourcePath="..\temp\Release\bin\lld.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="lldbdotest" Component_="lldbdotest" FileName="LLDB-D~1|lldb-dotest" Attributes="0" SourcePath="..\temp\Release\bin\lldb-dotest" SelfReg="false"/>
+    <ROW File="lldbrepro" Component_="lldbdotest" FileName="LLDB-R~1|lldb-repro" Attributes="0" SourcePath="..\temp\Release\bin\lldb-repro" SelfReg="false"/>
+    <ROW File="lldb.exe" Component_="lldb.exe" FileName="lldb.exe" Attributes="0" SourcePath="..\temp\Release\bin\lldb.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="llvmlit.py" Component_="lldbdotest" FileName="llvm-lit.py" Attributes="0" SourcePath="..\temp\Release\bin\llvm-lit.py" SelfReg="false"/>
+    <ROW File="llvmobjcopy.exe" Component_="llvmobjcopy.exe" FileName="LLVM-O~1.EXE|llvm-objcopy.exe" Attributes="0" SourcePath="..\temp\Release\bin\llvm-objcopy.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="llvmtblgen.exe" Component_="llvmtblgen.exe" FileName="LLVM-T~1.EXE|llvm-tblgen.exe" Attributes="0" SourcePath="..\temp\Release\bin\llvm-tblgen.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="adxintrin.h" Component_="adxintrin.h" FileName="ADXINT~1.H|adxintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\adxintrin.h" SelfReg="false"/>
+    <ROW File="altivec.h" Component_="adxintrin.h" FileName="altivec.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\altivec.h" SelfReg="false"/>
+    <ROW File="ammintrin.h" Component_="adxintrin.h" FileName="AMMINT~1.H|ammintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ammintrin.h" SelfReg="false"/>
+    <ROW File="arm64intr.h" Component_="adxintrin.h" FileName="ARM64I~1.H|arm64intr.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm64intr.h" SelfReg="false"/>
+    <ROW File="armintr.h" Component_="adxintrin.h" FileName="armintr.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\armintr.h" SelfReg="false"/>
+    <ROW File="arm_acle.h" Component_="adxintrin.h" FileName="arm_acle.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_acle.h" SelfReg="false"/>
+    <ROW File="arm_bf16.h" Component_="adxintrin.h" FileName="arm_bf16.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_bf16.h" SelfReg="false"/>
+    <ROW File="arm_cde.h" Component_="adxintrin.h" FileName="arm_cde.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_cde.h" SelfReg="false"/>
+    <ROW File="arm_cmse.h" Component_="adxintrin.h" FileName="arm_cmse.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_cmse.h" SelfReg="false"/>
+    <ROW File="arm_fp16.h" Component_="adxintrin.h" FileName="arm_fp16.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_fp16.h" SelfReg="false"/>
+    <ROW File="arm_mve.h" Component_="adxintrin.h" FileName="arm_mve.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_mve.h" SelfReg="false"/>
+    <ROW File="arm_neon.h" Component_="adxintrin.h" FileName="arm_neon.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_neon.h" SelfReg="false"/>
+    <ROW File="arm_sve.h" Component_="adxintrin.h" FileName="arm_sve.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\arm_sve.h" SelfReg="false"/>
+    <ROW File="avx2intrin.h" Component_="adxintrin.h" FileName="AVX2IN~1.H|avx2intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx2intrin.h" SelfReg="false"/>
+    <ROW File="avx512bf16intrin.h" Component_="adxintrin.h" FileName="AVX512~1.H|avx512bf16intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512bf16intrin.h" SelfReg="false"/>
+    <ROW File="avx512bitalgintrin.h" Component_="adxintrin.h" FileName="AVX512~2.H|avx512bitalgintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512bitalgintrin.h" SelfReg="false"/>
+    <ROW File="avx512bwintrin.h" Component_="adxintrin.h" FileName="AVX512~3.H|avx512bwintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512bwintrin.h" SelfReg="false"/>
+    <ROW File="avx512cdintrin.h" Component_="adxintrin.h" FileName="AVX512~4.H|avx512cdintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512cdintrin.h" SelfReg="false"/>
+    <ROW File="avx512dqintrin.h" Component_="adxintrin.h" FileName="AVX512~5.H|avx512dqintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512dqintrin.h" SelfReg="false"/>
+    <ROW File="avx512erintrin.h" Component_="adxintrin.h" FileName="AVX512~6.H|avx512erintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512erintrin.h" SelfReg="false"/>
+    <ROW File="avx512fintrin.h" Component_="adxintrin.h" FileName="AVX512~7.H|avx512fintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512fintrin.h" SelfReg="false"/>
+    <ROW File="avx512ifmaintrin.h" Component_="adxintrin.h" FileName="AVX512~8.H|avx512ifmaintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512ifmaintrin.h" SelfReg="false"/>
+    <ROW File="avx512ifmavlintrin.h" Component_="adxintrin.h" FileName="AVX512~9.H|avx512ifmavlintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512ifmavlintrin.h" SelfReg="false"/>
+    <ROW File="avx512pfintrin.h" Component_="adxintrin.h" FileName="AVX51~10.H|avx512pfintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512pfintrin.h" SelfReg="false"/>
+    <ROW File="avx512vbmi2intrin.h" Component_="adxintrin.h" FileName="AVX51~11.H|avx512vbmi2intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vbmi2intrin.h" SelfReg="false"/>
+    <ROW File="avx512vbmiintrin.h" Component_="adxintrin.h" FileName="AVX51~12.H|avx512vbmiintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vbmiintrin.h" SelfReg="false"/>
+    <ROW File="avx512vbmivlintrin.h" Component_="adxintrin.h" FileName="AVX51~13.H|avx512vbmivlintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vbmivlintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlbf16intrin.h" Component_="adxintrin.h" FileName="AVX51~14.H|avx512vlbf16intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlbf16intrin.h" SelfReg="false"/>
+    <ROW File="avx512vlbitalgintrin.h" Component_="adxintrin.h" FileName="AVX51~15.H|avx512vlbitalgintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlbitalgintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlbwintrin.h" Component_="adxintrin.h" FileName="AVX51~16.H|avx512vlbwintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlbwintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlcdintrin.h" Component_="adxintrin.h" FileName="AVX51~17.H|avx512vlcdintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlcdintrin.h" SelfReg="false"/>
+    <ROW File="avx512vldqintrin.h" Component_="adxintrin.h" FileName="AVX51~18.H|avx512vldqintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vldqintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlintrin.h" Component_="adxintrin.h" FileName="AVX51~19.H|avx512vlintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlvbmi2intrin.h" Component_="adxintrin.h" FileName="AVX51~20.H|avx512vlvbmi2intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlvbmi2intrin.h" SelfReg="false"/>
+    <ROW File="avx512vlvnniintrin.h" Component_="adxintrin.h" FileName="AVX51~21.H|avx512vlvnniintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlvnniintrin.h" SelfReg="false"/>
+    <ROW File="avx512vlvp2intersectintrin.h" Component_="adxintrin.h" FileName="AVX51~22.H|avx512vlvp2intersectintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vlvp2intersectintrin.h" SelfReg="false"/>
+    <ROW File="avx512vnniintrin.h" Component_="adxintrin.h" FileName="AVX51~23.H|avx512vnniintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vnniintrin.h" SelfReg="false"/>
+    <ROW File="avx512vp2intersectintrin.h" Component_="adxintrin.h" FileName="AVX51~24.H|avx512vp2intersectintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vp2intersectintrin.h" SelfReg="false"/>
+    <ROW File="avx512vpopcntdqintrin.h" Component_="adxintrin.h" FileName="AVX51~25.H|avx512vpopcntdqintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vpopcntdqintrin.h" SelfReg="false"/>
+    <ROW File="avx512vpopcntdqvlintrin.h" Component_="adxintrin.h" FileName="AVX51~26.H|avx512vpopcntdqvlintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avx512vpopcntdqvlintrin.h" SelfReg="false"/>
+    <ROW File="avxintrin.h" Component_="adxintrin.h" FileName="AVXINT~1.H|avxintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\avxintrin.h" SelfReg="false"/>
+    <ROW File="bmi2intrin.h" Component_="adxintrin.h" FileName="BMI2IN~1.H|bmi2intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\bmi2intrin.h" SelfReg="false"/>
+    <ROW File="bmiintrin.h" Component_="adxintrin.h" FileName="BMIINT~1.H|bmiintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\bmiintrin.h" SelfReg="false"/>
+    <ROW File="cet.h" Component_="adxintrin.h" FileName="cet.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cet.h" SelfReg="false"/>
+    <ROW File="cetintrin.h" Component_="adxintrin.h" FileName="CETINT~1.H|cetintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cetintrin.h" SelfReg="false"/>
+    <ROW File="cldemoteintrin.h" Component_="adxintrin.h" FileName="CLDEMO~1.H|cldemoteintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cldemoteintrin.h" SelfReg="false"/>
+    <ROW File="clflushoptintrin.h" Component_="adxintrin.h" FileName="CLFLUS~1.H|clflushoptintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\clflushoptintrin.h" SelfReg="false"/>
+    <ROW File="clwbintrin.h" Component_="adxintrin.h" FileName="CLWBIN~1.H|clwbintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\clwbintrin.h" SelfReg="false"/>
+    <ROW File="clzerointrin.h" Component_="adxintrin.h" FileName="CLZERO~1.H|clzerointrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\clzerointrin.h" SelfReg="false"/>
+    <ROW File="cpuid.h" Component_="adxintrin.h" FileName="cpuid.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cpuid.h" SelfReg="false"/>
+    <ROW File="algorithm" Component_="algorithm" FileName="ALGORI~1|algorithm" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cuda_wrappers\algorithm" SelfReg="false"/>
+    <ROW File="complex" Component_="algorithm" FileName="complex" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cuda_wrappers\complex" SelfReg="false"/>
+    <ROW File="new" Component_="algorithm" FileName="new" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\cuda_wrappers\new" SelfReg="false"/>
+    <ROW File="emmintrin.h" Component_="adxintrin.h" FileName="EMMINT~1.H|emmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\emmintrin.h" SelfReg="false"/>
+    <ROW File="enqcmdintrin.h" Component_="adxintrin.h" FileName="ENQCMD~1.H|enqcmdintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\enqcmdintrin.h" SelfReg="false"/>
+    <ROW File="f16cintrin.h" Component_="adxintrin.h" FileName="F16CIN~1.H|f16cintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\f16cintrin.h" SelfReg="false"/>
+    <ROW File="float.h" Component_="adxintrin.h" FileName="float.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\float.h" SelfReg="false"/>
+    <ROW File="fma4intrin.h" Component_="adxintrin.h" FileName="FMA4IN~1.H|fma4intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\fma4intrin.h" SelfReg="false"/>
+    <ROW File="fmaintrin.h" Component_="adxintrin.h" FileName="FMAINT~1.H|fmaintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\fmaintrin.h" SelfReg="false"/>
+    <ROW File="fxsrintrin.h" Component_="adxintrin.h" FileName="FXSRIN~1.H|fxsrintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\fxsrintrin.h" SelfReg="false"/>
+    <ROW File="gfniintrin.h" Component_="adxintrin.h" FileName="GFNIIN~1.H|gfniintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\gfniintrin.h" SelfReg="false"/>
+    <ROW File="htmintrin.h" Component_="adxintrin.h" FileName="HTMINT~1.H|htmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\htmintrin.h" SelfReg="false"/>
+    <ROW File="htmxlintrin.h" Component_="adxintrin.h" FileName="HTMXLI~1.H|htmxlintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\htmxlintrin.h" SelfReg="false"/>
+    <ROW File="ia32intrin.h" Component_="adxintrin.h" FileName="IA32IN~1.H|ia32intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ia32intrin.h" SelfReg="false"/>
+    <ROW File="immintrin.h" Component_="adxintrin.h" FileName="IMMINT~1.H|immintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\immintrin.h" SelfReg="false"/>
+    <ROW File="intrin.h" Component_="adxintrin.h" FileName="intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\intrin.h" SelfReg="false"/>
+    <ROW File="inttypes.h" Component_="adxintrin.h" FileName="inttypes.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\inttypes.h" SelfReg="false"/>
+    <ROW File="invpcidintrin.h" Component_="adxintrin.h" FileName="INVPCI~1.H|invpcidintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\invpcidintrin.h" SelfReg="false"/>
+    <ROW File="iso646.h" Component_="adxintrin.h" FileName="iso646.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\iso646.h" SelfReg="false"/>
+    <ROW File="limits.h" Component_="adxintrin.h" FileName="limits.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\limits.h" SelfReg="false"/>
+    <ROW File="lwpintrin.h" Component_="adxintrin.h" FileName="LWPINT~1.H|lwpintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\lwpintrin.h" SelfReg="false"/>
+    <ROW File="lzcntintrin.h" Component_="adxintrin.h" FileName="LZCNTI~1.H|lzcntintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\lzcntintrin.h" SelfReg="false"/>
+    <ROW File="mm3dnow.h" Component_="adxintrin.h" FileName="mm3dnow.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\mm3dnow.h" SelfReg="false"/>
+    <ROW File="mmintrin.h" Component_="adxintrin.h" FileName="mmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\mmintrin.h" SelfReg="false"/>
+    <ROW File="mm_malloc.h" Component_="adxintrin.h" FileName="MM_MAL~1.H|mm_malloc.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\mm_malloc.h" SelfReg="false"/>
+    <ROW File="module.modulemap" Component_="adxintrin.h" FileName="MODULE~1.MOD|module.modulemap" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\module.modulemap" SelfReg="false"/>
+    <ROW File="movdirintrin.h" Component_="adxintrin.h" FileName="MOVDIR~1.H|movdirintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\movdirintrin.h" SelfReg="false"/>
+    <ROW File="msa.h" Component_="adxintrin.h" FileName="msa.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\msa.h" SelfReg="false"/>
+    <ROW File="mwaitxintrin.h" Component_="adxintrin.h" FileName="MWAITX~1.H|mwaitxintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\mwaitxintrin.h" SelfReg="false"/>
+    <ROW File="nmmintrin.h" Component_="adxintrin.h" FileName="NMMINT~1.H|nmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\nmmintrin.h" SelfReg="false"/>
+    <ROW File="openclcbase.h" Component_="adxintrin.h" FileName="OPENCL~1.H|opencl-c-base.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\opencl-c-base.h" SelfReg="false"/>
+    <ROW File="openclc.h" Component_="adxintrin.h" FileName="opencl-c.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\opencl-c.h" SelfReg="false"/>
+    <ROW File="cmath" Component_="cmath" FileName="cmath" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\openmp_wrappers\cmath" SelfReg="false"/>
+    <ROW File="math.h" Component_="cmath" FileName="math.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\openmp_wrappers\math.h" SelfReg="false"/>
+    <ROW File="new_2" Component_="cmath" FileName="new" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\openmp_wrappers\new" SelfReg="false"/>
+    <ROW File="__clang_openmp_device_functions.h" Component_="cmath" FileName="__CLAN~1.H|__clang_openmp_device_functions.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\openmp_wrappers\__clang_openmp_device_functions.h" SelfReg="false"/>
+    <ROW File="pconfigintrin.h" Component_="adxintrin.h" FileName="PCONFI~1.H|pconfigintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\pconfigintrin.h" SelfReg="false"/>
+    <ROW File="pkuintrin.h" Component_="adxintrin.h" FileName="PKUINT~1.H|pkuintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\pkuintrin.h" SelfReg="false"/>
+    <ROW File="pmmintrin.h" Component_="adxintrin.h" FileName="PMMINT~1.H|pmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\pmmintrin.h" SelfReg="false"/>
+    <ROW File="popcntintrin.h" Component_="adxintrin.h" FileName="POPCNT~1.H|popcntintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\popcntintrin.h" SelfReg="false"/>
+    <ROW File="emmintrin.h_2" Component_="emmintrin.h" FileName="EMMINT~1.H|emmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\emmintrin.h" SelfReg="false"/>
+    <ROW File="mmintrin.h_2" Component_="emmintrin.h" FileName="mmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\mmintrin.h" SelfReg="false"/>
+    <ROW File="mm_malloc.h_2" Component_="emmintrin.h" FileName="MM_MAL~1.H|mm_malloc.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\mm_malloc.h" SelfReg="false"/>
+    <ROW File="pmmintrin.h_2" Component_="emmintrin.h" FileName="PMMINT~1.H|pmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\pmmintrin.h" SelfReg="false"/>
+    <ROW File="smmintrin.h" Component_="emmintrin.h" FileName="SMMINT~1.H|smmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\smmintrin.h" SelfReg="false"/>
+    <ROW File="tmmintrin.h" Component_="emmintrin.h" FileName="TMMINT~1.H|tmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\tmmintrin.h" SelfReg="false"/>
+    <ROW File="xmmintrin.h" Component_="emmintrin.h" FileName="XMMINT~1.H|xmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ppc_wrappers\xmmintrin.h" SelfReg="false"/>
+    <ROW File="prfchwintrin.h" Component_="adxintrin.h" FileName="PRFCHW~1.H|prfchwintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\prfchwintrin.h" SelfReg="false"/>
+    <ROW File="ptwriteintrin.h" Component_="adxintrin.h" FileName="PTWRIT~1.H|ptwriteintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\ptwriteintrin.h" SelfReg="false"/>
+    <ROW File="rdseedintrin.h" Component_="adxintrin.h" FileName="RDSEED~1.H|rdseedintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\rdseedintrin.h" SelfReg="false"/>
+    <ROW File="rtmintrin.h" Component_="adxintrin.h" FileName="RTMINT~1.H|rtmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\rtmintrin.h" SelfReg="false"/>
+    <ROW File="s390intrin.h" Component_="adxintrin.h" FileName="S390IN~1.H|s390intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\s390intrin.h" SelfReg="false"/>
+    <ROW File="serializeintrin.h" Component_="adxintrin.h" FileName="SERIAL~1.H|serializeintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\serializeintrin.h" SelfReg="false"/>
+    <ROW File="sgxintrin.h" Component_="adxintrin.h" FileName="SGXINT~1.H|sgxintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\sgxintrin.h" SelfReg="false"/>
+    <ROW File="shaintrin.h" Component_="adxintrin.h" FileName="SHAINT~1.H|shaintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\shaintrin.h" SelfReg="false"/>
+    <ROW File="smmintrin.h_2" Component_="adxintrin.h" FileName="SMMINT~1.H|smmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\smmintrin.h" SelfReg="false"/>
+    <ROW File="stdalign.h" Component_="adxintrin.h" FileName="stdalign.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdalign.h" SelfReg="false"/>
+    <ROW File="stdarg.h" Component_="adxintrin.h" FileName="stdarg.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdarg.h" SelfReg="false"/>
+    <ROW File="stdatomic.h" Component_="adxintrin.h" FileName="STDATO~1.H|stdatomic.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdatomic.h" SelfReg="false"/>
+    <ROW File="stdbool.h" Component_="adxintrin.h" FileName="stdbool.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdbool.h" SelfReg="false"/>
+    <ROW File="stddef.h" Component_="adxintrin.h" FileName="stddef.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stddef.h" SelfReg="false"/>
+    <ROW File="stdint.h" Component_="adxintrin.h" FileName="stdint.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdint.h" SelfReg="false"/>
+    <ROW File="stdnoreturn.h" Component_="adxintrin.h" FileName="STDNOR~1.H|stdnoreturn.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\stdnoreturn.h" SelfReg="false"/>
+    <ROW File="tbmintrin.h" Component_="adxintrin.h" FileName="TBMINT~1.H|tbmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\tbmintrin.h" SelfReg="false"/>
+    <ROW File="tgmath.h" Component_="adxintrin.h" FileName="tgmath.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\tgmath.h" SelfReg="false"/>
+    <ROW File="tmmintrin.h_2" Component_="adxintrin.h" FileName="TMMINT~1.H|tmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\tmmintrin.h" SelfReg="false"/>
+    <ROW File="tsxldtrkintrin.h" Component_="adxintrin.h" FileName="TSXLDT~1.H|tsxldtrkintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\tsxldtrkintrin.h" SelfReg="false"/>
+    <ROW File="unwind.h" Component_="adxintrin.h" FileName="unwind.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\unwind.h" SelfReg="false"/>
+    <ROW File="vadefs.h" Component_="adxintrin.h" FileName="vadefs.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\vadefs.h" SelfReg="false"/>
+    <ROW File="vaesintrin.h" Component_="adxintrin.h" FileName="VAESIN~1.H|vaesintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\vaesintrin.h" SelfReg="false"/>
+    <ROW File="varargs.h" Component_="adxintrin.h" FileName="varargs.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\varargs.h" SelfReg="false"/>
+    <ROW File="vecintrin.h" Component_="adxintrin.h" FileName="VECINT~1.H|vecintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\vecintrin.h" SelfReg="false"/>
+    <ROW File="vpclmulqdqintrin.h" Component_="adxintrin.h" FileName="VPCLMU~1.H|vpclmulqdqintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\vpclmulqdqintrin.h" SelfReg="false"/>
+    <ROW File="waitpkgintrin.h" Component_="adxintrin.h" FileName="WAITPK~1.H|waitpkgintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\waitpkgintrin.h" SelfReg="false"/>
+    <ROW File="wasm_simd128.h" Component_="adxintrin.h" FileName="WASM_S~1.H|wasm_simd128.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\wasm_simd128.h" SelfReg="false"/>
+    <ROW File="wbnoinvdintrin.h" Component_="adxintrin.h" FileName="WBNOIN~1.H|wbnoinvdintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\wbnoinvdintrin.h" SelfReg="false"/>
+    <ROW File="wmmintrin.h" Component_="adxintrin.h" FileName="WMMINT~1.H|wmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\wmmintrin.h" SelfReg="false"/>
+    <ROW File="x86intrin.h" Component_="adxintrin.h" FileName="X86INT~1.H|x86intrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\x86intrin.h" SelfReg="false"/>
+    <ROW File="xmmintrin.h_2" Component_="adxintrin.h" FileName="XMMINT~1.H|xmmintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xmmintrin.h" SelfReg="false"/>
+    <ROW File="xopintrin.h" Component_="adxintrin.h" FileName="XOPINT~1.H|xopintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xopintrin.h" SelfReg="false"/>
+    <ROW File="xsavecintrin.h" Component_="adxintrin.h" FileName="XSAVEC~1.H|xsavecintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xsavecintrin.h" SelfReg="false"/>
+    <ROW File="xsaveintrin.h" Component_="adxintrin.h" FileName="XSAVEI~1.H|xsaveintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xsaveintrin.h" SelfReg="false"/>
+    <ROW File="xsaveoptintrin.h" Component_="adxintrin.h" FileName="XSAVEO~1.H|xsaveoptintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xsaveoptintrin.h" SelfReg="false"/>
+    <ROW File="xsavesintrin.h" Component_="adxintrin.h" FileName="XSAVES~1.H|xsavesintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xsavesintrin.h" SelfReg="false"/>
+    <ROW File="xtestintrin.h" Component_="adxintrin.h" FileName="XTESTI~1.H|xtestintrin.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\xtestintrin.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_builtin_vars.h" Component_="adxintrin.h" FileName="__CLAN~1.H|__clang_cuda_builtin_vars.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_builtin_vars.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_cmath.h" Component_="adxintrin.h" FileName="__CLAN~2.H|__clang_cuda_cmath.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_cmath.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_complex_builtins.h" Component_="adxintrin.h" FileName="__CLAN~3.H|__clang_cuda_complex_builtins.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_complex_builtins.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_device_functions.h" Component_="adxintrin.h" FileName="__CLAN~4.H|__clang_cuda_device_functions.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_device_functions.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_intrinsics.h" Component_="adxintrin.h" FileName="__CLAN~5.H|__clang_cuda_intrinsics.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_intrinsics.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_libdevice_declares.h" Component_="adxintrin.h" FileName="__CLAN~6.H|__clang_cuda_libdevice_declares.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_libdevice_declares.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_math.h" Component_="adxintrin.h" FileName="__CLAN~7.H|__clang_cuda_math.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_math.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_math_forward_declares.h" Component_="adxintrin.h" FileName="__CLAN~8.H|__clang_cuda_math_forward_declares.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_math_forward_declares.h" SelfReg="false"/>
+    <ROW File="__clang_cuda_runtime_wrapper.h" Component_="adxintrin.h" FileName="__CLAN~9.H|__clang_cuda_runtime_wrapper.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_cuda_runtime_wrapper.h" SelfReg="false"/>
+    <ROW File="__clang_hip_libdevice_declares.h" Component_="adxintrin.h" FileName="__CLA~10.H|__clang_hip_libdevice_declares.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_hip_libdevice_declares.h" SelfReg="false"/>
+    <ROW File="__clang_hip_math.h" Component_="adxintrin.h" FileName="__CLA~11.H|__clang_hip_math.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_hip_math.h" SelfReg="false"/>
+    <ROW File="__clang_hip_runtime_wrapper.h" Component_="adxintrin.h" FileName="__CLA~12.H|__clang_hip_runtime_wrapper.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__clang_hip_runtime_wrapper.h" SelfReg="false"/>
+    <ROW File="__stddef_max_align_t.h" Component_="adxintrin.h" FileName="__STDD~1.H|__stddef_max_align_t.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__stddef_max_align_t.h" SelfReg="false"/>
+    <ROW File="__wmmintrin_aes.h" Component_="adxintrin.h" FileName="__WMMI~1.H|__wmmintrin_aes.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__wmmintrin_aes.h" SelfReg="false"/>
+    <ROW File="__wmmintrin_pclmul.h" Component_="adxintrin.h" FileName="__WMMI~2.H|__wmmintrin_pclmul.h" Attributes="0" SourcePath="..\temp\Release\lib\clang\11.0.0\include\__wmmintrin_pclmul.h" SelfReg="false"/>
+    <ROW File="clangAnalysis.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGA~1.LIB|clangAnalysis.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangAnalysis.lib" SelfReg="false"/>
+    <ROW File="clangARCMigrate.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGA~2.LIB|clangARCMigrate.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangARCMigrate.lib" SelfReg="false"/>
+    <ROW File="clangAST.lib" Component_="AllocateSpaceInStack.asm" FileName="clangAST.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangAST.lib" SelfReg="false"/>
+    <ROW File="clangASTMatchers.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGA~3.LIB|clangASTMatchers.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangASTMatchers.lib" SelfReg="false"/>
+    <ROW File="clangBasic.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGB~1.LIB|clangBasic.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangBasic.lib" SelfReg="false"/>
+    <ROW File="clangCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGC~1.LIB|clangCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangCodeGen.lib" SelfReg="false"/>
+    <ROW File="clangCrossTU.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGC~2.LIB|clangCrossTU.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangCrossTU.lib" SelfReg="false"/>
+    <ROW File="clangDriver.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGD~1.LIB|clangDriver.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangDriver.lib" SelfReg="false"/>
+    <ROW File="clangEdit.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGE~1.LIB|clangEdit.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangEdit.lib" SelfReg="false"/>
+    <ROW File="clangFormat.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGF~1.LIB|clangFormat.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangFormat.lib" SelfReg="false"/>
+    <ROW File="clangFrontend.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGF~2.LIB|clangFrontend.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangFrontend.lib" SelfReg="false"/>
+    <ROW File="clangFrontendTool.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGF~3.LIB|clangFrontendTool.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangFrontendTool.lib" SelfReg="false"/>
+    <ROW File="clangIndex.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGI~1.LIB|clangIndex.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangIndex.lib" SelfReg="false"/>
+    <ROW File="clangLex.lib" Component_="AllocateSpaceInStack.asm" FileName="clangLex.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangLex.lib" SelfReg="false"/>
+    <ROW File="clangParse.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGP~1.LIB|clangParse.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangParse.lib" SelfReg="false"/>
+    <ROW File="clangRewrite.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGR~1.LIB|clangRewrite.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangRewrite.lib" SelfReg="false"/>
+    <ROW File="clangRewriteFrontend.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGR~2.LIB|clangRewriteFrontend.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangRewriteFrontend.lib" SelfReg="false"/>
+    <ROW File="clangSema.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGS~1.LIB|clangSema.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangSema.lib" SelfReg="false"/>
+    <ROW File="clangSerialization.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGS~2.LIB|clangSerialization.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangSerialization.lib" SelfReg="false"/>
+    <ROW File="clangStaticAnalyzerCheckers.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGS~3.LIB|clangStaticAnalyzerCheckers.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangStaticAnalyzerCheckers.lib" SelfReg="false"/>
+    <ROW File="clangStaticAnalyzerCore.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGS~4.LIB|clangStaticAnalyzerCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangStaticAnalyzerCore.lib" SelfReg="false"/>
+    <ROW File="clangStaticAnalyzerFrontend.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGS~5.LIB|clangStaticAnalyzerFrontend.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangStaticAnalyzerFrontend.lib" SelfReg="false"/>
+    <ROW File="clangToolingCore.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGT~1.LIB|clangToolingCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangToolingCore.lib" SelfReg="false"/>
+    <ROW File="clangToolingInclusions.lib" Component_="AllocateSpaceInStack.asm" FileName="CLANGT~2.LIB|clangToolingInclusions.lib" Attributes="0" SourcePath="..\temp\Release\lib\clangToolingInclusions.lib" SelfReg="false"/>
+    <ROW File="gtest.lib" Component_="AllocateSpaceInStack.asm" FileName="gtest.lib" Attributes="0" SourcePath="..\temp\Release\lib\gtest.lib" SelfReg="false"/>
+    <ROW File="liblldb.exp" Component_="AllocateSpaceInStack.asm" FileName="liblldb.exp" Attributes="0" SourcePath="..\temp\Release\lib\liblldb.exp" SelfReg="false"/>
+    <ROW File="liblldb.lib" Component_="AllocateSpaceInStack.asm" FileName="liblldb.lib" Attributes="0" SourcePath="..\temp\Release\lib\liblldb.lib" SelfReg="false"/>
+    <ROW File="lldbtest.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDB-T~1.LIB|lldb-test.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldb-test.lib" SelfReg="false"/>
+    <ROW File="lldbBase.lib" Component_="AllocateSpaceInStack.asm" FileName="lldbBase.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbBase.lib" SelfReg="false"/>
+    <ROW File="lldbBreakpoint.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBBR~1.LIB|lldbBreakpoint.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbBreakpoint.lib" SelfReg="false"/>
+    <ROW File="lldbCommands.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBCO~1.LIB|lldbCommands.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbCommands.lib" SelfReg="false"/>
+    <ROW File="lldbCore.lib" Component_="AllocateSpaceInStack.asm" FileName="lldbCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbCore.lib" SelfReg="false"/>
+    <ROW File="lldbDataFormatters.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBDA~1.LIB|lldbDataFormatters.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbDataFormatters.lib" SelfReg="false"/>
+    <ROW File="lldbExpression.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBEX~1.LIB|lldbExpression.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbExpression.lib" SelfReg="false"/>
+    <ROW File="lldbHost.lib" Component_="AllocateSpaceInStack.asm" FileName="lldbHost.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbHost.lib" SelfReg="false"/>
+    <ROW File="lldbInitialization.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBIN~1.LIB|lldbInitialization.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbInitialization.lib" SelfReg="false"/>
+    <ROW File="lldbInterpreter.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBIN~2.LIB|lldbInterpreter.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbInterpreter.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIAArch64.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~1.LIB|lldbPluginABIAArch64.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIAArch64.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIARM.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~2.LIB|lldbPluginABIARM.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIARM.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIHexagon.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~3.LIB|lldbPluginABIHexagon.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIHexagon.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIMips.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~4.LIB|lldbPluginABIMips.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIMips.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIPowerPC.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~5.LIB|lldbPluginABIPowerPC.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIPowerPC.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABISystemZ.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~6.LIB|lldbPluginABISystemZ.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABISystemZ.lib" SelfReg="false"/>
+    <ROW File="lldbPluginABIX86.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~7.LIB|lldbPluginABIX86.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginABIX86.lib" SelfReg="false"/>
+    <ROW File="lldbPluginAppleObjCRuntime.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~8.LIB|lldbPluginAppleObjCRuntime.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginAppleObjCRuntime.lib" SelfReg="false"/>
+    <ROW File="lldbPluginArchitectureArm.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBPL~9.LIB|lldbPluginArchitectureArm.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginArchitectureArm.lib" SelfReg="false"/>
+    <ROW File="lldbPluginArchitectureMips.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~10.LIB|lldbPluginArchitectureMips.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginArchitectureMips.lib" SelfReg="false"/>
+    <ROW File="lldbPluginArchitecturePPC64.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~11.LIB|lldbPluginArchitecturePPC64.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginArchitecturePPC64.lib" SelfReg="false"/>
+    <ROW File="lldbPluginClangCommon.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~12.LIB|lldbPluginClangCommon.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginClangCommon.lib" SelfReg="false"/>
+    <ROW File="lldbPluginCPlusPlusLanguage.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~13.LIB|lldbPluginCPlusPlusLanguage.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginCPlusPlusLanguage.lib" SelfReg="false"/>
+    <ROW File="lldbPluginCPPRuntime.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~14.LIB|lldbPluginCPPRuntime.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginCPPRuntime.lib" SelfReg="false"/>
+    <ROW File="lldbPluginCXXItaniumABI.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~15.LIB|lldbPluginCXXItaniumABI.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginCXXItaniumABI.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDisassemblerLLVMC.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~16.LIB|lldbPluginDisassemblerLLVMC.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDisassemblerLLVMC.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderDarwinKernel.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~17.LIB|lldbPluginDynamicLoaderDarwinKernel.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderDarwinKernel.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderHexagonDYLD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~18.LIB|lldbPluginDynamicLoaderHexagonDYLD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderHexagonDYLD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderMacOSXDYLD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~19.LIB|lldbPluginDynamicLoaderMacOSXDYLD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderMacOSXDYLD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderPosixDYLD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~20.LIB|lldbPluginDynamicLoaderPosixDYLD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderPosixDYLD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderStatic.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~21.LIB|lldbPluginDynamicLoaderStatic.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderStatic.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderWasmDYLD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~22.LIB|lldbPluginDynamicLoaderWasmDYLD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderWasmDYLD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginDynamicLoaderWindowsDYLD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~23.LIB|lldbPluginDynamicLoaderWindowsDYLD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginDynamicLoaderWindowsDYLD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginExpressionParserClang.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~24.LIB|lldbPluginExpressionParserClang.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginExpressionParserClang.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstructionARM.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~25.LIB|lldbPluginInstructionARM.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstructionARM.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstructionARM64.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~26.LIB|lldbPluginInstructionARM64.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstructionARM64.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstructionMIPS.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~27.LIB|lldbPluginInstructionMIPS.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstructionMIPS.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstructionMIPS64.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~28.LIB|lldbPluginInstructionMIPS64.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstructionMIPS64.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstructionPPC64.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~29.LIB|lldbPluginInstructionPPC64.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstructionPPC64.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstrumentationRuntimeASan.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~30.LIB|lldbPluginInstrumentationRuntimeASan.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstrumentationRuntimeASan.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstrumentationRuntimeMainThreadChecker.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~31.LIB|lldbPluginInstrumentationRuntimeMainThreadChecker.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstrumentationRuntimeMainThreadChecker.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstrumentationRuntimeTSan.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~32.LIB|lldbPluginInstrumentationRuntimeTSan.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstrumentationRuntimeTSan.lib" SelfReg="false"/>
+    <ROW File="lldbPluginInstrumentationRuntimeUBSan.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~33.LIB|lldbPluginInstrumentationRuntimeUBSan.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginInstrumentationRuntimeUBSan.lib" SelfReg="false"/>
+    <ROW File="lldbPluginJITLoaderGDB.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~34.LIB|lldbPluginJITLoaderGDB.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginJITLoaderGDB.lib" SelfReg="false"/>
+    <ROW File="lldbPluginMemoryHistoryASan.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~35.LIB|lldbPluginMemoryHistoryASan.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginMemoryHistoryASan.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjCLanguage.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~36.LIB|lldbPluginObjCLanguage.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjCLanguage.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjCPlusPlusLanguage.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~37.LIB|lldbPluginObjCPlusPlusLanguage.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjCPlusPlusLanguage.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjCRuntime.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~38.LIB|lldbPluginObjCRuntime.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjCRuntime.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectContainerBSDArchive.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~39.LIB|lldbPluginObjectContainerBSDArchive.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectContainerBSDArchive.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectContainerMachOArchive.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~40.LIB|lldbPluginObjectContainerMachOArchive.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectContainerMachOArchive.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFileBreakpad.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~41.LIB|lldbPluginObjectFileBreakpad.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFileBreakpad.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFileELF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~42.LIB|lldbPluginObjectFileELF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFileELF.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFileJIT.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~43.LIB|lldbPluginObjectFileJIT.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFileJIT.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFileMachO.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~44.LIB|lldbPluginObjectFileMachO.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFileMachO.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFilePECOFF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~45.LIB|lldbPluginObjectFilePECOFF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFilePECOFF.lib" SelfReg="false"/>
+    <ROW File="lldbPluginObjectFileWasm.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~46.LIB|lldbPluginObjectFileWasm.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginObjectFileWasm.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformAndroid.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~47.LIB|lldbPluginPlatformAndroid.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformAndroid.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformFreeBSD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~48.LIB|lldbPluginPlatformFreeBSD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformFreeBSD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformGDB.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~49.LIB|lldbPluginPlatformGDB.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformGDB.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformLinux.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~50.LIB|lldbPluginPlatformLinux.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformLinux.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformMacOSX.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~51.LIB|lldbPluginPlatformMacOSX.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformMacOSX.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformNetBSD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~52.LIB|lldbPluginPlatformNetBSD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformNetBSD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformOpenBSD.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~53.LIB|lldbPluginPlatformOpenBSD.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformOpenBSD.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformPOSIX.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~54.LIB|lldbPluginPlatformPOSIX.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformPOSIX.lib" SelfReg="false"/>
+    <ROW File="lldbPluginPlatformWindows.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~55.LIB|lldbPluginPlatformWindows.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginPlatformWindows.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessElfCore.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~56.LIB|lldbPluginProcessElfCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessElfCore.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessGDBRemote.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~57.LIB|lldbPluginProcessGDBRemote.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessGDBRemote.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessMachCore.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~58.LIB|lldbPluginProcessMachCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessMachCore.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessMinidump.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~59.LIB|lldbPluginProcessMinidump.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessMinidump.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessUtility.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~60.LIB|lldbPluginProcessUtility.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessUtility.lib" SelfReg="false"/>
+    <ROW File="lldbPluginProcessWindowsCommon.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~61.LIB|lldbPluginProcessWindowsCommon.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginProcessWindowsCommon.lib" SelfReg="false"/>
+    <ROW File="lldbPluginRenderScriptRuntime.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~62.LIB|lldbPluginRenderScriptRuntime.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginRenderScriptRuntime.lib" SelfReg="false"/>
+    <ROW File="lldbPluginScriptInterpreterNone.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~63.LIB|lldbPluginScriptInterpreterNone.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginScriptInterpreterNone.lib" SelfReg="false"/>
+    <ROW File="lldbPluginStructuredDataDarwinLog.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~64.LIB|lldbPluginStructuredDataDarwinLog.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginStructuredDataDarwinLog.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolFileBreakpad.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~65.LIB|lldbPluginSymbolFileBreakpad.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolFileBreakpad.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolFileDWARF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~66.LIB|lldbPluginSymbolFileDWARF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolFileDWARF.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolFileNativePDB.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~67.LIB|lldbPluginSymbolFileNativePDB.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolFileNativePDB.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolFilePDB.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~68.LIB|lldbPluginSymbolFilePDB.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolFilePDB.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolFileSymtab.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~69.LIB|lldbPluginSymbolFileSymtab.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolFileSymtab.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolVendorELF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~70.LIB|lldbPluginSymbolVendorELF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolVendorELF.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSymbolVendorWasm.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~71.LIB|lldbPluginSymbolVendorWasm.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSymbolVendorWasm.lib" SelfReg="false"/>
+    <ROW File="lldbPluginSystemRuntimeMacOSX.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~72.LIB|lldbPluginSystemRuntimeMacOSX.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginSystemRuntimeMacOSX.lib" SelfReg="false"/>
+    <ROW File="lldbPluginTypeSystemClang.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~73.LIB|lldbPluginTypeSystemClang.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginTypeSystemClang.lib" SelfReg="false"/>
+    <ROW File="lldbPluginUnwindAssemblyInstEmulation.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~74.LIB|lldbPluginUnwindAssemblyInstEmulation.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginUnwindAssemblyInstEmulation.lib" SelfReg="false"/>
+    <ROW File="lldbPluginUnwindAssemblyX86.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBP~75.LIB|lldbPluginUnwindAssemblyX86.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbPluginUnwindAssemblyX86.lib" SelfReg="false"/>
+    <ROW File="lldbSymbol.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBSY~1.LIB|lldbSymbol.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbSymbol.lib" SelfReg="false"/>
+    <ROW File="lldbTarget.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBTA~1.LIB|lldbTarget.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbTarget.lib" SelfReg="false"/>
+    <ROW File="lldbUtility.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDBUT~1.LIB|lldbUtility.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldbUtility.lib" SelfReg="false"/>
+    <ROW File="lldCOFF.lib" Component_="AllocateSpaceInStack.asm" FileName="lldCOFF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldCOFF.lib" SelfReg="false"/>
+    <ROW File="lldCommon.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDCOM~1.LIB|lldCommon.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldCommon.lib" SelfReg="false"/>
+    <ROW File="lldCore.lib" Component_="AllocateSpaceInStack.asm" FileName="lldCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldCore.lib" SelfReg="false"/>
+    <ROW File="lldDriver.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDDRI~1.LIB|lldDriver.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldDriver.lib" SelfReg="false"/>
+    <ROW File="lldELF.lib" Component_="AllocateSpaceInStack.asm" FileName="lldELF.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldELF.lib" SelfReg="false"/>
+    <ROW File="lldMachO.lib" Component_="AllocateSpaceInStack.asm" FileName="lldMachO.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldMachO.lib" SelfReg="false"/>
+    <ROW File="lldMachO2.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDMAC~1.LIB|lldMachO2.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldMachO2.lib" SelfReg="false"/>
+    <ROW File="lldMinGW.lib" Component_="AllocateSpaceInStack.asm" FileName="lldMinGW.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldMinGW.lib" SelfReg="false"/>
+    <ROW File="lldReaderWriter.lib" Component_="AllocateSpaceInStack.asm" FileName="LLDREA~1.LIB|lldReaderWriter.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldReaderWriter.lib" SelfReg="false"/>
+    <ROW File="lldWasm.lib" Component_="AllocateSpaceInStack.asm" FileName="lldWasm.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldWasm.lib" SelfReg="false"/>
+    <ROW File="lldYAML.lib" Component_="AllocateSpaceInStack.asm" FileName="lldYAML.lib" Attributes="0" SourcePath="..\temp\Release\lib\lldYAML.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64AsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~1.LIB|LLVMAArch64AsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64AsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64CodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~2.LIB|LLVMAArch64CodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64CodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64Desc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~3.LIB|LLVMAArch64Desc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64Desc.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64Disassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~4.LIB|LLVMAArch64Disassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64Disassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64Info.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~5.LIB|LLVMAArch64Info.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64Info.lib" SelfReg="false"/>
+    <ROW File="LLVMAArch64Utils.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAA~6.LIB|LLVMAArch64Utils.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAArch64Utils.lib" SelfReg="false"/>
+    <ROW File="LLVMAggressiveInstCombine.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAG~1.LIB|LLVMAggressiveInstCombine.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAggressiveInstCombine.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~1.LIB|LLVMAMDGPUAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~2.LIB|LLVMAMDGPUCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~3.LIB|LLVMAMDGPUDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~4.LIB|LLVMAMDGPUDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~5.LIB|LLVMAMDGPUInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMAMDGPUUtils.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAM~6.LIB|LLVMAMDGPUUtils.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAMDGPUUtils.lib" SelfReg="false"/>
+    <ROW File="LLVMAnalysis.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAN~1.LIB|LLVMAnalysis.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAnalysis.lib" SelfReg="false"/>
+    <ROW File="LLVMARMAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~1.LIB|LLVMARMAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMARMCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~2.LIB|LLVMARMCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMARMDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~3.LIB|LLVMARMDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMARMDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~4.LIB|LLVMARMDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMARMInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~5.LIB|LLVMARMInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMARMUtils.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAR~6.LIB|LLVMARMUtils.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMARMUtils.lib" SelfReg="false"/>
+    <ROW File="LLVMAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAS~1.LIB|LLVMAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMAsmPrinter.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAS~2.LIB|LLVMAsmPrinter.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAsmPrinter.lib" SelfReg="false"/>
+    <ROW File="LLVMAVRAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAV~1.LIB|LLVMAVRAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAVRAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMAVRCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAV~2.LIB|LLVMAVRCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAVRCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMAVRDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAV~3.LIB|LLVMAVRDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAVRDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMAVRDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAV~4.LIB|LLVMAVRDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAVRDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMAVRInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMAV~5.LIB|LLVMAVRInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMAVRInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMBinaryFormat.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBI~1.LIB|LLVMBinaryFormat.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBinaryFormat.lib" SelfReg="false"/>
+    <ROW File="LLVMBitReader.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBI~2.LIB|LLVMBitReader.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBitReader.lib" SelfReg="false"/>
+    <ROW File="LLVMBitstreamReader.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBI~3.LIB|LLVMBitstreamReader.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBitstreamReader.lib" SelfReg="false"/>
+    <ROW File="LLVMBitWriter.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBI~4.LIB|LLVMBitWriter.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBitWriter.lib" SelfReg="false"/>
+    <ROW File="LLVMBPFAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBP~1.LIB|LLVMBPFAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBPFAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMBPFCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBP~2.LIB|LLVMBPFCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBPFCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMBPFDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBP~3.LIB|LLVMBPFDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBPFDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMBPFDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBP~4.LIB|LLVMBPFDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBPFDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMBPFInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMBP~5.LIB|LLVMBPFInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMBPFInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMCFGuard.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMCF~1.LIB|LLVMCFGuard.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMCFGuard.lib" SelfReg="false"/>
+    <ROW File="LLVMCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMCO~1.LIB|LLVMCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMCore.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMCore.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMCore.lib" SelfReg="false"/>
+    <ROW File="LLVMCoroutines.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMCO~2.LIB|LLVMCoroutines.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMCoroutines.lib" SelfReg="false"/>
+    <ROW File="LLVMCoverage.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMCO~3.LIB|LLVMCoverage.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMCoverage.lib" SelfReg="false"/>
+    <ROW File="LLVMDebugInfoCodeView.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMDE~1.LIB|LLVMDebugInfoCodeView.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMDebugInfoCodeView.lib" SelfReg="false"/>
+    <ROW File="LLVMDebugInfoDWARF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMDE~2.LIB|LLVMDebugInfoDWARF.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMDebugInfoDWARF.lib" SelfReg="false"/>
+    <ROW File="LLVMDebugInfoMSF.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMDE~3.LIB|LLVMDebugInfoMSF.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMDebugInfoMSF.lib" SelfReg="false"/>
+    <ROW File="LLVMDebugInfoPDB.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMDE~4.LIB|LLVMDebugInfoPDB.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMDebugInfoPDB.lib" SelfReg="false"/>
+    <ROW File="LLVMDemangle.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMDE~5.LIB|LLVMDemangle.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMDemangle.lib" SelfReg="false"/>
+    <ROW File="LLVMExecutionEngine.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMEX~1.LIB|LLVMExecutionEngine.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMExecutionEngine.lib" SelfReg="false"/>
+    <ROW File="LLVMExtensions.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMEX~2.LIB|LLVMExtensions.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMExtensions.lib" SelfReg="false"/>
+    <ROW File="LLVMFrontendOpenMP.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMFR~1.LIB|LLVMFrontendOpenMP.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMFrontendOpenMP.lib" SelfReg="false"/>
+    <ROW File="LLVMGlobalISel.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMGL~1.LIB|LLVMGlobalISel.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMGlobalISel.lib" SelfReg="false"/>
+    <ROW File="LLVMHexagonAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMHE~1.LIB|LLVMHexagonAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMHexagonAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMHexagonCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMHE~2.LIB|LLVMHexagonCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMHexagonCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMHexagonDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMHE~3.LIB|LLVMHexagonDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMHexagonDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMHexagonDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMHE~4.LIB|LLVMHexagonDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMHexagonDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMHexagonInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMHE~5.LIB|LLVMHexagonInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMHexagonInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMInstCombine.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMIN~1.LIB|LLVMInstCombine.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMInstCombine.lib" SelfReg="false"/>
+    <ROW File="LLVMInstrumentation.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMIN~2.LIB|LLVMInstrumentation.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMInstrumentation.lib" SelfReg="false"/>
+    <ROW File="LLVMipo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMipo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMipo.lib" SelfReg="false"/>
+    <ROW File="LLVMIRReader.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMIR~1.LIB|LLVMIRReader.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMIRReader.lib" SelfReg="false"/>
+    <ROW File="LLVMLanaiAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLA~1.LIB|LLVMLanaiAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLanaiAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMLanaiCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLA~2.LIB|LLVMLanaiCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLanaiCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMLanaiDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLA~3.LIB|LLVMLanaiDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLanaiDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMLanaiDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLA~4.LIB|LLVMLanaiDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLanaiDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMLanaiInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLA~5.LIB|LLVMLanaiInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLanaiInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMLibDriver.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLI~1.LIB|LLVMLibDriver.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLibDriver.lib" SelfReg="false"/>
+    <ROW File="LLVMLinker.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLI~2.LIB|LLVMLinker.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLinker.lib" SelfReg="false"/>
+    <ROW File="LLVMLTO.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMLTO.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMLTO.lib" SelfReg="false"/>
+    <ROW File="LLVMMC.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMC.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMC.lib" SelfReg="false"/>
+    <ROW File="LLVMMCDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMC~1.LIB|LLVMMCDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMCDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMMCJIT.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMC~2.LIB|LLVMMCJIT.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMCJIT.lib" SelfReg="false"/>
+    <ROW File="LLVMMCParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMC~3.LIB|LLVMMCParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMCParser.lib" SelfReg="false"/>
+    <ROW File="LLVMMipsAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~1.LIB|LLVMMipsAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMipsAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMMipsCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~2.LIB|LLVMMipsCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMipsCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMMipsDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~3.LIB|LLVMMipsDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMipsDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMMipsDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~4.LIB|LLVMMipsDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMipsDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMMipsInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~5.LIB|LLVMMipsInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMipsInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMMIRParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMI~6.LIB|LLVMMIRParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMIRParser.lib" SelfReg="false"/>
+    <ROW File="LLVMMSP430AsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMS~1.LIB|LLVMMSP430AsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMSP430AsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMMSP430CodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMS~2.LIB|LLVMMSP430CodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMSP430CodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMMSP430Desc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMS~3.LIB|LLVMMSP430Desc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMSP430Desc.lib" SelfReg="false"/>
+    <ROW File="LLVMMSP430Disassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMS~4.LIB|LLVMMSP430Disassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMSP430Disassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMMSP430Info.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMMS~5.LIB|LLVMMSP430Info.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMMSP430Info.lib" SelfReg="false"/>
+    <ROW File="LLVMNVPTXCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMNV~1.LIB|LLVMNVPTXCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMNVPTXCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMNVPTXDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMNV~2.LIB|LLVMNVPTXDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMNVPTXDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMNVPTXInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMNV~3.LIB|LLVMNVPTXInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMNVPTXInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMObjCARCOpts.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMOB~1.LIB|LLVMObjCARCOpts.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMObjCARCOpts.lib" SelfReg="false"/>
+    <ROW File="LLVMObject.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMOB~2.LIB|LLVMObject.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMObject.lib" SelfReg="false"/>
+    <ROW File="LLVMOption.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMOP~1.LIB|LLVMOption.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMOption.lib" SelfReg="false"/>
+    <ROW File="LLVMPasses.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPA~1.LIB|LLVMPasses.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPasses.lib" SelfReg="false"/>
+    <ROW File="LLVMPowerPCAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPO~1.LIB|LLVMPowerPCAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPowerPCAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMPowerPCCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPO~2.LIB|LLVMPowerPCCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPowerPCCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMPowerPCDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPO~3.LIB|LLVMPowerPCDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPowerPCDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMPowerPCDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPO~4.LIB|LLVMPowerPCDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPowerPCDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMPowerPCInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPO~5.LIB|LLVMPowerPCInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMPowerPCInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMProfileData.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMPR~1.LIB|LLVMProfileData.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMProfileData.lib" SelfReg="false"/>
+    <ROW File="LLVMRemarks.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRE~1.LIB|LLVMRemarks.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRemarks.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~1.LIB|LLVMRISCVAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~2.LIB|LLVMRISCVCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~3.LIB|LLVMRISCVDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~4.LIB|LLVMRISCVDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~5.LIB|LLVMRISCVInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMRISCVUtils.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRI~6.LIB|LLVMRISCVUtils.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRISCVUtils.lib" SelfReg="false"/>
+    <ROW File="LLVMRuntimeDyld.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMRU~1.LIB|LLVMRuntimeDyld.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMRuntimeDyld.lib" SelfReg="false"/>
+    <ROW File="LLVMScalarOpts.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSC~1.LIB|LLVMScalarOpts.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMScalarOpts.lib" SelfReg="false"/>
+    <ROW File="LLVMSelectionDAG.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSE~1.LIB|LLVMSelectionDAG.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSelectionDAG.lib" SelfReg="false"/>
+    <ROW File="LLVMSparcAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSP~1.LIB|LLVMSparcAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSparcAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMSparcCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSP~2.LIB|LLVMSparcCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSparcCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMSparcDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSP~3.LIB|LLVMSparcDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSparcDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMSparcDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSP~4.LIB|LLVMSparcDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSparcDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMSparcInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSP~5.LIB|LLVMSparcInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSparcInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMSupport.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSU~1.LIB|LLVMSupport.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSupport.lib" SelfReg="false"/>
+    <ROW File="LLVMSystemZAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSY~1.LIB|LLVMSystemZAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSystemZAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMSystemZCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSY~2.LIB|LLVMSystemZCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSystemZCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMSystemZDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSY~3.LIB|LLVMSystemZDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSystemZDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMSystemZDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSY~4.LIB|LLVMSystemZDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSystemZDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMSystemZInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMSY~5.LIB|LLVMSystemZInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMSystemZInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMTableGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMTA~1.LIB|LLVMTableGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMTableGen.lib" SelfReg="false"/>
+    <ROW File="LLVMTableGenGlobalISel.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMTA~2.LIB|LLVMTableGenGlobalISel.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMTableGenGlobalISel.lib" SelfReg="false"/>
+    <ROW File="LLVMTarget.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMTA~3.LIB|LLVMTarget.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMTarget.lib" SelfReg="false"/>
+    <ROW File="LLVMTextAPI.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMTE~1.LIB|LLVMTextAPI.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMTextAPI.lib" SelfReg="false"/>
+    <ROW File="LLVMTransformUtils.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMTR~1.LIB|LLVMTransformUtils.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMTransformUtils.lib" SelfReg="false"/>
+    <ROW File="LLVMVectorize.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMVE~1.LIB|LLVMVectorize.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMVectorize.lib" SelfReg="false"/>
+    <ROW File="LLVMWebAssemblyAsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWE~1.LIB|LLVMWebAssemblyAsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWebAssemblyAsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMWebAssemblyCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWE~2.LIB|LLVMWebAssemblyCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWebAssemblyCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMWebAssemblyDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWE~3.LIB|LLVMWebAssemblyDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWebAssemblyDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMWebAssemblyDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWE~4.LIB|LLVMWebAssemblyDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWebAssemblyDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMWebAssemblyInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWE~5.LIB|LLVMWebAssemblyInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWebAssemblyInfo.lib" SelfReg="false"/>
+    <ROW File="LLVMWindowsManifest.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMWI~1.LIB|LLVMWindowsManifest.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMWindowsManifest.lib" SelfReg="false"/>
+    <ROW File="LLVMX86AsmParser.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMX8~1.LIB|LLVMX86AsmParser.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMX86AsmParser.lib" SelfReg="false"/>
+    <ROW File="LLVMX86CodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMX8~2.LIB|LLVMX86CodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMX86CodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMX86Desc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMX8~3.LIB|LLVMX86Desc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMX86Desc.lib" SelfReg="false"/>
+    <ROW File="LLVMX86Disassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMX8~4.LIB|LLVMX86Disassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMX86Disassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMX86Info.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMX8~5.LIB|LLVMX86Info.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMX86Info.lib" SelfReg="false"/>
+    <ROW File="LLVMXCoreCodeGen.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMXC~1.LIB|LLVMXCoreCodeGen.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMXCoreCodeGen.lib" SelfReg="false"/>
+    <ROW File="LLVMXCoreDesc.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMXC~2.LIB|LLVMXCoreDesc.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMXCoreDesc.lib" SelfReg="false"/>
+    <ROW File="LLVMXCoreDisassembler.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMXC~3.LIB|LLVMXCoreDisassembler.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMXCoreDisassembler.lib" SelfReg="false"/>
+    <ROW File="LLVMXCoreInfo.lib" Component_="AllocateSpaceInStack.asm" FileName="LLVMXC~4.LIB|LLVMXCoreInfo.lib" Attributes="0" SourcePath="..\temp\Release\lib\LLVMXCoreInfo.lib" SelfReg="false"/>
+    <ROW File="CreateFileHookDll.dll" Component_="CreateFileHookDll.dll" FileName="CREATE~1.DLL|CreateFileHookDll.dll" Attributes="0" SourcePath="..\temp\x64\Release\CreateFileHookDll.dll" SelfReg="false"/>
+    <ROW File="config.json" Component_="config.json" FileName="CONFIG~1.JSO|config.json" Attributes="0" SourcePath="..\bsodSurvivor\config.json" SelfReg="false"/>
+    <ROW File="msvcp140.dll_1" Component_="msvcp140.dll_1" FileName="msvcp140.dll" Attributes="0" SourcePath="..\external-dlls\msvcp140.dll" SelfReg="false"/>
+    <ROW File="vcruntime140.dll_1" Component_="vcruntime140.dll_1" FileName="VCRUNT~1.DLL|vcruntime140.dll" Attributes="0" SourcePath="..\external-dlls\vcruntime140.dll" SelfReg="false"/>
+    <ROW File="vcruntime140_1.dll_1" Component_="vcruntime140_1.dll_1" FileName="VCRUNT~2.DLL|vcruntime140_1.dll" Attributes="0" SourcePath="..\external-dlls\vcruntime140_1.dll" SelfReg="false"/>
+    <ROW File="BsodSurvivor.dll" Component_="BsodSurvivor.dll" FileName="BSODSU~1.DLL|BsodSurvivor.dll" Attributes="0" SourcePath="..\temp\x64\Release\BsodSurvivor.dll" SelfReg="false"/>
+    <ROW File="BsodSurvivorExtension.vsix" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~1.VSI|BsodSurvivorExtension.vsix" Attributes="0" SourcePath="..\bsodSurvivor\visualStudioExtension\bin\Release\BsodSurvivorExtension.vsix" SelfReg="false"/>
+    <ROW File="bsodSurvivorDriverLib.lib" Component_="AllocateSpaceInStack.asm" FileName="BSODSU~1.LIB|bsodSurvivorDriverLib.lib" Attributes="0" SourcePath="..\temp\x64\Release\bsodSurvivorDriverLib.lib" SelfReg="false"/>
+    <ROW File="BsodSurvivorDriver.props" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~1.PRO|BsodSurvivorDriver.props" Attributes="0" SourcePath="..\bsodSurvivor\props\BsodSurvivorDriver.props" SelfReg="false"/>
+    <ROW File="BsodSurvivorDriverCommon.props" Component_="BsodSurvivorExtension.vsix" FileName="BSODSU~2.PRO|BsodSurvivorDriverCommon.props" Attributes="0" SourcePath="..\bsodSurvivor\props\BsodSurvivorDriverCommon.props" SelfReg="false"/>
+    <ROW File="EasyHook64.dll" Component_="EasyHook64.dll" FileName="EASYHO~1.DLL|EasyHook64.dll" Attributes="0" SourcePath="..\temp\x64\Release\EasyHook64.dll" SelfReg="false"/>
+    <ROW File="libcrypto1_1x64.dll" Component_="libcrypto1_1x64.dll" FileName="LIBCRY~1.DLL|libcrypto-1_1-x64.dll" Attributes="0" SourcePath="..\temp\x64\Release\libcrypto-1_1-x64.dll" SelfReg="false"/>
+    <ROW File="libprotobuf.dll" Component_="libprotobuf.dll" FileName="LIBPRO~1.DLL|libprotobuf.dll" Attributes="0" SourcePath="..\temp\x64\Release\libprotobuf.dll" SelfReg="false"/>
+    <ROW File="libprotobuflite.dll" Component_="libprotobuflite.dll" FileName="LIBPRO~2.DLL|libprotobuf-lite.dll" Attributes="0" SourcePath="..\temp\x64\Release\libprotobuf-lite.dll" SelfReg="false"/>
+    <ROW File="libssl1_1x64.dll" Component_="libssl1_1x64.dll" FileName="LIBSSL~1.DLL|libssl-1_1-x64.dll" Attributes="0" SourcePath="..\temp\x64\Release\libssl-1_1-x64.dll" SelfReg="false"/>
+    <ROW File="msvcp140.dll" Component_="msvcp140.dll" FileName="msvcp140.dll" Attributes="0" SourcePath="..\external-dlls\msvcp140.dll" SelfReg="false"/>
+    <ROW File="re2.dll" Component_="re2.dll" FileName="re2.dll" Attributes="0" SourcePath="..\temp\x64\Release\re2.dll" SelfReg="false"/>
+    <ROW File="vcruntime140.dll" Component_="vcruntime140.dll" FileName="VCRUNT~1.DLL|vcruntime140.dll" Attributes="0" SourcePath="..\external-dlls\vcruntime140.dll" SelfReg="false"/>
+    <ROW File="vcruntime140_1.dll" Component_="vcruntime140_1.dll" FileName="VCRUNT~2.DLL|vcruntime140_1.dll" Attributes="0" SourcePath="..\external-dlls\vcruntime140_1.dll" SelfReg="false"/>
+    <ROW File="zlib1.dll" Component_="zlib1.dll" FileName="zlib1.dll" Attributes="0" SourcePath="..\temp\x64\Release\zlib1.dll" SelfReg="false"/>
+    <ROW File="abseil_dll.dll" Component_="abseil_dll.dll" FileName="ABSEIL~1.DLL|abseil_dll.dll" Attributes="0" SourcePath="..\temp\x64\Release\abseil_dll.dll" SelfReg="false"/>
+    <ROW File="cares.dll" Component_="cares.dll" FileName="cares.dll" Attributes="0" SourcePath="..\temp\x64\Release\cares.dll" SelfReg="false"/>
+    <ROW File="copy_windbg_files.py" Component_="config.json" FileName="COPY_W~1.PY|copy_windbg_files.py" Attributes="0" SourcePath="copy_windbg_files.py" SelfReg="false"/>
+    <ROW File="ReadMe.md" Component_="ReadMe.md" FileName="ReadMe.md" Attributes="0" SourcePath="ReadMe.md" SelfReg="false"/>
+    <ROW File="clangDriverExample.sln" Component_="clangDriverExample.sln" FileName="CLANGD~1.SLN|clangDriverExample.sln" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.sln" SelfReg="false"/>
+    <ROW File="clangDriverExample.vcxproj" Component_="clangDriverExample.sln" FileName="CLANGD~1.VCX|clangDriverExample.vcxproj" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.vcxproj" SelfReg="false"/>
+    <ROW File="clangDriverExample.vcxproj.filters" Component_="clangDriverExample.sln" FileName="CLANGD~1.FIL|clangDriverExample.vcxproj.filters" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.vcxproj.filters" SelfReg="false"/>
+    <ROW File="Main.cpp" Component_="clangDriverExample.sln" FileName="Main.cpp" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\Main.cpp" SelfReg="false"/>
+    <ROW File="llvmdwarfdump.exe" Component_="llvmdwarfdump.exe" FileName="LLVM-D~1.EXE|llvm-dwarfdump.exe" Attributes="0" SourcePath="..\temp\Release\bin\llvm-dwarfdump.exe" SelfReg="false" DigSign="true"/>
+    <ROW File="stdafx.h" Component_="module.modulemap" FileName="stdafx.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\stdafx.h" SelfReg="false"/>
+    <ROW File="Vector.h" Component_="module.modulemap" FileName="Vector.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\Vector.h" SelfReg="false"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.BootstrOptComponent">
+    <ROW BootstrOptKey="GlobalOptions" DownloadFolder="[AppDataFolder][|Manufacturer]\[|ProductName]\prerequisites" Options="2"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.BuildComponent">
+    <ROW BuildKey="DefaultBuild" BuildName="DefaultBuild" BuildOrder="1" BuildType="0" Languages="en" InstallationType="4" UseLargeSchema="true"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.DictionaryComponent">
+    <ROW Path="&lt;AI_DICTS&gt;ui.ail"/>
+    <ROW Path="&lt;AI_DICTS&gt;ui_en.ail"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.FragmentComponent">
+    <ROW Fragment="CommonUI.aip" Path="&lt;AI_FRAGS&gt;CommonUI.aip"/>
+    <ROW Fragment="FolderDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\FolderDlg.aip"/>
+    <ROW Fragment="MaintenanceTypeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\MaintenanceTypeDlg.aip"/>
+    <ROW Fragment="MaintenanceWelcomeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\MaintenanceWelcomeDlg.aip"/>
+    <ROW Fragment="SequenceDialogs.aip" Path="&lt;AI_THEMES&gt;classic\fragments\SequenceDialogs.aip"/>
+    <ROW Fragment="Sequences.aip" Path="&lt;AI_FRAGS&gt;Sequences.aip"/>
+    <ROW Fragment="StaticUIStrings.aip" Path="&lt;AI_FRAGS&gt;StaticUIStrings.aip"/>
+    <ROW Fragment="UI.aip" Path="&lt;AI_THEMES&gt;classic\fragments\UI.aip"/>
+    <ROW Fragment="Validation.aip" Path="&lt;AI_FRAGS&gt;Validation.aip"/>
+    <ROW Fragment="VerifyRemoveDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\VerifyRemoveDlg.aip"/>
+    <ROW Fragment="VerifyRepairDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\VerifyRepairDlg.aip"/>
+    <ROW Fragment="WelcomeDlg.aip" Path="&lt;AI_THEMES&gt;classic\fragments\WelcomeDlg.aip"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiBinaryComponent">
+    <ROW Name="aicustact.dll" SourcePath="&lt;AI_CUSTACTS&gt;aicustact.dll"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiControlEventComponent">
+    <ROW Dialog_="WelcomeDlg" Control_="Next" Event="NewDialog" Argument="FolderDlg" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="FolderDlg" Control_="Next" Event="NewDialog" Argument="VerifyReadyDlg" Condition="AI_INSTALL" Ordering="201"/>
+    <ROW Dialog_="FolderDlg" Control_="Back" Event="NewDialog" Argument="WelcomeDlg" Condition="AI_INSTALL" Ordering="1"/>
+    <ROW Dialog_="MaintenanceWelcomeDlg" Control_="Next" Event="NewDialog" Argument="MaintenanceTypeDlg" Condition="AI_MAINT" Ordering="99"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Install" Event="EndDialog" Argument="Return" Condition="AI_MAINT" Ordering="198"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Back" Event="NewDialog" Argument="CustomizeDlg" Condition="AI_MAINT" Ordering="202"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Install" Event="EndDialog" Argument="Return" Condition="AI_INSTALL" Ordering="197"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Back" Event="NewDialog" Argument="FolderDlg" Condition="AI_INSTALL" Ordering="201"/>
+    <ROW Dialog_="CustomizeDlg" Control_="Next" Event="NewDialog" Argument="VerifyReadyDlg" Condition="AI_MAINT" Ordering="101"/>
+    <ROW Dialog_="CustomizeDlg" Control_="Back" Event="NewDialog" Argument="MaintenanceTypeDlg" Condition="AI_MAINT" Ordering="1"/>
+    <ROW Dialog_="MaintenanceTypeDlg" Control_="ChangeButton" Event="NewDialog" Argument="CustomizeDlg" Condition="AI_MAINT" Ordering="501"/>
+    <ROW Dialog_="MaintenanceTypeDlg" Control_="Back" Event="NewDialog" Argument="MaintenanceWelcomeDlg" Condition="AI_MAINT" Ordering="1"/>
+    <ROW Dialog_="MaintenanceTypeDlg" Control_="RemoveButton" Event="NewDialog" Argument="VerifyRemoveDlg" Condition="AI_MAINT AND InstallMode=&quot;Remove&quot;" Ordering="601"/>
+    <ROW Dialog_="VerifyRemoveDlg" Control_="Back" Event="NewDialog" Argument="MaintenanceTypeDlg" Condition="AI_MAINT AND InstallMode=&quot;Remove&quot;" Ordering="1"/>
+    <ROW Dialog_="MaintenanceTypeDlg" Control_="RepairButton" Event="NewDialog" Argument="VerifyRepairDlg" Condition="AI_MAINT AND InstallMode=&quot;Repair&quot;" Ordering="601"/>
+    <ROW Dialog_="VerifyRepairDlg" Control_="Back" Event="NewDialog" Argument="MaintenanceTypeDlg" Condition="AI_MAINT AND InstallMode=&quot;Repair&quot;" Ordering="1"/>
+    <ROW Dialog_="VerifyRepairDlg" Control_="Repair" Event="EndDialog" Argument="Return" Condition="AI_MAINT AND InstallMode=&quot;Repair&quot;" Ordering="399" Options="1"/>
+    <ROW Dialog_="VerifyRemoveDlg" Control_="Remove" Event="EndDialog" Argument="Return" Condition="AI_MAINT AND InstallMode=&quot;Remove&quot;" Ordering="299" Options="1"/>
+    <ROW Dialog_="PatchWelcomeDlg" Control_="Next" Event="NewDialog" Argument="VerifyReadyDlg" Condition="AI_PATCH" Ordering="201"/>
+    <ROW Dialog_="ResumeDlg" Control_="Install" Event="EndDialog" Argument="Return" Condition="AI_RESUME" Ordering="299"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Install" Event="EndDialog" Argument="Return" Condition="AI_PATCH" Ordering="199"/>
+    <ROW Dialog_="VerifyReadyDlg" Control_="Back" Event="NewDialog" Argument="PatchWelcomeDlg" Condition="AI_PATCH" Ordering="203"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCreateFolderComponent">
+    <ROW Directory_="APPDIR" Component_="APPDIR" ManualDelete="true"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiCustActComponent">
+    <ROW Action="AI_DOWNGRADE" Type="19" Target="4010"/>
+    <ROW Action="AI_DpiContentScale" Type="1" Source="aicustact.dll" Target="DpiContentScale"/>
+    <ROW Action="AI_EnableDebugLog" Type="321" Source="aicustact.dll" Target="EnableDebugLog"/>
+    <ROW Action="AI_InstallModeCheck" Type="1" Source="aicustact.dll" Target="UpdateInstallMode" WithoutSeq="true"/>
+    <ROW Action="AI_PREPARE_UPGRADE" Type="65" Source="aicustact.dll" Target="PrepareUpgrade"/>
+    <ROW Action="AI_RESTORE_LOCATION" Type="65" Source="aicustact.dll" Target="RestoreLocation"/>
+    <ROW Action="AI_ResolveKnownFolders" Type="1" Source="aicustact.dll" Target="AI_ResolveKnownFolders"/>
+    <ROW Action="AI_SHOW_LOG" Type="65" Source="aicustact.dll" Target="LaunchLogFile" WithoutSeq="true"/>
+    <ROW Action="AI_STORE_LOCATION" Type="51" Source="ARPINSTALLLOCATION" Target="[APPDIR]"/>
+    <ROW Action="AI_ViewReadme" Type="1" Source="aicustact.dll" Target="[#ReadMe.md]"/>
+    <ROW Action="SET_APPDIR" Type="307" Source="APPDIR" Target="[ProgramFilesFolder][Manufacturer]\[ProductName]"/>
+    <ROW Action="SET_SHORTCUTDIR" Type="307" Source="SHORTCUTDIR" Target="[ProgramMenuFolder][ProductName]"/>
+    <ROW Action="SET_TARGETDIR_TO_APPDIR" Type="51" Source="TARGETDIR" Target="[APPDIR]"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiEnvComponent">
+    <ROW Environment="BSOD_SURVIVOR_DIR" Name="=-BSOD_SURVIVOR_DIR" Value="[APPDIR]" Component_="clangcl.exe"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatCompsComponent">
+    <ROW Feature_="MainFeature" Component_="APPDIR"/>
+    <ROW Feature_="MainFeature" Component_="ProductInformation"/>
+    <ROW Feature_="MainFeature" Component_="clang.exe"/>
+    <ROW Feature_="MainFeature" Component_="clangcl.exe"/>
+    <ROW Feature_="MainFeature" Component_="clangcpp.exe"/>
+    <ROW Feature_="MainFeature" Component_="clang.exe_2"/>
+    <ROW Feature_="MainFeature" Component_="ld.lld.exe"/>
+    <ROW Feature_="MainFeature" Component_="ld64.lld.exe"/>
+    <ROW Feature_="MainFeature" Component_="liblldb.dll"/>
+    <ROW Feature_="MainFeature" Component_="lldlink.exe"/>
+    <ROW Feature_="MainFeature" Component_="lld.exe"/>
+    <ROW Feature_="MainFeature" Component_="lldbdotest"/>
+    <ROW Feature_="MainFeature" Component_="lldb.exe"/>
+    <ROW Feature_="MainFeature" Component_="llvmobjcopy.exe"/>
+    <ROW Feature_="MainFeature" Component_="llvmtblgen.exe"/>
+    <ROW Feature_="MainFeature" Component_="AllocateSpaceInStack.asm"/>
+    <ROW Feature_="MainFeature" Component_="adxintrin.h"/>
+    <ROW Feature_="MainFeature" Component_="algorithm"/>
+    <ROW Feature_="MainFeature" Component_="cmath"/>
+    <ROW Feature_="MainFeature" Component_="emmintrin.h"/>
+    <ROW Feature_="MainFeature" Component_="config.json"/>
+    <ROW Feature_="MainFeature" Component_="CreateFileHookDll.dll"/>
+    <ROW Feature_="MainFeature" Component_="msvcp140.dll_1"/>
+    <ROW Feature_="MainFeature" Component_="vcruntime140.dll_1"/>
+    <ROW Feature_="MainFeature" Component_="vcruntime140_1.dll_1"/>
+    <ROW Feature_="MainFeature" Component_="BsodSurvivor.dll"/>
+    <ROW Feature_="MainFeature" Component_="EasyHook64.dll"/>
+    <ROW Feature_="MainFeature" Component_="BsodSurvivorExtension.vsix"/>
+    <ROW Feature_="MainFeature" Component_="libcrypto1_1x64.dll"/>
+    <ROW Feature_="MainFeature" Component_="abseil_dll.dll"/>
+    <ROW Feature_="MainFeature" Component_="libprotobuf.dll"/>
+    <ROW Feature_="MainFeature" Component_="libprotobuflite.dll"/>
+    <ROW Feature_="MainFeature" Component_="libssl1_1x64.dll"/>
+    <ROW Feature_="MainFeature" Component_="msvcp140.dll"/>
+    <ROW Feature_="MainFeature" Component_="re2.dll"/>
+    <ROW Feature_="MainFeature" Component_="vcruntime140.dll"/>
+    <ROW Feature_="MainFeature" Component_="vcruntime140_1.dll"/>
+    <ROW Feature_="MainFeature" Component_="zlib1.dll"/>
+    <ROW Feature_="MainFeature" Component_="cares.dll"/>
+    <ROW Feature_="MainFeature" Component_="ReadMe.md"/>
+    <ROW Feature_="MainFeature" Component_="llvmdwarfdump.exe"/>
+    <ROW Feature_="MainFeature" Component_="clangDriverExample.sln"/>
+    <ROW Feature_="MainFeature" Component_="module.modulemap"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiInstExSeqComponent">
+    <ROW Action="AI_DOWNGRADE" Condition="AI_NEWERPRODUCTFOUND AND (UILevel &lt;&gt; 5)" Sequence="210"/>
+    <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
+    <ROW Action="AI_STORE_LOCATION" Condition="(Not Installed) OR REINSTALL" Sequence="1501"/>
+    <ROW Action="AI_PREPARE_UPGRADE" Condition="AI_UPGRADE=&quot;No&quot; AND (Not Installed)" Sequence="1399"/>
+    <ROW Action="AI_ResolveKnownFolders" Sequence="52"/>
+    <ROW Action="AI_EnableDebugLog" Sequence="51"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiInstallUISequenceComponent">
+    <ROW Action="AI_RESTORE_LOCATION" Condition="APPDIR=&quot;&quot;" Sequence="749"/>
+    <ROW Action="AI_ResolveKnownFolders" Sequence="53"/>
+    <ROW Action="AI_DpiContentScale" Sequence="52"/>
+    <ROW Action="AI_EnableDebugLog" Sequence="51"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiLaunchConditionsComponent">
+    <ROW Condition="((VersionNT &lt;&gt; 501) AND (VersionNT &lt;&gt; 502))" Description="[ProductName] cannot be installed on [WindowsTypeNT5XDisplay]." DescriptionLocId="AI.LaunchCondition.NoNT5X" IsPredefined="true" Builds="DefaultBuild"/>
+    <ROW Condition="(VersionNT &lt;&gt; 400)" Description="[ProductName] cannot be installed on [WindowsTypeNT40Display]." DescriptionLocId="AI.LaunchCondition.NoNT40" IsPredefined="true" Builds="DefaultBuild"/>
+    <ROW Condition="(VersionNT &lt;&gt; 500)" Description="[ProductName] cannot be installed on [WindowsTypeNT50Display]." DescriptionLocId="AI.LaunchCondition.NoNT50" IsPredefined="true" Builds="DefaultBuild"/>
+    <ROW Condition="VersionNT" Description="[ProductName] cannot be installed on [WindowsType9XDisplay]." DescriptionLocId="AI.LaunchCondition.No9X" IsPredefined="true" Builds="DefaultBuild"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiRegsComponent">
+    <ROW Registry="Path" Root="-1" Key="Software\[Manufacturer]\[ProductName]" Name="Path" Value="[APPDIR]" Component_="ProductInformation"/>
+    <ROW Registry="Version" Root="-1" Key="Software\[Manufacturer]\[ProductName]" Name="Version" Value="[ProductVersion]" Component_="ProductInformation"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiThemeComponent">
+    <ATTRIBUTE name="UsedTheme" value="classic"/>
+  </COMPONENT>
+  <COMPONENT cid="caphyon.advinst.msicomp.MsiUpgradeComponent">
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="0.0.1" VersionMax="[|ProductVersion]" Attributes="257" ActionProperty="OLDPRODUCTS"/>
+    <ROW UpgradeCode="[|UpgradeCode]" VersionMin="[|ProductVersion]" Attributes="2" ActionProperty="AI_NEWERPRODUCTFOUND"/>
+  </COMPONENT>
+</DOCUMENT>

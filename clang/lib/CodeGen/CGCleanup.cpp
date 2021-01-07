@@ -636,6 +636,12 @@ static void destroyOptimisticNormalEntry(CodeGenFunction &CGF,
   delete entry;
 }
 
+static llvm::FunctionCallee getSehTryEndFn(CodeGenModule& CGM) {
+  llvm::FunctionType* FTy =
+    llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
+  return CGM.CreateRuntimeFunction(FTy, "llvm.seh.try.end");
+}
+
 /// Pops a cleanup block.  If the block includes a normal cleanup, the
 /// current insertion point is threaded through the cleanup, as are
 /// any branch fixups on the cleanup.
@@ -758,17 +764,27 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
     cleanupFlags.setIsNormalCleanupKind();
   if (Scope.isEHCleanup())
     cleanupFlags.setIsEHCleanupKind();
-
   if (!RequiresNormalCleanup) {
     destroyOptimisticNormalEntry(*this, Scope);
     EHStack.popCleanup();
   } else {
+    // Under -EHa, invoke eha_scope_end() to mark scope end before dtor
+    bool IsEHa = getLangOpts().EHAsynch && !Scope.isLifetimeMarker();
+    const EHPersonality& Personality = EHPersonality::get(*this);
+
     // If we have a fallthrough and no other need for the cleanup,
     // emit it directly.
     if (HasFallthrough && !HasPrebranchedFallthrough &&
         !HasFixups && !HasExistingBranches) {
-
       destroyOptimisticNormalEntry(*this, Scope);
+      if (RequiresEHCleanup) {
+        if (!EHStack.empty()) {
+          if (Personality.isMSVCXXPersonality())
+            EmitSehCppScopeEnd();
+          else
+            EmitSehTryScopeEnd();
+        }
+      }
       EHStack.popCleanup();
 
       EmitCleanup(*this, Fn, cleanupFlags, NormalActiveFlag);
@@ -801,6 +817,18 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
       // should already be branched to it.
       EmitBlock(NormalEntry);
 
+      if (RequiresEHCleanup) {
+        // intercept normal cleanup to mark EHa scope end
+        if (IsEHa) {
+          if (!EHStack.empty()) {
+            if (Personality.isMSVCXXPersonality())
+              EmitSehCppScopeEnd();
+            else
+              EmitSehTryScopeEnd();
+          }
+        }
+      }
+      
       // III.  Figure out where we're going and build the cleanup
       // epilogue.
 
@@ -890,7 +918,6 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
         assert(BranchThroughDest);
         InstsToAppend.push_back(llvm::BranchInst::Create(BranchThroughDest));
       }
-
       // IV.  Pop the cleanup and emit it.
       EHStack.popCleanup();
       assert(EHStack.hasNormalCleanups() == HasEnclosingCleanups);
@@ -1012,6 +1039,8 @@ void CodeGenFunction::PopCleanupBlock(bool FallthroughIsBranchThrough) {
 
     SimplifyCleanupEntry(*this, EHEntry);
   }
+
+
 }
 
 /// isObviouslyBranchWithoutCleanups - Return true if a branch to the
@@ -1275,4 +1304,63 @@ void CodeGenFunction::EmitCXXTemporary(const CXXTemporary *Temporary,
                                        Address Ptr) {
   pushDestroy(NormalAndEHCleanup, Ptr, TempType, destroyCXXObject,
               /*useEHCleanup*/ true);
+}
+
+// EmitRuntimeCallOrInvoke() does not work bcause "funclet" not set
+//   in OperandBundle properly for noThrow intrinsic (see CGCall.cpp)
+static llvm::InvokeInst* EmitSehEHaScope(CodeGenFunction& CGF,
+  llvm::FunctionCallee& SehCppScope)
+{
+  llvm::BasicBlock* InvokeDest = CGF.getInvokeDest();
+  if (!InvokeDest) {
+    return nullptr;
+  }
+  llvm::BasicBlock* BB = CGF.Builder.GetInsertBlock();
+  assert(BB);
+  llvm::BasicBlock* Cont = CGF.createBasicBlock("invoke.cont");
+  SmallVector<llvm::OperandBundleDef, 1> BundleList =
+    CGF.getBundlesForFunclet(SehCppScope.getCallee());
+  if (CGF.CurrentFuncletPad)
+    BundleList.emplace_back("funclet", CGF.CurrentFuncletPad);
+  auto invoke = CGF.Builder.CreateInvoke(SehCppScope, Cont, InvokeDest, None, BundleList);
+  CGF.EmitBlock(Cont);
+  return invoke;
+}
+
+// Invoke a llvm.eha.scope.begin at the beginning of a CPP scope for -EHa
+void CodeGenFunction::EmitSehCppScopeBegin() {
+  llvm::FunctionType* FTy =
+    llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
+  llvm::FunctionCallee SehCppScope =
+    CGM.CreateRuntimeFunction(FTy, "llvm.eha.scope.begin");
+  EmitSehEHaScope(*this, SehCppScope);
+}
+
+// Invoke a llvm.eha.scope.end at the end of a CPP scope for -EHa
+//   llvm.eha.scope.end is emitted before popCleanup, so it's "invoked"
+void CodeGenFunction::EmitSehCppScopeEnd() {
+  llvm::FunctionType* FTy =
+    llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
+  llvm::FunctionCallee SehCppScope =
+    CGM.CreateRuntimeFunction(FTy, "llvm.eha.scope.end");
+  EmitSehEHaScope(*this, SehCppScope);
+}
+
+// Invoke a llvm.eha.scope.begin at the beginning of a CPP scope for -EHa
+void CodeGenFunction::EmitSehTryScopeBegin() {
+  llvm::FunctionType* FTy =
+    llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
+  llvm::FunctionCallee SehCppScope =
+    CGM.CreateRuntimeFunction(FTy, "llvm.seh.try.begin");
+  EmitSehEHaScope(*this, SehCppScope);
+}
+
+// Invoke a llvm.eha.scope.end at the end of a CPP scope for -EHa
+//   llvm.eha.scope.end is emitted before popCleanup, so it's "invoked"
+void CodeGenFunction::EmitSehTryScopeEnd() {
+  llvm::FunctionType* FTy =
+    llvm::FunctionType::get(CGM.VoidTy, /*isVarArg=*/false);
+  llvm::FunctionCallee SehCppScope =
+    CGM.CreateRuntimeFunction(FTy, "llvm.seh.try.end");
+  EmitSehEHaScope(*this, SehCppScope);
 }

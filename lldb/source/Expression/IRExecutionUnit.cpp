@@ -30,7 +30,8 @@
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
-
+#include "lldb/Symbol/Variable.h"
+#include <algorithm>
 #include "lldb/../../source/Plugins/Language/CPlusPlus/CPlusPlusLanguage.h"
 #include "lldb/../../source/Plugins/ObjectFile/JIT/ObjectFileJIT.h"
 
@@ -405,6 +406,8 @@ void IRExecutionUnit::GetRunnableInfo(Status &error, lldb::addr_t &func_addr,
       emitNewLine = true;
       ss.PutCString("  ");
       ss.PutCString(Mangled(failed_lookup).GetDemangledName().GetStringRef());
+      ss.PutCString("\nyou probable need to add " "my_" + std::to_string(std::hash<std::string>{}(
+                                               failed_lookup.AsCString())));
     }
 
     m_failed_lookups.clear();
@@ -717,6 +720,7 @@ void IRExecutionUnit::CollectCandidateCPlusPlusNames(
       ConstString demangled = mangled.GetDemangledName();
 
       if (demangled) {
+        CPP_specs.push_back(demangled);
         ConstString best_alternate_mangled_name =
             FindBestAlternateMangledName(demangled, sc);
 
@@ -729,6 +733,10 @@ void IRExecutionUnit::CollectCandidateCPlusPlusNames(
     std::set<ConstString> alternates;
     CPlusPlusLanguage::FindAlternateFunctionManglings(name, alternates);
     CPP_specs.insert(CPP_specs.end(), alternates.begin(), alternates.end());
+    auto myNameToSearch =
+        "my_" +
+        std::to_string(std::hash<std::string>{}(C_spec.name.AsCString()));
+    CPP_specs.push_back(ConstString(myNameToSearch));
   }
 }
 
@@ -791,7 +799,30 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
       // missing_weak_symbol will be true only if we found only weak undefined 
       // references to this symbol.
       symbol_was_missing_weak = true;      
-      for (auto candidate_sc : sc_list.SymbolContexts()) {        
+      auto symbolContexts = sc_list.SymbolContexts();
+      bool shouldReverseSymbols = false;
+      if (sc_list.GetSize() > 0) {
+        SymbolContext candidate_sc;
+        sc_list.GetContextAtIndex(0, candidate_sc);
+        if (sc.function) {
+          shouldReverseSymbols = true;
+        }
+        shouldReverseSymbols = true;
+        
+        if (sc.variable) {
+          if (auto type = sc.variable->GetType()) {
+            shouldReverseSymbols = type->GetForwardCompilerType().IsConst();
+          }
+        }
+        
+      }
+      for (size_t i = sc_list.GetSize(); i != 0;i--) {
+        SymbolContext candidate_sc;
+        size_t neededIndex = sc_list.GetSize() - i;
+        if (shouldReverseSymbols) {
+          neededIndex = i - 1;
+        }
+        sc_list.GetContextAtIndex(neededIndex, candidate_sc);
         // Only symbols can be weak undefined:
         if (!candidate_sc.symbol)
           symbol_was_missing_weak = false;
@@ -845,28 +876,13 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
       return false;
     };
 
-    if (sc.module_sp) {
-      sc.module_sp->FindFunctions(spec.name, CompilerDeclContext(), spec.mask,
-                                  true,  // include_symbols
-                                  false, // include_inlines
-                                  sc_list);
-    }
-
-    lldb::addr_t load_address = LLDB_INVALID_ADDRESS;
-
-    if (get_external_load_address(load_address, sc_list, sc)) {
-      return load_address;
-    } else {
-      sc_list.Clear();
-    }
-
     if (sc_list.GetSize() == 0 && sc.target_sp) {
       sc.target_sp->GetImages().FindFunctions(spec.name, spec.mask,
                                               true,  // include_symbols
                                               false, // include_inlines
                                               sc_list);
     }
-
+    lldb::addr_t load_address = LLDB_INVALID_ADDRESS;
     if (get_external_load_address(load_address, sc_list, sc)) {
       return load_address;
     } else {
@@ -880,7 +896,17 @@ lldb::addr_t IRExecutionUnit::FindInSymbols(
 
     if (get_external_load_address(load_address, sc_list, sc)) {
       return load_address;
+    } else {
+      sc_list.Clear();
     }
+
+    if (sc.module_sp) {
+      sc.module_sp->FindFunctions(spec.name, CompilerDeclContext(), spec.mask,
+                                  true,  // include_symbols
+                                  false, // include_inlines
+                                  sc_list);
+    }
+
     // if there are any searches we try after this, add an sc_list.Clear() in
     // an "else" clause here
 
@@ -1152,28 +1178,78 @@ bool IRExecutionUnit::CommitOneAllocation(lldb::ProcessSP &process_sp,
 }
 
 bool IRExecutionUnit::CommitAllocations(lldb::ProcessSP &process_sp) {
-  bool ret = true;
 
   lldb_private::Status err;
+  size_t neededSize = 0;
 
-  for (AllocationRecord &record : m_records) {
-    ret = CommitOneAllocation(process_sp, err, record);
-
-    if (!ret) {
-      break;
+  auto shouldIgnoreSection = [](AllocationRecord &record) {
+    switch (record.m_sect_type) {
+    case lldb::eSectionTypeInvalid:
+    case lldb::eSectionTypeDWARFDebugAbbrev:
+    case lldb::eSectionTypeDWARFDebugAddr:
+    case lldb::eSectionTypeDWARFDebugAranges:
+    case lldb::eSectionTypeDWARFDebugCuIndex:
+    case lldb::eSectionTypeDWARFDebugFrame:
+    case lldb::eSectionTypeDWARFDebugInfo:
+    case lldb::eSectionTypeDWARFDebugLine:
+    case lldb::eSectionTypeDWARFDebugLoc:
+    case lldb::eSectionTypeDWARFDebugLocLists:
+    case lldb::eSectionTypeDWARFDebugMacInfo:
+    case lldb::eSectionTypeDWARFDebugPubNames:
+    case lldb::eSectionTypeDWARFDebugPubTypes:
+    case lldb::eSectionTypeDWARFDebugRanges:
+    case lldb::eSectionTypeDWARFDebugStr:
+    case lldb::eSectionTypeDWARFDebugStrOffsets:
+    case lldb::eSectionTypeDWARFAppleNames:
+    case lldb::eSectionTypeDWARFAppleTypes:
+    case lldb::eSectionTypeDWARFAppleNamespaces:
+    case lldb::eSectionTypeDWARFAppleObjC:
+    case lldb::eSectionTypeDWARFGNUDebugAltLink: {
+      return true;
     }
-  }
+    default:
+      return false;
+    }
+  };
 
-  if (!ret) {
-    for (AllocationRecord &record : m_records) {
-      if (record.m_process_address != LLDB_INVALID_ADDRESS) {
-        Free(record.m_process_address, err);
-        record.m_process_address = LLDB_INVALID_ADDRESS;
+  std::map<uint64_t, uint64_t> offsets;
+  for (size_t i = 0; i < m_records.size();i++) {
+
+    if (shouldIgnoreSection(m_records[i])) {
+      continue;
+    }
+
+    if (neededSize % m_records.at(i).m_alignment != 0) {
+      neededSize = neededSize / m_records.at(i).m_alignment *
+                       m_records.at(i).m_alignment +
+                   m_records.at(i).m_alignment;
+    }
+
+    offsets[i] = neededSize;
+    neededSize = neededSize + m_records.at(i).m_size;
+
+      if (neededSize % m_records.at(i).m_alignment != 0) {
+      neededSize = neededSize / m_records.at(i).m_alignment *
+                         m_records.at(i).m_alignment +
+                     m_records.at(i).m_alignment;
       }
     }
+  auto allocatedAddr =
+      Malloc(neededSize, 1,
+             lldb::ePermissionsExecutable | lldb::ePermissionsWritable |
+                 lldb::ePermissionsReadable,
+             eAllocationPolicyProcessOnly, false, err);
+  if (!err.Success()) {
+
+    return false;
   }
 
-  return ret;
+  for (size_t i = 0; i < m_records.size(); i++) {
+    if (!shouldIgnoreSection(m_records[i])) {
+      m_records[i].m_process_address = allocatedAddr + offsets[i];
+    }
+  }
+  return true;
 }
 
 void IRExecutionUnit::ReportAllocations(llvm::ExecutionEngine &engine) {

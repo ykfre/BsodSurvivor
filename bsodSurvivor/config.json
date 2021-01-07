@@ -1,0 +1,22 @@
+{
+  "comment_executablePath":"You should change this to be where is your local driver path is",
+  "executablePath": "C:\\temp\\te\\llvm-project\\bsodSurvivor\\clangDriverExample\\x64\\Debug\\clangDriverExample\\clangDriverExample.sys",
+  
+  "comment_executableModuleName":"This is the module name's in windbg (probably this is the driver name)",
+  "executableModuleName": "clangDriverExample",
+  
+  "comment_modulesNames":"This is list of modules in the kernel which are examined for symbols or return from frame",
+  "modulesNames": [
+    "hal",
+	"nt",
+	"fltmgr"
+  ],
+  "comment_dontChange1":"Don't change",
+  "logCategories":["default"],
+  
+  "comment_dontChange2":"Don't change",
+  "serverPort":30051,
+  
+  "comment_dontChange3":"Don't change",
+  "shouldHaveAllocateSpaceInStackFunction":true
+}

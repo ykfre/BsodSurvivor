@@ -762,7 +762,7 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   Opts.SplitDwarfOutput =
       std::string(Args.getLastArgValue(OPT_split_dwarf_output));
   Opts.SplitDwarfInlining = !Args.hasArg(OPT_fno_split_dwarf_inlining);
-  Opts.DebugTypeExtRefs = Args.hasArg(OPT_dwarf_ext_refs);
+  Opts.DebugTypeExtRefs = true;
   Opts.DebugExplicitImport = Args.hasArg(OPT_dwarf_explicit_import);
   Opts.DebugFwdTemplateParams = Args.hasArg(OPT_debug_forward_template_params);
   Opts.EmbedSource = Args.hasArg(OPT_gembed_source);
@@ -2449,6 +2449,7 @@ static const StringRef GetInputKindName(InputKind IK) {
   }
   llvm_unreachable("unknown input language");
 }
+extern bool g_is_lldb_execution;
 
 static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                           const TargetOptions &TargetOpts,
@@ -2781,7 +2782,11 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   Opts.Exceptions = Args.hasArg(OPT_fexceptions);
   Opts.IgnoreExceptions = Args.hasArg(OPT_fignore_exceptions);
   Opts.ObjCExceptions = Args.hasArg(OPT_fobjc_exceptions);
-  Opts.CXXExceptions = Args.hasArg(OPT_fcxx_exceptions);
+
+  if (!g_is_lldb_execution) {
+    Opts.CXXExceptions = Args.hasArg(OPT_fcxx_exceptions);
+    Opts.EHAsynch = Args.hasArg(OPT_feh_asynch);
+  }
 
   // -ffixed-point
   Opts.FixedPoint =
@@ -2846,7 +2851,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     !Args.hasArg(OPT_fno_modules_search_all) &&
     Args.hasArg(OPT_fmodules_search_all);
   Opts.ModulesErrorRecovery = !Args.hasArg(OPT_fno_modules_error_recovery);
-  Opts.ImplicitModules = !Args.hasArg(OPT_fno_implicit_modules);
+  Opts.ImplicitModules = true;
   Opts.CharIsSigned = Opts.OpenCL || !Args.hasArg(OPT_fno_signed_char);
   Opts.WChar = Opts.CPlusPlus && !Args.hasArg(OPT_fno_wchar);
   Opts.Char8 = Args.hasFlag(OPT_fchar8__t, OPT_fno_char8__t, Opts.CPlusPlus20);

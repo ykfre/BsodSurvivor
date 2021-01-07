@@ -7,6 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Target/Thread.h"
+#include "lldb/Core/Section.h"
+#include "lldb/Expression/DiagnosticManager.h"
+#include "lldb/Target/ThreadPlanCallFunctionUsingABI.h"
+
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/FormatEntity.h"
@@ -49,7 +53,8 @@
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/lldb-enumerations.h"
-
+#include "llvm/IR/LLVMContext.h"
+#include <Windows.h>
 #include <memory>
 
 using namespace lldb;
@@ -260,6 +265,63 @@ void Thread::DestroyThread() {
   m_curr_frames_sp.reset();
   m_prev_frames_sp.reset();
 }
+
+bool Thread::RunFunc(const lldb_private::Address &funcAddr,
+                     const std::vector<uint64_t> &args,
+                     size_t &returnValue,
+                     lldb_private::Status &error,
+                     const EvaluateExpressionOptions &options,
+                     lldb_private::ExecutionContext &exe_ctx) {
+  llvm::LLVMContext Ctx;
+  auto *int64tValue = llvm::Type::getInt64Ty(Ctx);
+  // Pack the arguments into an llvm::array
+  llvm::FunctionType *FTy =
+      llvm::FunctionType::get(int64tValue, /*isVarArg=*/false);
+  std::vector<ABI::CallArgument> call_args;
+  for (const auto &arg : args) {
+    ABI::CallArgument call_arg;
+    call_arg.type = ABI::CallArgument::TargetValue;
+    call_arg.size = 8;
+    call_arg.value = arg;
+    call_args.push_back(std::move(call_arg));
+  }
+  // Setup a thread plan to call the target function
+  lldb::ThreadPlanSP call_plan_sp(
+      new lldb_private::ThreadPlanCallFunctionUsingABI(
+          *this, funcAddr, *FTy, *int64tValue,
+          llvm::ArrayRef<ABI::CallArgument>(call_args.data(), call_args.size()),
+          options));
+  // Check if the plan is valid
+  lldb_private::StreamString ss;
+  if (!call_plan_sp || !call_plan_sp->ValidatePlan(&ss)) {
+    error.SetErrorToGenericError();
+    error.SetErrorStringWithFormat(
+        "unable to make ThreadPlanCallFunctionUsingABI for 0x%llx",
+        funcAddr.GetOffset());
+    return false;
+  }
+
+  exe_ctx.GetProcessPtr()->SetRunningUserExpression(true);
+
+  lldb_private::DiagnosticManager diagnostics;
+  // Execute the actual function call thread plan
+  lldb::ExpressionResults res = exe_ctx.GetProcessRef().RunThreadPlan(
+      exe_ctx, call_plan_sp, options, diagnostics);
+
+  // Check that the thread plan completed successfully
+  if (res != lldb::ExpressionResults::eExpressionCompleted) {
+    error.SetErrorToGenericError();
+    error.SetErrorStringWithFormat("ThreadPlanCallFunctionUsingABI failed");
+    return false;
+  }
+
+  exe_ctx.GetProcessPtr()->SetRunningUserExpression(false);
+  ((ThreadPlanCallFunctionUsingABI *)(call_plan_sp.get()))->SetReturnValue();
+  returnValue =
+      call_plan_sp->GetReturnValueObject()->GetValue().GetScalar().SLongLong();
+  return true;
+}
+
 
 void Thread::BroadcastSelectedFrameChange(StackID &new_frame_id) {
   if (EventTypeHasListeners(eBroadcastBitSelectedFrameChanged))
@@ -1439,21 +1501,28 @@ lldb::StackFrameSP Thread::GetFrameWithConcreteFrameIndex(uint32_t unwind_idx) {
 
 Status Thread::ReturnFromFrameWithIndex(uint32_t frame_idx,
                                         lldb::ValueObjectSP return_value_sp,
+    lldb_private::ExecutionContext &executionContext,
                                         bool broadcast) {
   StackFrameSP frame_sp = GetStackFrameAtIndex(frame_idx);
   Status return_error;
 
-  if (!frame_sp) {
-    return_error.SetErrorStringWithFormat(
-        "Could not find frame with index %d in thread 0x%" PRIx64 ".",
-        frame_idx, GetID());
+  for (int i = 0; i <= frame_idx; i++) {
+        StackFrameSP frame_sp = GetStackFrameAtIndex(0);
+    return_error =
+        ReturnFromFrame(frame_sp, return_value_sp, executionContext, broadcast);
+    if (!return_error.Success()) {
+      return return_error;
+    }
   }
+  return return_error;
 
-  return ReturnFromFrame(frame_sp, return_value_sp, broadcast);
+  return ReturnFromFrame(frame_sp, return_value_sp, executionContext,broadcast);
 }
+
 
 Status Thread::ReturnFromFrame(lldb::StackFrameSP frame_sp,
                                lldb::ValueObjectSP return_value_sp,
+                               lldb_private::ExecutionContext &executionContext,
                                bool broadcast) {
   Status return_error;
 
@@ -1510,6 +1579,7 @@ Status Thread::ReturnFromFrame(lldb::StackFrameSP frame_sp,
   StackFrameSP youngest_frame_sp = thread->GetStackFrameAtIndex(0);
   if (youngest_frame_sp) {
     lldb::RegisterContextSP reg_ctx_sp(youngest_frame_sp->GetRegisterContext());
+
     if (reg_ctx_sp) {
       bool copy_success = reg_ctx_sp->CopyFromRegisterContext(
           older_frame_sp->GetRegisterContext());

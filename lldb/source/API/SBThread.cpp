@@ -981,8 +981,8 @@ SBError SBThread::ReturnFromFrame(SBFrame &frame, SBValue &return_value) {
 
   if (exe_ctx.HasThreadScope()) {
     Thread *thread = exe_ctx.GetThreadPtr();
-    sb_error.SetError(
-        thread->ReturnFromFrame(frame.GetFrameSP(), return_value.GetSP()));
+    sb_error.SetError(thread->ReturnFromFrame(frame.GetFrameSP(),
+                                              return_value.GetSP(), exe_ctx));
   }
 
   return LLDB_RECORD_RESULT(sb_error);

@@ -52,9 +52,10 @@ void dependencies::detail::appendCommonModuleArguments(
           }
         }
       };
-
+  /*
   Result.push_back("-fno-implicit-modules");
   Result.push_back("-fno-implicit-module-maps");
+  */
   AddArgs(Modules);
 }
 

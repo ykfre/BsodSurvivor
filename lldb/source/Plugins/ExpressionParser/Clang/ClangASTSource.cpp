@@ -590,6 +590,20 @@ bool ClangASTSource::IgnoreName(const ConstString name,
          name_string_ref.startswith("_$");
 }
 
+bool ClangASTSource::findByModules(clang::DeclContext *context,
+                                   ConstString name,
+                                   std::vector<clang::NamedDecl *> &decls) {
+  if (ClangModulesDeclVendor *modules_decl_vendor =
+          m_target->GetClangModulesDeclVendor()) {
+    bool append = false;
+    uint32_t max_matches = 0xffffffff;
+
+    return modules_decl_vendor->FindDecls((clang::DeclContext *)context, name,
+                                          append, max_matches, decls);
+  }
+  return false;
+}
+
 void ClangASTSource::FindExternalVisibleDecls(
     NameSearchContext &context, lldb::ModuleSP module_sp,
     CompilerDeclContext &namespace_decl) {
@@ -857,34 +871,35 @@ void ClangASTSource::FindDeclInModules(NameSearchContext &context,
     return;
 
   bool append = false;
-  uint32_t max_matches = 1;
+  uint32_t max_matches = 0xffffffff;
   std::vector<clang::NamedDecl *> decls;
 
-  if (!modules_decl_vendor->FindDecls(name, append, max_matches, decls))
+  if (!modules_decl_vendor->FindDecls(
+          (clang::DeclContext *)context.m_decl_context, name, append,
+          max_matches,
+          decls))
     return;
 
   LLDB_LOG(log, "  CAS::FEVD Matching entity found for \"{0}\" in the modules",
            name);
 
-  clang::NamedDecl *const decl_from_modules = decls[0];
+    for (const auto &decl : decls) {
+        clang::NamedDecl *const decl_from_modules = decls[0];
+        if (llvm::isa<clang::TypeDecl>(decl_from_modules) ||
+            llvm::isa<clang::ObjCContainerDecl>(decl_from_modules) ||
+            llvm::isa<clang::EnumConstantDecl>(decl_from_modules)) {
+          clang::Decl *copied_decl = CopyDecl(decl_from_modules);
+          clang::NamedDecl *copied_named_decl =
+              copied_decl ? dyn_cast<clang::NamedDecl>(copied_decl) : nullptr;
 
-  if (llvm::isa<clang::TypeDecl>(decl_from_modules) ||
-      llvm::isa<clang::ObjCContainerDecl>(decl_from_modules) ||
-      llvm::isa<clang::EnumConstantDecl>(decl_from_modules)) {
-    clang::Decl *copied_decl = CopyDecl(decl_from_modules);
-    clang::NamedDecl *copied_named_decl =
-        copied_decl ? dyn_cast<clang::NamedDecl>(copied_decl) : nullptr;
+          if (!copied_named_decl) {
+            continue;
+          }
+          context.AddNamedDecl(copied_named_decl);
 
-    if (!copied_named_decl) {
-      LLDB_LOG(log, "  CAS::FEVD - Couldn't export a type from the modules");
-
-      return;
-    }
-
-    context.AddNamedDecl(copied_named_decl);
-
-    context.m_found_type = true;
-  }
+          context.m_found_type = true;
+        }
+      }
 }
 
 void ClangASTSource::FindDeclInObjCRuntime(NameSearchContext &context,
@@ -907,11 +922,14 @@ void ClangASTSource::FindDeclInObjCRuntime(NameSearchContext &context,
     return;
 
   bool append = false;
-  uint32_t max_matches = 1;
+  uint32_t max_matches = 0xffffffff;
   std::vector<clang::NamedDecl *> decls;
 
   auto *clang_decl_vendor = llvm::cast<ClangDeclVendor>(decl_vendor);
-  if (!clang_decl_vendor->FindDecls(name, append, max_matches, decls))
+  if (!clang_decl_vendor->FindDecls(
+          (clang::DeclContext *)context.m_decl_context, name, append,
+          max_matches,
+          decls))
     return;
 
   LLDB_LOG(log, "  CAS::FEVD Matching type found for \"{0}\" in the runtime",
@@ -1148,10 +1166,13 @@ void ClangASTSource::FindObjCMethodDecls(NameSearchContext &context) {
             m_target->GetClangModulesDeclVendor()) {
       ConstString interface_name(interface_decl->getNameAsString().c_str());
       bool append = false;
-      uint32_t max_matches = 1;
+      uint32_t max_matches = 0xffffffff;
       std::vector<clang::NamedDecl *> decls;
 
-      if (!modules_decl_vendor->FindDecls(interface_name, append, max_matches,
+      if (!modules_decl_vendor->FindDecls(
+              (clang::DeclContext *)context.m_decl_context, interface_name,
+              append,
+              max_matches,
                                           decls))
         break;
 
@@ -1188,11 +1209,13 @@ void ClangASTSource::FindObjCMethodDecls(NameSearchContext &context) {
 
     ConstString interface_name(interface_decl->getNameAsString().c_str());
     bool append = false;
-    uint32_t max_matches = 1;
+    uint32_t max_matches = 0xffffffff;
     std::vector<clang::NamedDecl *> decls;
 
     auto *clang_decl_vendor = llvm::cast<ClangDeclVendor>(decl_vendor);
-    if (!clang_decl_vendor->FindDecls(interface_name, append, max_matches,
+    if (!clang_decl_vendor->FindDecls(
+            (clang::DeclContext *)context.m_decl_context,interface_name, append,
+            max_matches,
                                       decls))
       break;
 
@@ -1321,10 +1344,12 @@ void ClangASTSource::FindObjCPropertyAndIvarDecls(NameSearchContext &context) {
       break;
 
     bool append = false;
-    uint32_t max_matches = 1;
+    uint32_t max_matches = 0xffffffff;
     std::vector<clang::NamedDecl *> decls;
 
-    if (!modules_decl_vendor->FindDecls(class_name, append, max_matches, decls))
+    if (!modules_decl_vendor->FindDecls(
+            (clang::DeclContext *)context.m_decl_context, class_name, append,
+            max_matches, decls))
       break;
 
     DeclFromUser<const ObjCInterfaceDecl> interface_decl_from_modules(
@@ -1364,11 +1389,13 @@ void ClangASTSource::FindObjCPropertyAndIvarDecls(NameSearchContext &context) {
       break;
 
     bool append = false;
-    uint32_t max_matches = 1;
+    uint32_t max_matches = 0xffffffff;
     std::vector<clang::NamedDecl *> decls;
 
     auto *clang_decl_vendor = llvm::cast<ClangDeclVendor>(decl_vendor);
-    if (!clang_decl_vendor->FindDecls(class_name, append, max_matches, decls))
+    if (!clang_decl_vendor->FindDecls(
+            (clang::DeclContext *)context.m_decl_context, class_name, append,
+            max_matches, decls))
       break;
 
     DeclFromUser<const ObjCInterfaceDecl> interface_decl_from_runtime(

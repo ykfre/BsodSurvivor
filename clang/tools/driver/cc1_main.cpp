@@ -164,6 +164,9 @@ static void ensureSufficientStack() {
 static void ensureSufficientStack() {}
 #endif
 
+extern void serialize(CompilerInvocation &CI,
+                      SmallVector<FrontendInputFile, 0> inputs);
+
 /// Print supported cpus of the given target.
 static int PrintSupportedCPUs(std::string TargetStr) {
   std::string Error;
@@ -205,6 +208,7 @@ int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
   DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagsBuffer);
   bool Success = CompilerInvocation::CreateFromArgs(Clang->getInvocation(),
                                                     Argv, Diags, Argv0);
+  serialize(Clang->getInvocation(), Clang->getFrontendOpts().Inputs);
 
   if (Clang->getFrontendOpts().TimeTrace) {
     llvm::timeTraceProfilerInitialize(

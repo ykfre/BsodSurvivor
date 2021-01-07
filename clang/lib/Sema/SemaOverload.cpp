@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cstdlib>
 
+extern bool g_is_lldb_execution;
 using namespace clang;
 using namespace sema;
 
@@ -9314,17 +9315,37 @@ Sema::AddArgumentDependentLookupCandidates(DeclarationName Name,
     if (FunctionDecl *FD = dyn_cast<FunctionDecl>(*I)) {
       if (ExplicitTemplateArgs)
         continue;
-
-      AddOverloadCandidate(
-          FD, FoundDecl, Args, CandidateSet, /*SuppressUserConversions=*/false,
-          PartialOverloading, /*AllowExplicit=*/true,
-          /*AllowExplicitConversions=*/false, ADLCallKind::UsesADL);
-      if (CandidateSet.getRewriteInfo().shouldAddReversed(Context, FD)) {
-        AddOverloadCandidate(
-            FD, FoundDecl, {Args[1], Args[0]}, CandidateSet,
+      if (FD->getDescribedFunctionTemplate()) {
+        auto *FTD = FD->getDescribedFunctionTemplate();
+        AddTemplateOverloadCandidate(
+            FTD, FoundDecl, ExplicitTemplateArgs, Args, CandidateSet,
             /*SuppressUserConversions=*/false, PartialOverloading,
-            /*AllowExplicit=*/true, /*AllowExplicitConversions=*/false,
-            ADLCallKind::UsesADL, None, OverloadCandidateParamOrder::Reversed);
+            /*AllowExplicit=*/true, ADLCallKind::UsesADL);
+        if (CandidateSet.getRewriteInfo().shouldAddReversed(
+                Context, FTD->getTemplatedDecl())) {
+          AddTemplateOverloadCandidate(
+              FTD, FoundDecl, ExplicitTemplateArgs, {Args[1], Args[0]},
+              CandidateSet, /*SuppressUserConversions=*/false,
+              PartialOverloading,
+              /*AllowExplicit=*/true, ADLCallKind::UsesADL,
+              OverloadCandidateParamOrder::Reversed);
+        }
+      }
+      else
+      {
+        AddOverloadCandidate(FD, FoundDecl, Args, CandidateSet,
+                             /*SuppressUserConversions=*/false,
+                             PartialOverloading, /*AllowExplicit=*/true,
+                             /*AllowExplicitConversions=*/false,
+                             ADLCallKind::UsesADL);
+        if (CandidateSet.getRewriteInfo().shouldAddReversed(Context, FD)) {
+          AddOverloadCandidate(
+              FD, FoundDecl, {Args[1], Args[0]}, CandidateSet,
+              /*SuppressUserConversions=*/false, PartialOverloading,
+              /*AllowExplicit=*/true, /*AllowExplicitConversions=*/false,
+              ADLCallKind::UsesADL, None,
+              OverloadCandidateParamOrder::Reversed);
+        }
       }
     } else {
       auto *FTD = cast<FunctionTemplateDecl>(*I);
@@ -9888,29 +9909,30 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
   llvm::SmallVector<OverloadCandidate*, 4> PendingBest;
   PendingBest.push_back(&*Best);
   Best->Best = true;
+  if (!g_is_lldb_execution) {
+    // Make sure that this function is better than every other viable
+    // function. If not, we have an ambiguity.
+    while (!PendingBest.empty()) {
+      auto *Curr = PendingBest.pop_back_val();
+      for (auto *Cand : Candidates) {
+        if (Cand->Viable && !Cand->Best &&
+            !isBetterOverloadCandidate(S, *Curr, *Cand, Loc, Kind)) {
+          PendingBest.push_back(Cand);
+          Cand->Best = true;
 
-  // Make sure that this function is better than every other viable
-  // function. If not, we have an ambiguity.
-  while (!PendingBest.empty()) {
-    auto *Curr = PendingBest.pop_back_val();
-    for (auto *Cand : Candidates) {
-      if (Cand->Viable && !Cand->Best &&
-          !isBetterOverloadCandidate(S, *Curr, *Cand, Loc, Kind)) {
-        PendingBest.push_back(Cand);
-        Cand->Best = true;
-
-        if (S.isEquivalentInternalLinkageDeclaration(Cand->Function,
-                                                     Curr->Function))
-          EquivalentCands.push_back(Cand->Function);
-        else
-          Best = end();
+          if (S.isEquivalentInternalLinkageDeclaration(Cand->Function,
+                                                       Curr->Function))
+            EquivalentCands.push_back(Cand->Function);
+          else
+            Best = end();
+        }
       }
     }
-  }
 
-  // If we found more than one best candidate, this is ambiguous.
-  if (Best == end())
-    return OR_Ambiguous;
+    // If we found more than one best candidate, this is ambiguous.
+    if (Best == end())
+      return OR_Ambiguous;
+  }
 
   // Best is the best viable function.
   if (Best->Function && Best->Function->isDeleted())
@@ -12438,12 +12460,22 @@ static void AddOverloadedCallCandidate(Sema &S,
     if (!dyn_cast<FunctionProtoType>(Func->getType()->getAs<FunctionType>()))
       return;
 
-    S.AddOverloadCandidate(Func, FoundDecl, Args, CandidateSet,
-                           /*SuppressUserConversions=*/false,
-                           PartialOverloading);
+    if (Func->getDescribedTemplate())
+    {
+      S.AddTemplateOverloadCandidate(
+          dyn_cast<FunctionTemplateDecl>(Func->getDescribedTemplate()),
+          FoundDecl,
+                                     ExplicitTemplateArgs, Args, CandidateSet,
+          /*SuppressUserConversions=*/false, PartialOverloading);
+    }
+    else
+    {
+      S.AddOverloadCandidate(Func, FoundDecl, Args, CandidateSet,
+                             /*SuppressUserConversions=*/false,
+                             PartialOverloading);
+    }
     return;
   }
-
   if (FunctionTemplateDecl *FuncTemplate
       = dyn_cast<FunctionTemplateDecl>(Callee)) {
     S.AddTemplateOverloadCandidate(FuncTemplate, FoundDecl,

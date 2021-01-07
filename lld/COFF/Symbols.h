@@ -52,6 +52,7 @@ public:
     // over another.
     DefinedRegularKind = 0,
     DefinedCommonKind,
+    FunctionJumperKind,
     DefinedLocalImportKind,
     DefinedImportThunkKind,
     DefinedImportDataKind,
@@ -374,8 +375,7 @@ private:
 // This is here just for compatibility with MSVC.
 class DefinedLocalImport : public Defined {
 public:
-  DefinedLocalImport(StringRef n, Defined *s)
-      : Defined(DefinedLocalImportKind, n), data(make<LocalImportChunk>(s)) {}
+  DefinedLocalImport(StringRef n, Defined *s, bool isFunc);
 
   static bool classof(const Symbol *s) {
     return s->kind() == DefinedLocalImportKind;
@@ -385,7 +385,22 @@ public:
   Chunk *getChunk() { return data; }
 
 private:
-  LocalImportChunk *data;
+  NonSectionChunk *data;
+};
+
+class FunctionJumperSymbol : public Defined {
+public:
+  FunctionJumperSymbol(StringRef n, Defined *s);
+
+  static bool classof(const Symbol *s) {
+    return s->kind() == FunctionJumperKind;
+  }
+
+  uint64_t getRVA() { return data->getRVA(); }
+  Chunk *getChunk() { return data; }
+
+private:
+  NonSectionChunk *data;
 };
 
 inline uint64_t Defined::getRVA() {
@@ -398,6 +413,8 @@ inline uint64_t Defined::getRVA() {
     return cast<DefinedImportData>(this)->getRVA();
   case DefinedImportThunkKind:
     return cast<DefinedImportThunk>(this)->getRVA();
+  case FunctionJumperKind:
+    return cast<FunctionJumperSymbol>(this)->getRVA();
   case DefinedLocalImportKind:
     return cast<DefinedLocalImport>(this)->getRVA();
   case DefinedCommonKind:
@@ -426,6 +443,8 @@ inline Chunk *Defined::getChunk() {
     return cast<DefinedImportThunk>(this)->getChunk();
   case DefinedLocalImportKind:
     return cast<DefinedLocalImport>(this)->getChunk();
+  case FunctionJumperKind:
+    return cast<FunctionJumperSymbol>(this)->getChunk();
   case DefinedCommonKind:
     return cast<DefinedCommon>(this)->getChunk();
   case LazyArchiveKind:
@@ -450,6 +469,7 @@ union SymbolUnion {
   alignas(DefinedImportThunk) char h[sizeof(DefinedImportThunk)];
   alignas(DefinedLocalImport) char i[sizeof(DefinedLocalImport)];
   alignas(LazyObject) char j[sizeof(LazyObject)];
+  alignas(FunctionJumperSymbol) char k[sizeof(FunctionJumperSymbol)];
 };
 
 template <typename T, typename... ArgT>

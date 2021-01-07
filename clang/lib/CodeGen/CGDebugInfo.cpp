@@ -2230,9 +2230,6 @@ void CGDebugInfo::completeClassData(const RecordDecl *RD) {
         !isClassOrMethodDLLImport(CXXRD))
       return;
 
-  if (DebugTypeExtRefs && isDefinedInClangModule(RD->getDefinition()))
-    return;
-
   completeClass(RD);
 }
 
@@ -2262,8 +2259,6 @@ static bool hasExplicitMemberDefinition(CXXRecordDecl::method_iterator I,
 static bool shouldOmitDefinition(codegenoptions::DebugInfoKind DebugKind,
                                  bool DebugTypeExtRefs, const RecordDecl *RD,
                                  const LangOptions &LangOpts) {
-  if (DebugTypeExtRefs && isDefinedInClangModule(RD->getDefinition()))
-    return true;
 
   if (auto *ES = RD->getASTContext().getExternalSource())
     if (ES->hasExternalDefinitions(RD) == ExternalASTSource::EK_Always)
@@ -2447,7 +2442,7 @@ llvm::DIType *CGDebugInfo::CreateType(const ObjCInterfaceType *Ty,
   // Return a forward declaration if this type was imported from a clang module,
   // and this is not the compile unit with the implementation of the type (which
   // may contain hidden ivars).
-  if (DebugTypeExtRefs && ID->isFromASTFile() && ID->getDefinition() &&
+  if (false && ID->isFromASTFile() && ID->getDefinition() &&
       !ID->getImplementation())
     return DBuilder.createForwardDecl(llvm::dwarf::DW_TAG_structure_type,
                                       ID->getName(),
@@ -2932,12 +2927,10 @@ llvm::DIType *CGDebugInfo::CreateEnumType(const EnumType *Ty) {
 
   SmallString<256> Identifier = getTypeIdentifier(Ty, CGM, TheCU);
 
-  bool isImportedFromModule =
-      DebugTypeExtRefs && ED->isFromASTFile() && ED->getDefinition();
 
   // If this is just a forward declaration, construct an appropriately
   // marked node and just return it.
-  if (isImportedFromModule || !ED->getDefinition()) {
+  if (!ED->getDefinition()) {
     // Note that it is possible for enums to be created as part of
     // their own declcontext. In this case a FwdDecl will be created
     // twice. This doesn't cause a problem because both FwdDecls are

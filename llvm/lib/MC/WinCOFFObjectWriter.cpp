@@ -12,6 +12,10 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/Support/Process.h"
+
+#include <fstream>
+#include "llvm/Support/Process.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -55,7 +59,7 @@ using llvm::support::endian::write32le;
 #define DEBUG_TYPE "WinCOFFObjectWriter"
 
 namespace {
-
+extern std::vector<char> g_serailizeCompilerInvocation;
 using name = SmallString<COFF::NameSize>;
 
 enum AuxiliaryType {
@@ -124,6 +128,7 @@ public:
 
 class WinCOFFObjectWriter : public MCObjectWriter {
 public:
+  MCSectionCOFF *CommandLineSection;
   support::endian::Writer W;
 
   using symbols = std::vector<std::unique_ptr<COFFSymbol>>;
@@ -665,6 +670,10 @@ void WinCOFFObjectWriter::writeSection(MCAssembler &Asm,
 ////////////////////////////////////////////////////////////////////////////////
 // MCObjectWriter interface implementations
 
+extern "C" std::vector<char> read_serialize();
+extern "C" std::vector<char> read_serialize_default() { return std::vector<char>(); }
+#pragma comment(linker, "/alternatename:read_serialize=read_serialize_default") 
+
 void WinCOFFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
                                                    const MCAsmLayout &Layout) {
   if (EmitAddrsigSection) {
@@ -673,7 +682,10 @@ void WinCOFFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
         SectionKind::getMetadata());
     Asm.registerSection(*AddrsigSection);
   }
-
+  CommandLineSection = Asm.getContext().getCOFFSection(
+      ".command", 0,
+      SectionKind::getMetadata());
+  Asm.registerSection(*CommandLineSection);
   // "Define" each section & symbol. This creates section & symbol
   // entries in the staging area.
   for (const auto &Section : Asm)
@@ -1097,6 +1109,17 @@ uint64_t WinCOFFObjectWriter::writeObject(MCAssembler &Asm,
              "executePostLayoutBinding!");
       encodeULEB128(SectionMap[TargetSection]->Symbol->getIndex(), OS);
     }
+  }
+
+  if(CommandLineSection) {
+    auto Frag = new MCDataFragment(CommandLineSection);
+    Frag->setLayoutOrder(0);
+    raw_svector_ostream OS(Frag->getContents());
+
+    std::vector<char> compilerInvocationSerialized = read_serialize();
+
+    OS.write(compilerInvocationSerialized.data(),
+             compilerInvocationSerialized.size());
   }
 
   assignFileOffsets(Asm, Layout);

@@ -27,7 +27,8 @@ public:
     return vendor->GetKind() == eAppleObjCDeclVendor;
   }
 
-  uint32_t FindDecls(ConstString name, bool append, uint32_t max_matches,
+  uint32_t FindDecls(clang::DeclContext *context, ConstString name, bool append,
+                     uint32_t max_matches,
                      std::vector<CompilerDecl> &decls) override;
 
   friend class AppleObjCExternalASTSource;
