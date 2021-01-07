@@ -74,7 +74,7 @@
     <ROW Component="llvmdwarfdump.exe" ComponentId="{F9B9AD17-69D8-4DF3-BA32-42AA7F6D8E8F}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmdwarfdump.exe"/>
     <ROW Component="llvmobjcopy.exe" ComponentId="{A916B82F-B139-4ED0-A27E-D5252FF3DCBD}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmobjcopy.exe"/>
     <ROW Component="llvmtblgen.exe" ComponentId="{6ADA4554-3DF4-414F-A048-7DE930626A63}" Directory_="bin_Dir" Attributes="256" KeyPath="llvmtblgen.exe"/>
-    <ROW Component="module.modulemap" ComponentId="{1BE85D3E-CDAA-4F5F-ADA7-5EC6DF15FDFC}" Directory_="msis_Dir" Attributes="0" KeyPath="module.modulemap_2" Type="0"/>
+    <ROW Component="module.modulemap" ComponentId="{1BE85D3E-CDAA-4F5F-ADA7-5EC6DF15FDFC}" Directory_="msis_Dir" Attributes="0" KeyPath="stdafx.h" Type="0"/>
     <ROW Component="msvcp140.dll" ComponentId="{C49BD98B-18A8-4756-BFB1-60812CE13EE0}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="msvcp140.dll"/>
     <ROW Component="msvcp140.dll_1" ComponentId="{171CA70B-0D9F-41FB-9EBD-71D1358CDEC5}" Directory_="bin_Dir" Attributes="256" KeyPath="msvcp140.dll_1"/>
     <ROW Component="re2.dll" ComponentId="{FA51A8FF-911C-4C25-94E4-75D4535842B9}" Directory_="NewFolder_Dir" Attributes="256" KeyPath="re2.dll"/>
@@ -546,7 +546,6 @@
     <ROW File="clangDriverExample.vcxproj.filters" Component_="clangDriverExample.sln" FileName="CLANGD~1.FIL|clangDriverExample.vcxproj.filters" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\clangDriverExample.vcxproj.filters" SelfReg="false"/>
     <ROW File="Main.cpp" Component_="clangDriverExample.sln" FileName="Main.cpp" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\Main.cpp" SelfReg="false"/>
     <ROW File="llvmdwarfdump.exe" Component_="llvmdwarfdump.exe" FileName="LLVM-D~1.EXE|llvm-dwarfdump.exe" Attributes="0" SourcePath="..\temp\Release\bin\llvm-dwarfdump.exe" SelfReg="false" DigSign="true"/>
-    <ROW File="module.modulemap_2" Component_="module.modulemap" FileName="MODULE~1.MOD|module.modulemap" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\module.modulemap" SelfReg="false"/>
     <ROW File="stdafx.h" Component_="module.modulemap" FileName="stdafx.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\stdafx.h" SelfReg="false"/>
     <ROW File="Vector.h" Component_="module.modulemap" FileName="Vector.h" Attributes="0" SourcePath="..\bsodSurvivor\clangDriverExample\msis\Vector.h" SelfReg="false"/>
   </COMPONENT>
