@@ -11,6 +11,7 @@ These are the major components off the project:
 1. Update source code / global variables  in debugging without any need to unload the driver or reboot the computer, by compiling the wanted changed file and link the created obj file with the already loaded code in memory , and then replace the functions which were in the old obj by the new functions which are in the new obj, (for now even if the functions are the same).
 
    You will need to use [Bsod Survivor Visual Studio Plugin](#installation) (and not only Windbg Plugin as all the other components) in order to  use this feature.
+   This plugin is needed for instructing Windbg which code to change at run time.
 
    Please read the [limitations.](#updating-driver-code-in-runtime-limitations)
 
@@ -95,7 +96,8 @@ and follow the installation guide in [here](installer/README.md).
 
 # Build Your Driver
 
-- [ ] In order for getting all the above functionality you need to use ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriverCommon.props for libs, and ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriver.props  for drivers when you are compiling your driver.
+- [ ] In order for getting all the above functionality you need to use ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriverCommon.props for libs, and ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriver.props for drivers when you are compiling your driver. 
+You must builld all your libs, which you want to change at run time and driver code using this compiler.
 
   BSOD_SURVIVOR_DIR - will be added to your environment variable after the [Installation](#installation)
 
@@ -123,7 +125,7 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 # Limitations And Known Issues
 
 - There is for now only a support for one driver, that's means you can't use any feature of this project for debugging multiple drivers, only for one of them it will work (you will need to decide which one in the config.json file of the Windbg Plugin)
-- You won't be able to debug multiple vms nor using multiple instances of the windbg plugin. 
+- You won't be able to debug multiple vms nor using multiple instances of the Windbg plugin. 
 - The vm must be stopped before you run any feature, and you must be sure the operation of the feature ended before you continue your run  (There will be an informative log).
 - Some Antiviruses may for some reason block some operations of your local Windbg -please add Windbg and the plugin to the white list of those antiviruses if some blocking window appears. 
 
