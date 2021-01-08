@@ -160,6 +160,8 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 
 - Globals with ctor's/dtor's aren't supported and will not work as expected.
 
+- Pre build scripts which changes/adds c++ code aren't supported.
+
 - Inline static const int varialbes changes are taking affect only on an obj file change base, and all the cpp files which are using this variables should be recompiled.
 
 - Modifiable global variable won't be updated the value in the new obj if this variable was already exists in in the driver. For example let's say int g=0; was in the driver, and now we write int g=1;
