@@ -182,7 +182,7 @@ Blink - https://github.com/crosire/blink for pdb parser and some ideas.
 
 tenzen-llvm-project https://github.com/tentzen/llvm-project, for the implementation of sehs in llvm x64, which return of frame is based on.
 
-cppcheck-plugin https://github.com/jenkinsci/cppcheck-plugin The code of the Visual Studio Extension is based on this code.
+cppcheck-plugin https://github.com/VioletGiraffe/cppcheck-vs-addin The code of the Visual Studio Extension is based on this code.
 
 
 
