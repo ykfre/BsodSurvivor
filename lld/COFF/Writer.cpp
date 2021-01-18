@@ -1404,7 +1404,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY;
   if (setNoSEHCharacteristic)
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NO_SEH;
-  if (config->terminalServerAware)
+  if (!config->driver && config->terminalServerAware)
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE;
   pe->NumberOfRvaAndSize = numberOfDataDirectory;
   if (textSec->getVirtualSize()) {

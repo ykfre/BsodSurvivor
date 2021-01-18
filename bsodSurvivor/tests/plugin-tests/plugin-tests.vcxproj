@@ -173,6 +173,7 @@
     <ClCompile Include="BlinkTest.cpp" />
     <ClCompile Include="ConfigurationTests.cpp" />
     <ClCompile Include="ExpressionTests.cpp" />
+    <ClCompile Include="FinallyTests.cpp" />
     <ClCompile Include="FunctionRunManagerTests.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="ReturnFromFrameTests.cpp" />

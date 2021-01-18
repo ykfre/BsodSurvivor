@@ -504,11 +504,36 @@ bool replaceFunctionsWithImp(Module &M) {
         f.getFunctionType(), GlobalValue::ExternalLinkage, f.getAddressSpace(),
         ("__jmp_" + f.getName()).str(), &M);
     FDecl->setAttributes(f.getAttributes());
-    if (f.hasPersonalityFn()) {
-      FDecl->setPersonalityFn(f.getPersonalityFn());
-    }
     FDecl->setCallingConv(f.getCallingConv());
     f.replaceNonMetadataUsesWith(FDecl);
+  }
+  for (auto &FF : M) {
+    for (auto &B : FF) {
+      for (llvm::BasicBlock::iterator J = B.begin(), JE = B.end(); J != JE;
+           ++J) {
+        if (dyn_cast<CallInst>(J) && 
+                dyn_cast<CallInst>(J)->getCalledFunction() &&
+            dyn_cast<CallInst>(J)
+                ->getCalledFunction()->getName() == "llvm.localrecover") {
+          auto operand = dyn_cast<CallInst>(J)->getArgOperand(0);
+          auto funcName = operand->stripPointerCasts()->getName();
+          if (funcName.startswith("__jmp_")) {
+            auto originalFunc =
+                M.getFunction(funcName.substr(strlen("__jmp_")));
+            if (Operator::getOpcode(operand) == Instruction::BitCast) {
+              auto bitCastInst = BitCastInst::Create(
+                  llvm::Instruction::CastOps::BitCast,
+                                  originalFunc,
+                                  cast<Operator>(operand)->getType());
+              B.getInstList().insert(J, bitCastInst);
+              dyn_cast<CallInst>(J)->setArgOperand(0, bitCastInst);
+            }else {
+              dyn_cast<CallInst>(J)->setArgOperand(0, originalFunc);
+            }
+          }
+        }
+      }
+    }
   }
   return isChanged;
 }
@@ -544,7 +569,6 @@ public:
             if (isa<llvm::DbgInfoIntrinsic>(J)) {
               continue;
             }
-
             if (auto call = llvm::dyn_cast<llvm::CallInst>(J)) {
               if (call->getCalledFunction()) {
                   auto funcName = call->getCalledFunction()->getName().str();
