@@ -1110,16 +1110,18 @@ void AsmPrinter::emitFunctionBody() {
       // If there is a pre-instruction symbol, emit a label for it here.
       if (MCSymbol *S = MI.getPreInstrSymbol())
         OutStreamer->emitLabel(S);
-
-      if (ShouldPrintDebugScopes) {
-        for (const HandlerInfo &HI : Handlers) {
-          NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
-                             HI.TimerGroupName, HI.TimerGroupDescription,
-                             TimePassesIsEnabled);
-          HI.Handler->beginInstruction(&MI);
+      if (MI.getOpcode() != TargetOpcode::EH_LABEL) {
+        if (ShouldPrintDebugScopes) {
+          for (const HandlerInfo &HI : Handlers) {
+            NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
+                               HI.TimerGroupName, HI.TimerGroupDescription,
+                               TimePassesIsEnabled);
+            HI.Handler->beginInstruction(&MI);
+          }
         }
       }
-
+      
+      
       if (isVerbose())
         emitComments(MI, OutStreamer->GetCommentOS());
 
@@ -1143,10 +1145,20 @@ void AsmPrinter::emitFunctionBody() {
         //    must have being turned into an UndefValue.
         //  Div with variable opnds must be led by at least a Load
         {
-          auto MI2 = std::next(MI.getIterator());
-          if (IsEHa && MI2 != MBB.end()
-                    && (MI2->mayLoadOrStore() || MI2->mayRaiseFPException()))
-            emitNops(1);
+          
+            auto MI2 = std::next(MI.getIterator());
+            if (IsEHa && MI2 != MBB.end() &&
+                (MI2->mayLoadOrStore() || MI2->mayRaiseFPException())) {
+              emitNops(1);
+            }
+            if (ShouldPrintDebugScopes) {
+              for (const HandlerInfo &HI : Handlers) {
+                NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
+                                   HI.TimerGroupName, HI.TimerGroupDescription,
+                                   TimePassesIsEnabled);
+                HI.Handler->beginInstruction(&MI);
+              }
+            }
         }
         break;
       case TargetOpcode::INLINEASM:
