@@ -1147,10 +1147,7 @@ void AsmPrinter::emitFunctionBody() {
         {
           
             auto MI2 = std::next(MI.getIterator());
-            if (IsEHa && MI2 != MBB.end() &&
-                (MI2->mayLoadOrStore() || MI2->mayRaiseFPException())) {
-              emitNops(1);
-            }
+            emitNops(1);
             if (ShouldPrintDebugScopes) {
               for (const HandlerInfo &HI : Handlers) {
                 NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
