@@ -26,7 +26,7 @@ These are the major components off the project:
 
 This project is a fork of LLVM 10.
 
-This project is in beta version 0.1.0
+This project is in beta version 0.2.0
 
 The project is composed from Visual Studio plugin, Windbg plugin, and changes to LLDB/Clang/LLD.
 
@@ -116,7 +116,7 @@ You must builld all your libs, which you want to change at run time and driver c
 
 # Supported Architectures
 
-Currently it is only supported on Windows 7 x64 - although in the near future it will be supported on Windows 10 without [hvci](https://docs.microsoft.com/en-us/windows-hardware/drivers/bringup/device-guard-and-credential-guard) as well.
+Currently it is supported on Windows 7 and Windows 10 without [hvci](https://docs.microsoft.com/en-us/windows-hardware/drivers/bringup/device-guard-and-credential-guard).
 
 For the Windbg plugin - [Windbg Preview](https://www.microsoft.com/en-us/p/windbg-preview/9pgjgd53tn86) is required, and will not work correctly on the old one.
 
