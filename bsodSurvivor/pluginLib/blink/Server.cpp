@@ -1,20 +1,3 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "ws2_32.lib")
 
@@ -47,6 +30,7 @@ public:
   VsLogger(grpc::ServerWriter<::LinkCommand::LinkCommandReply> *reply) {
     m_reply = reply;
   }
+
   void write(const std::string &message) override {
     auto reply = LinkCommandReply();
     reply.set_islogging(true);
@@ -66,9 +50,7 @@ grpc::Status GreeterServiceImpl::Compile(
   auto thread = g_threadFactory->create(GetCurrentThreadId());
   t_logger = std::make_shared<VsLogger>(reply);
   g_platform->setCurrentThread(thread);
-  auto dlls = std::vector<std::shared_ptr<LoadedDll>>{g_blink.getDllToChange()};
-  auto ordinaryDlls = g_blink.getOrdinaryDlls();
-  dlls.insert(dlls.begin(), ordinaryDlls.begin(), ordinaryDlls.end());
+  auto dlls = g_blink.getAllDlls();
   bool res = commands::runCommand(
       [&request]() {
         std::stringstream ss;
@@ -81,13 +63,15 @@ grpc::Status GreeterServiceImpl::Compile(
         return result.m_success;
       },
       CommonCommandArgs{0}, dlls);
+  t_logger = g_logger;
+  auto common = CommonCommandArgs{0};
+  commands::jumpToMostUpdatedFunction(common);
   auto message = LinkCommandReply();
 
   message.set_islogging(false);
   message.set_success(res);
   auto options = grpc::WriteOptions();
   reply->WriteLast(message, options);
-  t_logger.reset();
   return Status::OK;
 }
 

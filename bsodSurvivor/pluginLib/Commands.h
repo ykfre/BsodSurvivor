@@ -12,6 +12,8 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
 
 bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line);
 
+bool jumpToMostUpdatedFunction(CommonCommandArgs &commonCommandArgs);
+
 bool runCommand(const std::function<bool()> &func,
                 const CommonCommandArgs &commonCommandArgs,
                 std::vector<std::shared_ptr<LoadedDll>> &modules);

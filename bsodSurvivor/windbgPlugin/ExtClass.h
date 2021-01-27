@@ -24,6 +24,8 @@ public:
   EXT_COMMAND_METHOD(reload_dynamic_modules);
   EXT_COMMAND_METHOD(reload_config);
   EXT_COMMAND_METHOD(reset_saved_files);
+  EXT_COMMAND_METHOD(expr);
+  EXT_COMMAND_METHOD(discard_expr);
 
   void log(const std::string &output);
   HRESULT initializeThreadGlobals();
@@ -36,7 +38,7 @@ public:
   std::shared_ptr<size_t> m_event;
   inline static thread_local std::shared_ptr<IDebugClient5> t_debugClient5;
   inline static thread_local std::shared_ptr<IDebugClient> t_debugClient;
-  inline static  std::shared_ptr<IDebugControl> g_control;
+  inline static std::shared_ptr<IDebugControl> g_control;
 
   inline static thread_local std::shared_ptr<IDebugControl> t_control;
   inline static thread_local std::shared_ptr<IDebugSymbols> t_symbols;
@@ -50,7 +52,7 @@ public:
 
 private:
   std::string getWindbgDir() const;
-  std::string getConfigFilePath()const ;
+  std::string getConfigFilePath() const;
   void
   executeCommand(const std::function<bool(CommonCommandArgs &args)> &command);
   DebugEvents m_debugEvents;

@@ -139,6 +139,7 @@ std::shared_ptr<IDebugClient> g_debugClient;
 
 HRESULT EXT_CLASS::Initialize() {
   t_logger = std::make_shared<WindbgLogger>();
+  g_logger = t_logger;
   HRESULT result = initializeThreadGlobals();
 
   if (!SUCCEEDED(result)) {
@@ -263,6 +264,51 @@ bool EXT_CLASS::isKernelDebugger() {
   ULONG Qualifier;
   t_control->GetDebuggeeType(&Class, &Qualifier);
   return DEBUG_CLASS_KERNEL == Class;
+}
+
+#include <iostream>
+EXT_COMMAND(
+    expr, "EvaluateExpression",
+    "{custom}{;x;expression;the expression or a file to read from the "
+    "expression, must be a file if the epression is larger than one line}") {
+  auto scriptFilePathPointer = GetUnnamedArgStr(0);
+  std::string scriptFilePath = scriptFilePathPointer;
+  std::cout << scriptFilePath;
+  executeCommand([this, scriptFilePath](CommonCommandArgs &args) {
+    std::string expressionValue = scriptFilePath;
+    auto expression = readFile(scriptFilePath);
+    if (expression) {
+      expressionValue =
+          std::string(expression.value().begin(), expression.value().end());
+    }
+    auto thread = g_platform->getCurrentThread();
+    auto currentFrame = thread->getRegisterValue("$frame", 0).to_ullong();
+    auto res = commands::executeExpression(
+        args, std::string{expressionValue.begin(), expressionValue.end()});
+    abortIfFalse(
+        SUCCEEDED(g_ExtInstance.t_control->Execute(
+            DEBUG_OUTCTL_THIS_CLIENT,
+            std::string(".frame /r " + std::to_string(currentFrame)).c_str(),
+            0)),
+        ".frame failed");
+    return res;
+  });
+}
+
+EXT_COMMAND(discard_expr,
+            "Discard current expression if exists , this operation is not "
+            "calling needed destructors.",
+            "") {
+  executeCommand([](CommonCommandArgs &args) {
+    args.selectedFrameIndex = 0;
+    auto thread = g_platform->getCurrentThread();
+    if (!g_functionRunManager.isWaitingForFunctionToEnd(
+            thread->getThreadId())) {
+      writeLog("no active expression to discard");
+    }
+    g_functionRunManager.notifyFunctionEnded(thread->getThreadId());
+    return true;
+  });
 }
 
 EXT_COMMAND(reload_config, "reload config.json again", "") {

@@ -12,6 +12,7 @@ public:
   void write(const std::string &message) override;
 };
 
+inline std::shared_ptr<Logger> g_logger;
 inline thread_local std::shared_ptr<Logger> t_logger;
 void writeLog(const std::string &message);
 

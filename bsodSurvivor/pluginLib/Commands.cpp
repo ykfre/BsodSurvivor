@@ -5,6 +5,7 @@
 #pragma comment(lib, "dbghelp.lib")
 
 #pragma warning(push, 0)
+#include "Commands.h"
 #include "Api/SystemInitializerFull.h"
 #include "CommonCommandArgs.h"
 #include "Config.h"
@@ -738,5 +739,143 @@ bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line) {
   ss << std::hex << whereToJump;
   writeLog("finished jumping to " + ss.str());
   return error.Success();
+}
+
+size_t getIndexOfInstructionAtAddress(
+    lldb_private::InstructionList & instList, const lldb_private::Address &address,
+    lldb_private::Target* target) {
+  for (size_t i = 0; i < instList.GetSize(); i++) {
+    auto instAddr =
+        instList.GetInstructionAtIndex(i)->GetAddress().GetLoadAddress(target);
+    if (instAddr == address.GetLoadAddress(target)) {
+      return i;
+    }
+  }
+  return (size_t)-1;
+}
+
+bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
+                    &commonCommandInitializerValues,
+                size_t &whereToJump) {
+  lldb_private::ExecutionContext exe_ctx2;
+  commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
+      exe_ctx2);
+  lldb_private::Status error;
+  auto frame =
+      commonCommandInitializerValues->exeCtxScope->CalculateStackFrame();
+  auto thread = commonCommandInitializerValues->exeCtxScope->CalculateThread();
+  const lldb_private::SymbolContext &sym_ctx =
+      frame->GetSymbolContext(lldb::eSymbolContextLineEntry);
+  // Try the current file, but override if asked.
+  auto file = sym_ctx.line_entry.file;
+  if (!file) {
+    writeLog("No source file available for the current location, not jumping.");
+    return false;
+  }
+  if (!sym_ctx.function) {
+    writeLog("Not inside a function, not jumping.");
+    return false;
+  }
+  auto &funcSym = frame->GetSymbolContext(lldb::eSymbolContextFunction);
+  auto rawFunctionName = funcSym.function->GetMangled().GetMangledName();
+  if (rawFunctionName.IsEmpty()) {
+    rawFunctionName = funcSym.function->GetName();
+  }
+  auto functionName = std::string(rawFunctionName.AsCString());
+  if (!g_blink.getSymbol("__jmp_" + functionName)) {
+    writeLog("No need to jump, not jumping.");
+    return false;
+  }
+  auto newestAddr = g_blink.getSymbol(functionName);
+  if (!newestAddr) {
+    writeLog("The symbol name isn't found: " + functionName + " ,not jumping.");
+    return false;
+  }
+  lldb_private::MyRegisterContext youngestContext(*thread, 0);
+
+  auto targetSp =
+      commonCommandInitializerValues->exeCtxScope->CalculateTarget();
+  auto currentFunctionStart = (void *)funcSym.function->GetAddressRange()
+                                  .GetBaseAddress()
+                                  .GetLoadAddress(targetSp.get());
+  if (youngestContext.GetPC() < (size_t)currentFunctionStart) {
+    writeLog("Error - The function starts after the current pc");
+    return false;
+  }
+  if (newestAddr == currentFunctionStart) {
+    writeLog("Already in the most updated function.");
+    return false;
+  }
+  whereToJump = (size_t)newestAddr + youngestContext.GetPC() -
+                (size_t)currentFunctionStart;
+  auto dissasembler =
+      funcSym.function->GetInstructions(exe_ctx2, nullptr, true);
+  if (!dissasembler) {
+    writeLog("No dissasembler");
+    return false;
+  }
+  auto functionEnd = 
+      (size_t)funcSym.function->GetAddressRange()
+          .GetBaseAddress()
+                         .GetLoadAddress(targetSp.get()) +
+                     funcSym.function->GetAddressRange().GetByteSize();
+  lldb_private::AddressRange range1(
+      lldb_private::Address((lldb::addr_t)currentFunctionStart), functionEnd - (size_t)currentFunctionStart);
+  auto rangeAssembly1 = dissasembler->DisassembleRange(
+      targetSp->GetArchitecture(), nullptr, nullptr, *targetSp, range1, false);
+  if (!rangeAssembly1) {
+    writeLog("No dissasembler");
+    return false;
+  }
+  auto instrList1 = rangeAssembly1->GetInstructionList();
+  lldb_private::AddressRange range2(
+      lldb_private::Address((lldb::addr_t)newestAddr),
+      functionEnd - (size_t)currentFunctionStart);
+  auto rangeAssembly2 = dissasembler->DisassembleRange(
+      targetSp->GetArchitecture(), nullptr, nullptr, *targetSp, range2, false);
+  if (!rangeAssembly2) {
+    writeLog("No dissasembler");
+    return false;
+  }
+  auto instrList2 = rangeAssembly2->GetInstructionList();
+  auto foundInstr1 =
+      getIndexOfInstructionAtAddress(instrList1,lldb_private::Address(
+          (lldb::addr_t)(youngestContext.GetPC())), targetSp.get());
+  if (foundInstr1 == (size_t)-1) {
+    writeLog("Don't found instr, don't jump");
+    return false;
+  }
+  if (foundInstr1 > instrList2.GetSize()) {
+    writeLog("The new instructions don't fit to jump to");
+    return false;
+  }
+  for (size_t i = 0; i <= foundInstr1; i++) {
+    if (instrList1.GetInstructionAtIndex(i)->GetOpcode().GetOpcode64() !=
+        instrList2.GetInstructionAtIndex(i)->GetOpcode().GetOpcode64()) {
+      writeLog("The new instructions don't fit to jump to");
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+bool jumpToMostUpdatedFunction(CommonCommandArgs &commonCommandArgs) {
+  std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
+  llvm::Optional<CommonCommandInitializerValues>
+      commonCommandInitializerValues =
+          commonCommandRunInitializer(commonCommandArgs, modules);
+  if (!commonCommandInitializerValues) {
+    return false;
+  }
+
+  size_t whereToJump = 0;
+  if (!shouldJump(commonCommandInitializerValues, whereToJump)) {
+    return false;
+  }
+
+  writeLog("Jumping to a newer address");
+  g_platform->getCurrentThread()->setRegisterValue("rip",whereToJump) ;
+  return true;
 }
 } // namespace commands
