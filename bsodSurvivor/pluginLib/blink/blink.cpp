@@ -268,7 +268,8 @@ Blink::updatePreviousNeededSymbols(const std::shared_ptr<LoadedDll> &loadedDll,
         if (((size_t)oldSymbol.second.m_address) % sizeof(void *) != 0) {
           return Result(
               "The updated values don't have size which is devided by "
-              "sizeof(void*)");
+              "sizeof(void*) " +
+              oldSymbol.first+ " in address " + std::to_string((size_t)oldSymbol.second.m_address));
         }
         needToReplaceOldSymbols.push_back(
             std::make_pair(realOldSymbolName, oldSymbol.second.m_address));
@@ -420,15 +421,19 @@ Blink::writeAsmFileWithNeededSymbols(const std::set<std::string> &symbolsToNull,
       defData += symbolName + "	DQ	0 \n";
     }
   }
-  defData += "_DATA ENDS\n";
-
-  defData += "_TEXT SEGMENT\n";
   for (auto symbolName : symbolsToNull) {
     if (symbolName._Starts_with("__jmp_")) {
       defData +=
           "EXTERNDEF __my_imp_" + getRealSymbolName(symbolName) + ":QWORD\n";
       defData +=
           "__my_imp_" + getRealSymbolName(symbolName) + "	DQ	0 \n";
+    }
+  }
+  defData += "_DATA ENDS\n";
+
+  defData += "_TEXT SEGMENT\n";
+  for (auto symbolName : symbolsToNull) {
+    if (symbolName._Starts_with("__jmp_")) {
       defData += "\n" + symbolName + " PROC\n" + "		jmp " +
                  "[__my_imp_" + getRealSymbolName(symbolName) + "]\n" +
                  symbolName + " ENDP\n\n";
@@ -729,7 +734,7 @@ Result Blink::compile(const LinkCommandRequest *request,
   std::string clangFilePath = request->clangfilepath();
   std::string processOutput;
   std::string processCommand = "\"" + clangFilePath + "\"" +
-                               " /EHa /Od /Zi /GS- -gdwarf " +
+                               " /EHa /Od /Zi /GS- -gdwarf  -Xclang -fno-should-emit-dwarf-for-globals " +
                                request->compilationflags() + " -c " + "\"" +
                                filePath + "\"" + " -o " + outputFilePath;
   writeLog("starting to compile " + processCommand);
