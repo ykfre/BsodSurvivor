@@ -90,7 +90,7 @@ std::string Blink::getUniqueTempFilePath(const std::string &filePath,
   while (true) {
     wantedFilePath =
         m_tempDirPath + "\\" + prefix + "__" + std::to_string(i) + "__" +
-        std::to_string((size_t)std::hash<std::string>{}(filePath)) + "__" +
+        std::to_string((size_t)std::hash<std::string>{}(filePath)) + "$$__$$" +
         fileName.string();
     if (!std::filesystem::exists(wantedFilePath)) {
       break;

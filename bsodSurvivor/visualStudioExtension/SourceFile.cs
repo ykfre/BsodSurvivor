@@ -131,8 +131,12 @@ namespace VSPackage.BsodSurvivorPlugin
 
 		public string LanguageStandard { get; set; }
 
+		public string WarningLevel { get; set; }
 
-        private string _fullPath = null;
+		public string TreatWarningAsError { get; set; }
+
+
+		private string _fullPath = null;
         private string _projectBasePath = null;
     }
 
