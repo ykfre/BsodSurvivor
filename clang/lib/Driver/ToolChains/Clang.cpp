@@ -42,7 +42,6 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/YAMLParser.h"
-
 #ifdef LLVM_ON_UNIX
 #include <unistd.h> // For getuid().
 #endif
@@ -620,11 +619,14 @@ getFramePointerKind(const ArgList &Args, const llvm::Triple &Triple) {
   Arg *A = Args.getLastArg(options::OPT_fomit_frame_pointer,
                            options::OPT_fno_omit_frame_pointer);
   bool OmitFP = A && A->getOption().matches(options::OPT_fomit_frame_pointer);
+  OmitFP = false;
   bool NoOmitFP =
       A && A->getOption().matches(options::OPT_fno_omit_frame_pointer);
+  NoOmitFP = true;
   bool KeepLeaf = Args.hasFlag(options::OPT_momit_leaf_frame_pointer,
                                options::OPT_mno_omit_leaf_frame_pointer,
                                Triple.isAArch64() || Triple.isPS4CPU());
+  KeepLeaf = false;
   if (NoOmitFP || mustUseNonLeafFramePointerForTarget(Triple) ||
       (!OmitFP && useFramePointerForTargetByDefault(Args, Triple))) {
     if (KeepLeaf)
@@ -5631,6 +5633,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_finline_functions,
                   options::OPT_finline_hint_functions,
                   options::OPT_fno_inline_functions);
+
 
   // FIXME: Find a better way to determine whether the language has modules
   // support by default, or just assume that all languages do.

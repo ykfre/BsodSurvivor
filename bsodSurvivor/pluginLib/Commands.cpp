@@ -123,7 +123,7 @@ class Process2 : public lldb_private::Process {
 public:
   static std::shared_ptr<Process2>
   create(lldb::TargetSP target_sp, lldb::ListenerSP listener_sp,
-         const CommonCommandArgs &args,
+         CommonCommandArgs &args,
          std::vector<std::shared_ptr<LoadedDll>> &modules) {
     auto process = std::make_shared<Process2>(target_sp, listener_sp, args);
 
@@ -252,7 +252,7 @@ public:
   void SetStackFrame(lldb::StackFrameSP sp) { m_frame = sp; }
 
   Process2(lldb::TargetSP target_sp, lldb::ListenerSP listener_sp,
-           const CommonCommandArgs &args)
+           CommonCommandArgs &args)
       : lldb_private::Process(target_sp, listener_sp),
         m_CommonCommandArgs(args) {}
 
@@ -263,7 +263,7 @@ private:
 
 class Platform2 : public lldb_private::Platform {
 public:
-  Platform2(bool is_host_platform, const CommonCommandArgs &args)
+  Platform2(bool is_host_platform, CommonCommandArgs &args)
       : lldb_private::Platform(is_host_platform), m_CommonCommandArgs(args) {}
   UserIDResolver2 m_resolver;
   const char *GetDescription() override { return ""; };
@@ -344,7 +344,7 @@ class StackFrame2 : public lldb_private::StackFrame {
 
 class MyCtx : public lldb_private::ExecutionContextScope {
 public:
-  MyCtx(const lldb::TargetSP target, const CommonCommandArgs &args,
+  MyCtx(const lldb::TargetSP target, CommonCommandArgs &args,
         std::vector<std::shared_ptr<LoadedDll>> &modules) {
     m_target = target;
     m_CommonCommandArgs = args;
@@ -463,8 +463,8 @@ struct CommonCommandInitializerValues {
   lldb::TargetSP targetSp;
 };
 
-llvm::Optional<CommonCommandInitializerValues>
-commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
+std::shared_ptr<CommonCommandInitializerValues>
+commonCommandRunInitializer(CommonCommandArgs &commonCommandArgs,
                             std::vector<std::shared_ptr<LoadedDll>> &modules) {
   if (g_config.shouldHaveAllocateSpaceInStackFunction) {
     g_platform->callAllocateSpaceInStack = [] {
@@ -488,14 +488,15 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
 
   lldb_private::Platform::SetHostPlatform(
       lldb::PlatformSP(new Platform2(true, commonCommandArgs)));
-  CommonCommandInitializerValues commonCommandInitializerValues;
-  commonCommandInitializerValues.debugger =
+  auto commonCommandInitializerValues =
+      std::make_shared<CommonCommandInitializerValues>();
+  commonCommandInitializerValues->debugger =
       lldb_private::Debugger::CreateInstance();
   int FD;
   if (std::error_code ec = llvm::sys::fs::openFileForWrite(
           "error.txt", FD, llvm::sys::fs::CD_CreateAlways,
           llvm::sys::fs::OF_Text)) {
-    return llvm::NoneType();
+    return nullptr;
   }
 
   // Keep it for now for debugging puproses only.
@@ -508,62 +509,64 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
     categoryStr[category.size()] = '\0';
     logCategoriesPtr[i] = categoryStr;
   }
-  if (!commonCommandInitializerValues.debugger->EnableLog(
+  if (!commonCommandInitializerValues->debugger->EnableLog(
           "lldb",
           llvm::ArrayRef{logCategoriesPtr, g_config.logCategories.size()},
           "log.txt", 0, *error_stream)) {
-    return llvm::NoneType();
+    return nullptr;
   }
   lldb_private::LoadDependentFiles load_dependent_files =
       lldb_private::eLoadDependentsNo;
-  auto &targetList = commonCommandInitializerValues.debugger->GetTargetList();
+  auto &targetList = commonCommandInitializerValues->debugger->GetTargetList();
 
   if (!targetList
-           .CreateTarget(*commonCommandInitializerValues.debugger,
+           .CreateTarget(*commonCommandInitializerValues->debugger,
                          "c:\\Windows\\System32\\kernel32.dll", "",
                          load_dependent_files, nullptr,
-                         commonCommandInitializerValues.targetSp)
+                         commonCommandInitializerValues->targetSp)
            .Success()) {
-    return llvm::NoneType();
+    return nullptr;
   }
 
   llvm::Triple triple;
   triple.setArch(llvm::Triple::x86_64);
-  commonCommandInitializerValues.targetSp->SetArchitecture(
+  commonCommandInitializerValues->targetSp->SetArchitecture(
       lldb_private::ArchSpec(triple));
-  commonCommandInitializerValues.exeCtxScope = std::make_shared<MyCtx>(
-      commonCommandInitializerValues.targetSp, commonCommandArgs, modules);
-  if (!commonCommandInitializerValues.exeCtxScope->CalculateProcess()) {
-    return llvm::NoneType();
+  commonCommandInitializerValues->exeCtxScope = std::make_shared<MyCtx>(
+      commonCommandInitializerValues->targetSp, commonCommandArgs, modules);
+  if (!commonCommandInitializerValues->exeCtxScope->CalculateProcess()) {
+    return nullptr;
   }
-  if (!commonCommandInitializerValues.exeCtxScope->CalculateThread()
+  if (!commonCommandInitializerValues->exeCtxScope->CalculateThread()
            ->SetSelectedFrameByIndex(commonCommandArgs.selectedFrameIndex)) {
     writeLog("failed to set wanted frame index " +
              std::to_string(commonCommandArgs.selectedFrameIndex) +
              "\n maybe there is module which isn't the main one in the "
              "middle?, for exmple, nt,hal, and etc");
-    return llvm::NoneType();
+    return nullptr;
   }
   auto currentThread =
-      commonCommandInitializerValues.exeCtxScope->CalculateThread();
+      commonCommandInitializerValues->exeCtxScope->CalculateThread();
   auto pc = currentThread->GetSelectedFrame()->GetRegisterContext()->GetPC();
   lldb_private::ExecutionContext exeCtx;
-  commonCommandInitializerValues.exeCtxScope->CalculateExecutionContext(exeCtx);
+  commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
+      exeCtx);
   auto currentModule = getContainingModule(exeCtx, pc);
   if (currentModule) {
-    commonCommandInitializerValues.exeCtxScope->CalculateProcess()->setPath(
+    commonCommandInitializerValues->exeCtxScope->CalculateProcess()->setPath(
         (*currentModule)->GetFileSpec().GetPath());
   } else {
     std::stringstream ss;
     ss << "failed to find module for pc " << std::hex << pc;
     writeLog(ss.str());
   }
-  commonCommandInitializerValues.targetSp->GetProcessSP() =
-      commonCommandInitializerValues.exeCtxScope->CalculateProcess();
-  commonCommandInitializerValues.exeCtxScope->CalculateStackFrame();
+  commonCommandInitializerValues->targetSp->GetProcessSP() =
+      commonCommandInitializerValues->exeCtxScope->CalculateProcess();
+  commonCommandInitializerValues->exeCtxScope->CalculateStackFrame();
   g_platform->runFunc = [commonCommandInitializerValues](
                             void *addr, const std::vector<size_t> &args) {
-    auto thread = commonCommandInitializerValues.exeCtxScope->CalculateThread();
+    auto thread =
+        commonCommandInitializerValues->exeCtxScope->CalculateThread();
     lldb_private::Status error;
     lldb_private::EvaluateExpressionOptions options;
     options.SetDebug(false);
@@ -576,12 +579,11 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
     size_t returnValue = 0;
 
     lldb_private::ExecutionContext exeCtx;
-    commonCommandInitializerValues.exeCtxScope->CalculateExecutionContext(
+    commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
         exeCtx);
     thread->RunFunc((size_t)addr, args, returnValue, error, options, exeCtx);
     return returnValue;
   };
-
   t_bpAddress = g_platform->getFunctionToBreakAddress();
   if (g_platform->callAllocateSpaceInStack) {
     t_callAllocateStack = g_platform->callAllocateSpaceInStack.value();
@@ -589,20 +591,18 @@ commonCommandRunInitializer(const CommonCommandArgs &commonCommandArgs,
   return commonCommandInitializerValues;
 }
 
-bool runCommand(const std::function<bool()> &func,
-                const CommonCommandArgs &commonCommandArgs,
+bool runCommand(const std::function<bool(CommonCommandArgs &args)> &func,
+                CommonCommandArgs &commonCommandArgs,
                 std::vector<std::shared_ptr<LoadedDll>> &modules) {
   if (!g_platform->verifyPreConditions()) {
     return false;
   }
-  llvm::Optional<CommonCommandInitializerValues>
-      commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs, modules);
-  if (!commonCommandInitializerValues) {
-    writeLog("failed to run initialize lldb");
-    return false;
-  }
-  return func();
+  g_platform->getCurrentThread()->showThreadInfo();
+
+  bool res = func(commonCommandArgs);
+  g_platform->runFunc = nullptr;
+  g_platform->getCurrentThread()->showThreadInfo();
+  return res;
 }
 
 bool executeExpression(CommonCommandArgs &commonCommandArgs,
@@ -610,9 +610,8 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
   writeLog("sarting executing expression");
 
   auto modules = g_blink.getAllDlls();
-  llvm::Optional<CommonCommandInitializerValues>
-      commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs, modules);
+  auto commonCommandInitializerValues =
+      commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
@@ -648,18 +647,40 @@ bool executeExpression(CommonCommandArgs &commonCommandArgs,
   return lldb::eExpressionCompleted == result;
 }
 
+#pragma warning(push, 0)
+#include "blink/LinkCommand.grpc.pb.h"
+#pragma warning(pop)
+bool blink(CommonCommandArgs &commonCommandArgs,
+           const void *request) {
+
+  auto dlls = g_blink.getAllDlls();
+
+  auto commonCommandInitializerValues =
+      commonCommandRunInitializer(commonCommandArgs, dlls);
+  if (!commonCommandInitializerValues) {
+    return false;
+  }
+  std::stringstream ss;
+  ss << std::hex << g_blink.getDllToChange()->getStartAddress();
+  writeLog("main module is loaded at " + ss.str());
+  auto result = g_blink.link((LinkCommand::LinkCommandRequest *)request);
+  if (!result.m_success) {
+    writeLog(result.m_err);
+  }
+  return result.m_success;
+}
+
 bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
                      size_t untilFrameIndex, bool shouldCallDestructors) {
-
+  commonCommandArgs.selectedFrameIndex = 0;
   if (untilFrameIndex == 0) {
     writeLog("you try to return to the same frame - not doing anything");
     return false;
   }
   writeLog("start returning from frame");
   std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
-  llvm::Optional<CommonCommandInitializerValues>
-      commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs, modules);
+  auto commonCommandInitializerValues =
+      commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
@@ -671,19 +692,20 @@ bool returnFromFrame(CommonCommandArgs &commonCommandArgs,
       shouldCallDestructors, (int32_t)untilFrameIndex);
   std::string returnFromFrameStr = error.Success()
                                        ? "returned from frame successfully"
-                                       : "failed to return from frmae";
+                                       : "failed to return from frame";
   writeLog(returnFromFrameStr);
   return error.Success();
 }
 
 bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line) {
+
   std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
-  llvm::Optional<CommonCommandInitializerValues>
-      commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs, modules);
+  auto commonCommandInitializerValues =
+      commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
+
   lldb_private::ExecutionContext exe_ctx2;
   commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
       exe_ctx2);
@@ -702,10 +724,10 @@ bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line) {
     writeLog("No source file available for the current location.");
     return false;
   }
-
   std::string warnings;
   auto targetSp =
       commonCommandInitializerValues->exeCtxScope->CalculateTarget();
+
   // Find candidate locations.
   std::vector<lldb_private::Address> candidates, within_function,
       outside_function;
@@ -726,9 +748,13 @@ bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line) {
   for (const auto &address : within_function) {
     whereToJump = std::min(address.GetLoadAddress(targetSp.get()), whereToJump);
   }
-  if (whereToJump >
-      g_platform->getCurrentThread()->getRegisterValue("rip", 0).to_ullong()) {
-    writeLog("trying to jump after current line - not supported");
+  auto currentRip =
+      g_platform->getCurrentThread()->getRegisterValue("rip", 0).to_ullong();
+  if (whereToJump > currentRip) {
+    writeLog(
+        "trying to jump after current line - not supported, want to jump to " +
+        std::to_string(whereToJump) + ", wherewe are in " +
+        std::to_string(currentRip));
     return false;
   }
   error = ::callDestructors(
@@ -741,9 +767,9 @@ bool jumpTo(CommonCommandArgs &commonCommandArgs, uint32_t line) {
   return error.Success();
 }
 
-size_t getIndexOfInstructionAtAddress(
-    lldb_private::InstructionList & instList, const lldb_private::Address &address,
-    lldb_private::Target* target) {
+size_t getIndexOfInstructionAtAddress(lldb_private::InstructionList &instList,
+                                      const lldb_private::Address &address,
+                                      lldb_private::Target *target) {
   for (size_t i = 0; i < instList.GetSize(); i++) {
     auto instAddr =
         instList.GetInstructionAtIndex(i)->GetAddress().GetLoadAddress(target);
@@ -754,16 +780,109 @@ size_t getIndexOfInstructionAtAddress(
   return (size_t)-1;
 }
 
-bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
-                    &commonCommandInitializerValues,
-                size_t &whereToJump) {
+std::vector<uint32_t>
+findSubRbpInstr(const lldb_private::InstructionList &instList,
+                uint32_t untilInstrIndex,
+                lldb_private::ExecutionContext *exeCtx) {
+  std::vector<uint32_t> results;
+  // " leaq   0x40(%rsp), %rbp"
+  for (size_t i = 0; i < untilInstrIndex; i++) {
+    auto inst = instList.GetInstructionAtIndex(i);
+    lldb_private::StreamString ss;
+    inst->Dump(&ss, 10, true, false, exeCtx, nullptr, nullptr, nullptr, 10);
+    auto instString = ss.GetString().str();
+    int leaFound = instString.find("lea");
+    if (leaFound == -1) {
+      continue;
+    }
+    auto rspIndex = instString.find("(%rsp), %rbp");
+    if (rspIndex == -1) {
+      continue;
+    }
+    auto sizeIndex = instString.find(" ", leaFound);
+    if (sizeIndex == -1) {
+      continue;
+    }
+    sizeIndex++;
+    auto subSizeStr = instString.substr(sizeIndex, rspIndex - sizeIndex);
+    std::stringstream ss2;
+    ss2 << std::hex << subSizeStr;
+    int subSize = 0;
+    ss2 >> subSize;
+    results.push_back(subSize);
+  }
+  return results;
+}
+#include <sstream>
+std::vector<uint32_t>
+findSubRspInstr(const lldb_private::InstructionList &instList,
+                uint32_t untilInstrIndex,
+                lldb_private::ExecutionContext *exeCtx) {
+  std::vector<uint32_t> results;
+  for (size_t i = 0; i < untilInstrIndex; i++) {
+    auto inst = instList.GetInstructionAtIndex(i);
+    lldb_private::StreamString ss;
+    inst->Dump(&ss, 10, true, false, exeCtx, nullptr, nullptr, nullptr, 10);
+    auto instString = ss.GetString().str();
+    int subFound = instString.find("sub");
+    if (subFound == -1) {
+      continue;
+    }
+    auto rspIndex = instString.find(", %rsp");
+    if (rspIndex == -1) {
+      continue;
+    }
+    auto sizeIndex = instString.find("$", subFound);
+    if (sizeIndex == -1) {
+      continue;
+    }
+    sizeIndex++;
+    auto subSizeStr = instString.substr(sizeIndex, rspIndex - sizeIndex);
+    std::stringstream ss2;
+    ss2 << std::hex << subSizeStr;
+    int subSize = 0;
+    ss2 >> subSize;
+    results.push_back(subSize);
+  }
+  return results;
+}
+
+std::optional<uint32_t>
+getValueToAddToRbpFromMove(lldb_private::Instruction &inst,
+                           lldb_private::ExecutionContext &exe_ctx2) {
+  lldb_private::StreamString ss;
+  inst.Dump(&ss, 10, true, false, &exe_ctx2, nullptr, nullptr, nullptr, 10);
+  auto instString = ss.GetString().str();
+  int movFound = instString.find("mov");
+  if (movFound == -1) {
+    return std::nullopt;
+  }
+  auto rbpIndex = instString.find("(%rbp)");
+  if (rbpIndex == -1) {
+    return std::nullopt;
+  }
+  auto sizeIndex = instString.rfind(", ", rbpIndex);
+  if (sizeIndex == -1) {
+    return std::nullopt;
+  }
+  sizeIndex += 2;
+  auto subSizeStr = instString.substr(sizeIndex, rbpIndex - sizeIndex);
+  std::stringstream ss2;
+  ss2 << std::hex << subSizeStr;
+  int subSize = 0;
+  ss2 >> subSize;
+  return subSize;
+}
+
+bool shouldJump(CommonCommandInitializerValues &commonCommandInitializerValues,
+                size_t &whereToJump, int &rspToChange, int &rbpToChangeFromSp) {
   lldb_private::ExecutionContext exe_ctx2;
-  commonCommandInitializerValues->exeCtxScope->CalculateExecutionContext(
+  commonCommandInitializerValues.exeCtxScope->CalculateExecutionContext(
       exe_ctx2);
   lldb_private::Status error;
   auto frame =
-      commonCommandInitializerValues->exeCtxScope->CalculateStackFrame();
-  auto thread = commonCommandInitializerValues->exeCtxScope->CalculateThread();
+      commonCommandInitializerValues.exeCtxScope->CalculateStackFrame();
+  auto thread = commonCommandInitializerValues.exeCtxScope->CalculateThread();
   const lldb_private::SymbolContext &sym_ctx =
       frame->GetSymbolContext(lldb::eSymbolContextLineEntry);
   // Try the current file, but override if asked.
@@ -793,8 +912,7 @@ bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
   }
   lldb_private::MyRegisterContext youngestContext(*thread, 0);
 
-  auto targetSp =
-      commonCommandInitializerValues->exeCtxScope->CalculateTarget();
+  auto targetSp = commonCommandInitializerValues.exeCtxScope->CalculateTarget();
   auto currentFunctionStart = (void *)funcSym.function->GetAddressRange()
                                   .GetBaseAddress()
                                   .GetLoadAddress(targetSp.get());
@@ -806,21 +924,20 @@ bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
     writeLog("Already in the most updated function.");
     return false;
   }
-  whereToJump = (size_t)newestAddr + youngestContext.GetPC() -
-                (size_t)currentFunctionStart;
+
   auto dissasembler =
       funcSym.function->GetInstructions(exe_ctx2, nullptr, true);
   if (!dissasembler) {
     writeLog("No dissasembler");
     return false;
   }
-  auto functionEnd = 
-      (size_t)funcSym.function->GetAddressRange()
-          .GetBaseAddress()
+  auto functionEnd = (size_t)funcSym.function->GetAddressRange()
+                         .GetBaseAddress()
                          .GetLoadAddress(targetSp.get()) +
                      funcSym.function->GetAddressRange().GetByteSize();
   lldb_private::AddressRange range1(
-      lldb_private::Address((lldb::addr_t)currentFunctionStart), functionEnd - (size_t)currentFunctionStart);
+      lldb_private::Address((lldb::addr_t)currentFunctionStart),
+      functionEnd - (size_t)currentFunctionStart);
   auto rangeAssembly1 = dissasembler->DisassembleRange(
       targetSp->GetArchitecture(), nullptr, nullptr, *targetSp, range1, false);
   if (!rangeAssembly1) {
@@ -838,9 +955,10 @@ bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
     return false;
   }
   auto instrList2 = rangeAssembly2->GetInstructionList();
-  auto foundInstr1 =
-      getIndexOfInstructionAtAddress(instrList1,lldb_private::Address(
-          (lldb::addr_t)(youngestContext.GetPC())), targetSp.get());
+  auto foundInstr1 = getIndexOfInstructionAtAddress(
+      instrList1,
+      lldb_private::Address((lldb::addr_t)(youngestContext.GetPC())),
+      targetSp.get());
   if (foundInstr1 == (size_t)-1) {
     writeLog("Don't found instr, don't jump");
     return false;
@@ -849,33 +967,107 @@ bool shouldJump(llvm::Optional<CommonCommandInitializerValues>
     writeLog("The new instructions don't fit to jump to");
     return false;
   }
-  for (size_t i = 0; i <= foundInstr1; i++) {
-    if (instrList1.GetInstructionAtIndex(i)->GetOpcode().GetOpcode64() !=
-        instrList2.GetInstructionAtIndex(i)->GetOpcode().GetOpcode64()) {
+
+  auto rbp1 = findSubRbpInstr(instrList1, foundInstr1, &exe_ctx2);
+
+  auto rbp2 = findSubRbpInstr(instrList2, foundInstr1, &exe_ctx2);
+  if (rbp1.size() > 1 || rbp2.size() > 1) {
+    writeLog("Supporting jump only one lea rbp, not multiple.");
+    return false;
+  }
+  if (rbp2.empty() || rbp1.empty()) {
+    writeLog("Not supporting jump where there isn't lea rbp,rsp.");
+    return false;
+  }
+  rbpToChangeFromSp = rbp2.at(0);
+  writeLog("rbp to add to rsp is " + std::to_string(rbpToChangeFromSp));
+  auto subs1 = findSubRspInstr(instrList1, foundInstr1, &exe_ctx2);
+  auto subs2 = findSubRspInstr(instrList2, foundInstr1, &exe_ctx2);
+  if (subs1.size() > 1 || subs2.size() > 1) {
+    writeLog("Supporting jump only one sub rsp, not multiple.");
+    return false;
+  }
+
+  int sub2 = 0;
+  if (!subs2.empty()) {
+    sub2 = subs2.at(0);
+  }
+  int sub1 = 0;
+  if (!subs1.empty()) {
+    sub1 = subs1.at(0);
+  }
+
+  for (size_t i = 0; i < foundInstr1; i++) {
+    auto instr1 = instrList1.GetInstructionAtIndex(i);
+    auto instr2 = instrList2.GetInstructionAtIndex(i);
+    auto opcodes1 = ((unsigned char *)instr1->GetOpcode().GetOpcodeBytes());
+    auto opcode1 = opcodes1[0];
+    auto opcodes2 = ((unsigned char *)instr2->GetOpcode().GetOpcodeBytes());
+    auto opcode2 = opcodes2[0];
+    if (opcode1 != opcode2) {
       writeLog("The new instructions don't fit to jump to");
       return false;
     }
+    llvm::SmallVector<lldb_private::Instruction::Operand, 6> operands;
+    auto valueToAddToRbp1 = getValueToAddToRbpFromMove(*instr1, exe_ctx2);
+    auto valueToAddToRbp2 = getValueToAddToRbpFromMove(*instr2, exe_ctx2);
+    if (valueToAddToRbp1.has_value() != valueToAddToRbp2.has_value()) {
+      writeLog("The new instructions don't fit to jump to");
+      return false;
+    }
+    if (valueToAddToRbp1.has_value()) {
+      if (-sub1 + valueToAddToRbp1.value() + rbp1.at(0) !=
+          -sub2 + valueToAddToRbp2.value() + rbp2.at(0)) {
+        writeLog("The new instructions don't fit to jump to");
+        return false;
+      }
+    }
   }
-  
+
+  rspToChange = sub1 - sub2;
+  whereToJump =
+      (size_t)newestAddr +
+      instrList2.GetInstructionAtIndex(foundInstr1)
+          ->GetAddress()
+          .GetLoadAddress(targetSp.get()) -
+      instrList2.GetInstructionAtIndex(0)->GetAddress().GetLoadAddress(
+          targetSp.get());
   return true;
 }
 
 bool jumpToMostUpdatedFunction(CommonCommandArgs &commonCommandArgs) {
+  if (commonCommandArgs.selectedFrameIndex != 0) {
+    writeLog("you should only select frame 0");
+    return false;
+  }
   std::vector<std::shared_ptr<LoadedDll>> modules = g_blink.getAllDlls();
-  llvm::Optional<CommonCommandInitializerValues>
-      commonCommandInitializerValues =
-          commonCommandRunInitializer(commonCommandArgs, modules);
+  auto commonCommandInitializerValues =
+      commonCommandRunInitializer(commonCommandArgs, modules);
   if (!commonCommandInitializerValues) {
     return false;
   }
 
   size_t whereToJump = 0;
-  if (!shouldJump(commonCommandInitializerValues, whereToJump)) {
+  int rspToChange = 0;
+  int rbpChange = 0;
+  if (!shouldJump(*commonCommandInitializerValues, whereToJump, rspToChange,
+                  rbpChange)) {
     return false;
   }
 
-  writeLog("Jumping to a newer address");
-  g_platform->getCurrentThread()->setRegisterValue("rip",whereToJump) ;
+  writeLog("Jumping to a newer address " + std::to_string(whereToJump));
+  g_platform->getCurrentThread()->setRegisterValue("rip", whereToJump);
+
+  auto rsp =
+      g_platform->getCurrentThread()->getRegisterValue("rsp", 0).to_ullong();
+  writeLog("rsp change is " + std::to_string(rspToChange));
+  rsp += rspToChange;
+  g_platform->getCurrentThread()->setRegisterValue("rsp", rsp);
+
+  writeLog("value to add to rsp for rbp is " + std::to_string(rbpChange));
+  g_platform->getCurrentThread()->setRegisterValue("rbp",
+                                                   rsp + (uint32_t)rbpChange);
+
   return true;
 }
 } // namespace commands

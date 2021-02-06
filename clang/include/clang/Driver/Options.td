@@ -882,6 +882,10 @@ def fcxx_exceptions: Flag<["-"], "fcxx-exceptions">, Group<f_Group>,
   HelpText<"Enable C++ exceptions">, Flags<[CC1Option]>;
 def feh_asynch: Flag<["-"], "feh-asynch">, Group<f_Group>,
   HelpText<"Enable EH Asynchronous exceptions">, Flags<[CC1Option]>;
+def fshould_emit_dwarf_for_globals: Flag<["-"], "fshould-emit-dwarf-for-globals">, Group<f_Group>,
+  HelpText<"Should enable dwarf for globals">, Flags<[CC1Option]>;
+def fno_should_emit_dwarf_for_globals: Flag<["-"], "fno-should-emit-dwarf-for-globals">, Group<f_Group>,
+  HelpText<"Should not enable dwarf for globals">, Flags<[CC1Option]>;
 def fcxx_modules : Flag <["-"], "fcxx-modules">, Group<f_Group>,
   Flags<[DriverOption]>;
 def fdebug_pass_arguments : Flag<["-"], "fdebug-pass-arguments">, Group<f_Group>;
@@ -1553,7 +1557,10 @@ def fno_delayed_template_parsing : Flag<["-"], "fno-delayed-template-parsing">, 
 def fno_objc_exceptions: Flag<["-"], "fno-objc-exceptions">, Group<f_Group>;
 def fno_objc_legacy_dispatch : Flag<["-"], "fno-objc-legacy-dispatch">, Group<f_Group>;
 def fno_objc_weak : Flag<["-"], "fno-objc-weak">, Group<f_Group>, Flags<[CC1Option]>;
-def fno_omit_frame_pointer : Flag<["-"], "fno-omit-frame-pointer">, Group<f_Group>;
+def fno_omit_frame_pointer : Flag<["-"], "fno-omit-frame-pointer">,
+	Group<f_Group>,
+	Flags<[CC1Option]>,
+    HelpText<"Do not omit frame pointer">;
 def fno_operator_names : Flag<["-"], "fno-operator-names">, Group<f_Group>,
   HelpText<"Do not treat C++ operator name keywords as synonyms for operators">,
   Flags<[CC1Option]>;

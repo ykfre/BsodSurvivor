@@ -31,11 +31,12 @@ public:
     m_reply = reply;
   }
 
-  void write(const std::string &message) override {
+  bool write(const std::string &message) override {
     auto reply = LinkCommandReply();
     reply.set_islogging(true);
     reply.set_message(message);
     m_reply->Write(reply);
+    return true;
   }
 
 private:
@@ -50,22 +51,21 @@ grpc::Status GreeterServiceImpl::Compile(
   auto thread = g_threadFactory->create(GetCurrentThreadId());
   t_logger = std::make_shared<VsLogger>(reply);
   g_platform->setCurrentThread(thread);
+  auto commonArgs = CommonCommandArgs{0};
   auto dlls = g_blink.getAllDlls();
   bool res = commands::runCommand(
-      [&request]() {
-        std::stringstream ss;
-        ss << std::hex << g_blink.getDllToChange()->getStartAddress();
-        writeLog("main module is loaded at " + ss.str());
-        auto result = g_blink.link(request);
-        if (!result.m_success) {
-          writeLog(result.m_err);
-        }
-        return result.m_success;
+      [&request](CommonCommandArgs &args) {
+        return commands::blink(args, request);
       },
-      CommonCommandArgs{0}, dlls);
+      commonArgs, dlls);
   t_logger = g_logger;
   auto common = CommonCommandArgs{0};
-  commands::jumpToMostUpdatedFunction(common);
+  commands::runCommand(
+      [&common](const CommonCommandArgs &) {
+        commands::jumpToMostUpdatedFunction(common);
+        return true;
+      },
+      common, dlls);
   auto message = LinkCommandReply();
 
   message.set_islogging(false);
