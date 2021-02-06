@@ -27,15 +27,14 @@ void WindbgPlatform::addBp(void *addr) {
   ULONG bpFlags;
   bp->GetFlags(&bpFlags);
   bpFlags |= DEBUG_BREAKPOINT_ENABLED | DEBUG_BREAKPOINT_ADDER_ONLY |
-     DEBUG_BREAKPOINT_GO_ONLY;
+             DEBUG_BREAKPOINT_GO_ONLY;
   auto hres = bp->SetFlags(bpFlags);
   abortIfFalse(SUCCEEDED(hres), "failed to set bp");
   bp->SetOffset(size_t(addr));
   g_ExtInstance.m_bpAndCounters[(size_t)addr] += 1;
 }
 
-WindbgPlatform::WindbgPlatform() {
-}
+WindbgPlatform::WindbgPlatform() {}
 
 void *WindbgPlatform::allocateMemory(size_t size) {
 
@@ -69,7 +68,8 @@ void *WindbgPlatform::allocateMemory(size_t size) {
     auto allocated_addr = runFunc(mallocAddr, {NonPagedPool, size});
     std::stringstream ss;
     ss << std::hex << (size_t)allocated_addr;
-    writeLog("allocate memory in " + ss.str()+ " with size " + std::to_string(size));
+    writeLog("allocate memory in " + ss.str() + " with size " +
+             std::to_string(size));
 
     return (void *)allocated_addr;
   }
@@ -174,8 +174,9 @@ void WindbgThread::setRegisterValue(const std::string &registerName,
         registerNameLower.c_str(), &index);
     abortIfFalse(SUCCEEDED(result),
                  "failed set index name " + registerNameLower);
-    g_ExtInstance.t_registers2->SetPseudoValues(DEBUG_REGSRC_FRAME, 1, nullptr,
-                                                index, &debugValue);
+    abortIfFalse(SUCCEEDED(g_ExtInstance.t_registers2->SetPseudoValues(
+                     DEBUG_REGSRC_FRAME, 1, nullptr, index, &debugValue)),
+                 "failed set index name " + registerNameLower);
   } else {
     debugValue.Type = type;
     result = g_ExtInstance.t_registers2->SetValue(index, &debugValue);
@@ -202,7 +203,8 @@ size_t WindbgPlatform::writeMemory(void *addr, const void *buf, size_t size) {
           (size_t)addr, (void *)buf, (uint32_t)size, &bytesRead)) ||
       bytesRead != size) {
     std::stringstream ss;
-    ss << "write failed in " << std::hex << addr << " from " << (size_t)buf << "with size " << size;
+    ss << "write failed in " << std::hex << addr << " from " << (size_t)buf
+       << "with size " << size;
     writeLog(ss.str());
     return 0;
   }
@@ -304,16 +306,23 @@ bool WindbgPlatform::runThreadPlan() {
   addBp(getFunctionToBreakAddress());
   auto thread = getCurrentThread();
   int tid = thread->getThreadId();
-  auto event =
-      g_functionRunManager.registerForBpHittedForTid(tid);
+  auto event = g_functionRunManager.registerForBpHittedForTid(tid);
   thread->resumeThread();
   g_functionRunManager.waitForFunctionToEnd(event, tid);
-
   return true;
 }
 
 bool WindbgThread::initialize() {
   return SUCCEEDED(g_ExtInstance.initializeThreadGlobals());
+}
+
+void WindbgThread::showThreadInfo() {
+  auto frame =
+      g_platform->getCurrentThread()->getRegisterValue("$frame", 0).to_ulong();
+  g_ExtInstance.t_control->Execute(DEBUG_OUTCTL_ALL_CLIENTS, ".thread", 0);
+  g_ExtInstance.t_control->Execute(DEBUG_OUTCTL_ALL_CLIENTS, "!irql", 0);
+  g_ExtInstance.t_control->Execute(
+      DEBUG_OUTCTL_THIS_CLIENT, (".frame " + std::to_string(frame)).c_str(), 0);
 }
 
 std::shared_ptr<PlatformThread> WindbgThreadFactory::create(int tid) {
