@@ -2450,6 +2450,7 @@ static const StringRef GetInputKindName(InputKind IK) {
   llvm_unreachable("unknown input language");
 }
 extern bool g_is_lldb_execution;
+extern bool g_shouldEmitDwarfForGlobals;
 
 static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                           const TargetOptions &TargetOpts,
@@ -2898,6 +2899,9 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Args.hasFlag(OPT_frecovery_ast_type, OPT_fno_recovery_ast_type, false);
   Opts.HeinousExtensions = Args.hasArg(OPT_fheinous_gnu_extensions);
   Opts.AccessControl = !Args.hasArg(OPT_fno_access_control);
+  g_shouldEmitDwarfForGlobals =
+      Args.hasFlag(options::OPT_fshould_emit_dwarf_for_globals,
+                   options::OPT_fno_should_emit_dwarf_for_globals, true);
   Opts.ElideConstructors = !Args.hasArg(OPT_fno_elide_constructors);
   Opts.MathErrno = !Opts.OpenCL && Args.hasArg(OPT_fmath_errno);
   Opts.InstantiationDepth =

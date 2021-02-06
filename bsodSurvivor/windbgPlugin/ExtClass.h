@@ -26,8 +26,9 @@ public:
   EXT_COMMAND_METHOD(reset_saved_files);
   EXT_COMMAND_METHOD(expr);
   EXT_COMMAND_METHOD(discard_expr);
+  EXT_COMMAND_METHOD(jump_to_most_updated);
 
-  void log(const std::string &output);
+  bool log(const std::string &output);
   HRESULT initializeThreadGlobals();
   HRESULT Initialize() override;
 

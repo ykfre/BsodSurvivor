@@ -45,7 +45,7 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
-
+bool g_shouldEmitDwarfForGlobals = true;
 DIEDwarfExpression::DIEDwarfExpression(const AsmPrinter &AP,
                                        DwarfCompileUnit &CU, DIELoc &DIE)
     : DwarfExpression(AP.getDwarfVersion(), CU), AP(AP), OutDIE(DIE) {}
@@ -1616,6 +1616,10 @@ DIE &DwarfUnit::constructMemberDIE(DIE &Buffer, const DIDerivedType *DT) {
 }
 
 DIE *DwarfUnit::getOrCreateStaticMemberDIE(const DIDerivedType *DT) {
+  if (!g_shouldEmitDwarfForGlobals) {
+    return nullptr;
+  }
+
   if (!DT)
     return nullptr;
 

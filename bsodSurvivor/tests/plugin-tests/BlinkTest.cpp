@@ -190,7 +190,9 @@ class M
 {
 public:
 static int functionToChange1() { return 2; }
+static int m;
 };
+int globalValue = 0;
 
 void fksk()
 {
