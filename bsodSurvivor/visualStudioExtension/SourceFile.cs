@@ -21,8 +21,11 @@ namespace VSPackage.BsodSurvivorPlugin
 		{
 			if (String.IsNullOrEmpty(_projectBasePath))
 				return;
-			else if (String.IsNullOrEmpty(path) || path.Equals(".") || path.Equals("\\\".\\\""))
+			else if (path.Equals(".") || path.Equals("\\\".\\\""))
+            {
+				IncludePaths.Add(path);
 				return;
+			}
 
             bool isAbsolutePath;
             try

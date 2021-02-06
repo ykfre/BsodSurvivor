@@ -559,6 +559,7 @@ namespace VSPackage.BsodSurvivorPlugin
                             includePaths[i] = Environment.ExpandEnvironmentVariables(config.Evaluate(includePaths[i])); ;
                         sourceForAnalysis.LanguageStandard = languageFlag;
                         sourceForAnalysis.AddIncludePaths(includePaths);
+                        sourceForAnalysis.AddIncludePath(".");
                         sourceForAnalysis.AddMacros(definitions.Split(';'));
                         sourceForAnalysis.AddMacrosToUndefine(macrosToUndefine.Split(';'));
                         break;
@@ -645,6 +646,7 @@ namespace VSPackage.BsodSurvivorPlugin
                             FilePath = sourceFile.FilePath,
                             LinkerFlags = "",
                             ObjCopyPath = Environment.ExpandEnvironmentVariables(@"%BSOD_SURVIVOR_DIR%\bin\llvm-objcopy.exe")
+                            ObjCopyPath = Environment.ExpandEnvironmentVariables(@"C:\temp\te\llvm-project\temp\Release\bin\llvm-objcopy.exe")
 
                         });
                         while (await reply.ResponseStream.MoveNext())
