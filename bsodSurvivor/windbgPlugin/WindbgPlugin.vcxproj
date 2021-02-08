@@ -84,7 +84,7 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(WindowsSdkDir)\Debuggers\inc;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <LibraryPath>C:\WinDDK\7600.16385.1\Debuggers\sdk\lib\amd64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
-    <TargetName>lldb</TargetName>
+    <TargetName>BsodSurvivor</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
