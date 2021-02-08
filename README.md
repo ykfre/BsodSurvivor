@@ -26,7 +26,7 @@ These are the major components off the project:
 
 This project is a fork of LLVM 10.
 
-This project is in beta version 0.2.0
+This project is in beta version 0.3.0
 
 The project is composed from Visual Studio plugin, Windbg plugin, and changes to LLDB/Clang/LLD.
 
@@ -61,6 +61,16 @@ and now I can just step into the function(F11) and continue debugging my new cod
 
 ![](readme-pics/after_step_into.PNG)
 
+but then I remembered that what I really wants is that uniName in line 17 to be \\\DosDevices\\C:\\WINDOWS\\example2.txt instead of \\\DosDevices\\C:\\WINDOWS\\example.txt, although I can just update line 17, and do the same procedure as I did previously of changing the function, I can also just do this in another way, by evaluating and running an expression which will affect the local variable uniName, only in this run, and not in all the runs, usefull for experiments / code you don't want to  run in multiple threads and so on.
+
+!expr c:\temp\a.txt , where I saved in c:\temp\a.txt
+the following content:
+RtlInitUnicodeString(&uniName, L" \\\\\DosDevices\\\C:\\\WINDOWS\\\example2.txt");
+
+![](readme-pics\after_expr.PNG)
+
+UniName as you can see have the value of L" \\\\\DosDevices\\\C:\\\WINDOWS\\\example2.txt".
+
 and finally let's see how we can continue the program - even if we got BSOD:
 
 First let's get a driver which do a BSOD:
@@ -85,6 +95,7 @@ and follow the installation guide in [here](installer/README.md).
 
 # Windbg Commands
 
+- **!expr {expression}** - Evaluates the expression in a file path and then evaluate it, Your breakpoints should be work as always so you can break in the functions which are called inside the expression.
 - !**reload_config** - Reload config.json again.
 - !**return_with** - Return from current frame with calling destructors, without continue the function flow.
 - !**return_without** - Return from current frame without calling destructors, without continue the function flow.
@@ -93,9 +104,22 @@ and follow the installation guide in [here](installer/README.md).
 - **!jump {line_num}** - Jump to a previous line in the same function, including calling needed destructors.
 - **!reload_dynamic_modules** - Make Windbg reload dynamic modules again, useful when you did .reload /f and Windbg removed the dynamic modules.
 - **!reset_saved_files** - Make Windbg stop showing some version of a cpp file, and make it use the most updated one in the disk, should only be used if a bug somehow appeared. 
+- **!discard_expr** - Discard current expression if exists , this operation is not calling needed destructors.
 
 # Build Your Driver
 
+- [ ] In order for the expression evaluator to work correctly even on templates/default arguments you need to add module.modulemap with sdafx.h as there is in the [ClangDriverExample dir](bsodSurvivor\clangDriverExample\msis\module.modulemap),(you can just take this file), and place it in the dir of the wanted include, see the structure of [ClangDriverExample](bsodSurvivor\clangDriverExample) for better understanding.
+
+  - stdafx.h should contain all the headers which we want their in information in debugging time Usually wdm and your STL types
+
+  - In module.modulemap should be listed only one file.
+
+  - There should be only one module.modulemap file in your entire project.
+
+  - stdafx.h should be the first include in your files, and you shouldn't include any contained include after stdafx.h, for example let's say MyVector.h is inside stdafx.h - you shouldn't do:
+
+     #include stdafx.h
+    #include MyVector.h
 - [ ] In order for getting all the above functionality you need to use ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriverCommon.props for libs, and ${BSOD_SURVIVOR_DIR}\visual studio\BsodSurvivorDriver.props for drivers when you are compiling your driver. 
 You must builld all your libs, which you want to change at run time and driver code using this compiler.
 
@@ -175,6 +199,29 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 - Code which uses try catch/sehs shouldn't be in a code which is being updated - as Windows will not run the catch/__except code.
 
   You should place them in different files from the file which you want to change.
+  
+## Evaluating Expressions - Limitations
+
+- For now there isn't a support for printing automatically a result of expression, you need to use instead [DbgPrint](https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-dbgprint) in the expression, for example: DbgPrint("result is %d", f()).
+
+- Default function arguments /Macros won't be found if if the function isn't in a file which is in in a [clang module](https://clang.llvm.org/docs/Modules.html)
+
+  - **All the modules support is very much experimental**!
+
+- Functions which didn't compiled to the binary - won't be able to be found and used, mainly important for templates/ static unused functions if their implementation isn't in a [module](https://clang.llvm.org/docs/Modules.html) .
+
+- Functions in an anonymous namespaces won't be found.
+
+- Expressions with classes/functions with const expressions SNIFAE, or forward declaration won't be evaluated correctly even with module, please use static const where possible.
+  type_traits, std::unique_ptr,std::shared_ptr, std::optional, and std::expected were changed in order to be implemented without static constexpr where possible in [here](bsodSurvivor\tests\ExecutableTest\stl).
+
+  This files are also installed as part of BSOD_SURVIVOR installation (will be used only if you include them).
+
+- Templates and Default function arguments won't work if you will compile the program using Incredibuild, as it won't find there module.modulemap in the remote computer ( the compilation will still succeed)
+
+- You won't be able to evaluate expression if there is an upper frame from your selected frame, which its program counter isn't in your main driver as configured in config.json
+
+- Consts values are evaluated using the original module content only.
 
 # Open Source Acknowledgements
 
@@ -183,6 +230,10 @@ Blink - https://github.com/crosire/blink for pdb parser and some ideas.
 tenzen-llvm-project https://github.com/tentzen/llvm-project, for the implementation of sehs in llvm x64, which return of frame is based on.
 
 cppcheck-plugin https://github.com/VioletGiraffe/cppcheck-vs-addin The code of the Visual Studio Extension is based on this code.
+
+Microsoft stl -  https://github.com/microsoft/STL
+
+std::expected - https://github.com/TartanLlama/expected
 
 
 
