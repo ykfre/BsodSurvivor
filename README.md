@@ -22,6 +22,7 @@ These are the major components off the project:
 3. Jump to a previous line in the function - include calling needed destructors.
 
    Useful in order to reexamine what some code do again and again.
+4. Run expression evaluation from a file including templates/default parameters and so on, which Windbg doesn't support.
 
 
 This project is a fork of LLVM 10.
@@ -105,6 +106,7 @@ and follow the installation guide in [here](installer/README.md).
 - **!reload_dynamic_modules** - Make Windbg reload dynamic modules again, useful when you did .reload /f and Windbg removed the dynamic modules.
 - **!reset_saved_files** - Make Windbg stop showing some version of a cpp file, and make it use the most updated one in the disk, should only be used if a bug somehow appeared. 
 - **!discard_expr** - Discard current expression if exists , this operation is not calling needed destructors.
+- **!jump_to_most_updated** - Change the current program counter to an equallivent function to the current function which is the most updated function, if it is safe to do so.
 
 # Build Your Driver
 
