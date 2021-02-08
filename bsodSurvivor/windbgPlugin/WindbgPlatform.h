@@ -11,7 +11,8 @@ public:
 class WindbgThread:public PlatformThread {
 public:
   bool initialize() override;
-
+  void showThreadInfo() override;
+  
   void suspendThread()override{};
   void resumeThread() override;
   int getThreadId() override;

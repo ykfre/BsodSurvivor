@@ -2,5 +2,5 @@
 #include "Logger.h"
 
 class WindbgLogger : public Logger{
-  void write(const std::string &message) override;
+  bool write(const std::string &message) override;
 };

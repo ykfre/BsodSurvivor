@@ -1,7 +1,6 @@
 #include "WindbgLogger.h"
 #include "ExtClass.h"
 
-void WindbgLogger::write(const std::string &message) 
-{
-  g_ExtInstance.log(message);
+bool WindbgLogger::write(const std::string &message) {
+  return g_ExtInstance.log(message);
 }

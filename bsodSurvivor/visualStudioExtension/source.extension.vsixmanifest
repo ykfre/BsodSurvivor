@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="BsodSurvivor.73c4b0ba-32c2-4a4f-9c45-31ba9f23b052" Version="0.1" Language="en-US" Publisher="ido westler" />
+    <Identity Id="BsodSurvivor.73c4b0ba-32c2-4a4f-9c45-31ba9f23b052" Version="0.3" Language="en-US" Publisher="ido westler" />
     <DisplayName>BsodSurvivor</DisplayName>
     <Description>This extension aims to facilitate devoloping drivers by making it possible to change the driver binary in run time using Continue And Debug</Description>
   </Metadata>

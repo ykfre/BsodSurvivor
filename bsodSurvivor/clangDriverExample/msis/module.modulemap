@@ -1,0 +1,5 @@
+
+module Vector21675979290{
+ header  "stdafx.h"
+ export *
+}

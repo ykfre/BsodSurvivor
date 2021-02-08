@@ -40,6 +40,7 @@ namespace VSPackage.BsodSurvivorPlugin
             {
                 Assumes.NotNull(_outputPane);
                 await JoinableTaskFactory.SwitchToMainThreadAsync();
+                _outputPane.Activate();
                 if (shouldClear)
                 {
                     _outputPane.Activate();
@@ -552,14 +553,52 @@ namespace VSPackage.BsodSurvivorPlugin
                         {
                             languageFlag = "/std:c++17";
                         }
-
+                        string warningLevel = "";
+                        string warningLevelString = GetAttributeFromProject("WarningLevel", filePath, targetConfig, realProject);
+                        if (warningLevelString.StartsWith("TurnOffAllWarnings"))
+                        {
+                            warningLevel = "/W0";
+                        }
+                        else if (warningLevelString == "Level1")
+                        {
+                            warningLevel = "/W1";
+                        }
+                        else if (warningLevelString == "Level2")
+                        {
+                            warningLevel = "/W2";
+                        }
+                        else if (warningLevelString == "Level3")
+                        {
+                            warningLevel = "/W3";
+                        }
+                        else if (warningLevelString == "Level4")
+                        {
+                            warningLevel = "/W4";
+                        }
+                        else
+                        {
+                            warningLevel = "/Wall";
+                        }
+                        string setWarningAsError = "";
+                        string setWarningAsErrorString = GetAttributeFromProject("TreatWarningAsError", filePath, targetConfig, realProject);
+                        if (setWarningAsErrorString.StartsWith("true"))
+                        {
+                            setWarningAsError = "/WX";
+                        }
+                        else
+                        {
+                            setWarningAsError = "/WX-";
+                        }
                         String macrosToUndefine = tool.UndefinePreprocessorDefinitions;
                         String[] includePaths = includes.Split(';');
                         for (int i = 0; i < includePaths.Length; ++i)
                             includePaths[i] = Environment.ExpandEnvironmentVariables(config.Evaluate(includePaths[i])); ;
                         sourceForAnalysis.LanguageStandard = languageFlag;
                         sourceForAnalysis.AddIncludePaths(includePaths);
+                        sourceForAnalysis.AddIncludePath(".");
                         sourceForAnalysis.AddMacros(definitions.Split(';'));
+                        sourceForAnalysis.TreatWarningAsError = setWarningAsError;
+                        sourceForAnalysis.WarningLevel = warningLevel;
                         sourceForAnalysis.AddMacrosToUndefine(macrosToUndefine.Split(';'));
                         break;
                     }
@@ -633,6 +672,9 @@ namespace VSPackage.BsodSurvivorPlugin
                     {
                         compilationFlags += "/D\"" + define + "\"" + " ";
                     }
+                    compilationFlags += sourceFile.TreatWarningAsError + " ";
+                    compilationFlags += sourceFile.WarningLevel + " ";
+
                     compilationFlags += sourceFile.LanguageStandard + " ";
                     JoinableTaskFactory.Run(async () =>
                     {
@@ -651,7 +693,22 @@ namespace VSPackage.BsodSurvivorPlugin
                         {
                             if (reply.ResponseStream.Current.IsLogging)
                             {
-                                AddTextToOutputWindow(reply.ResponseStream.Current.Message);
+                                string message = reply.ResponseStream.Current.Message;
+                                string newNamePrefix = "$$__$$";
+                                if(message.IndexOf(newNamePrefix) != -1 && -1 == message.IndexOf("starting to")&&
+                                message.IndexOf("clang-cl") != -1)
+                                {
+                                    var error = message.Substring(message.IndexOf("\n"));
+                                    var last = error.IndexOf("(", error.IndexOf(newNamePrefix));
+                                    var start = error.LastIndexOf("\n", error.IndexOf(newNamePrefix))+1;
+                                    if(last != -1 && start !=-1)
+                                    {
+                                        var fileName = error.Substring(start, last - start);
+                                        message = message.Replace(fileName, sourceFile.FilePath);
+                                    }
+                                }
+
+                                AddTextToOutputWindow(message);
                             }
                             else
                             {

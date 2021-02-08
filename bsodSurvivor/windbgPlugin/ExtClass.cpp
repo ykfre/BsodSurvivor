@@ -41,10 +41,12 @@ ExtExtension *g_ExtInstancePtr = &g_ExtInstance;
 
 void EXT_CLASS::Uninitialize() {}
 
-void EXT_CLASS::log(const std::string &output) {
+bool EXT_CLASS::log(const std::string &output) {
   if (t_control) {
-    t_control->Output(DEBUG_OUTPUT_NORMAL, (output + "\n").c_str());
+    OutputDebugStringA(output.c_str());
+    return SUCCEEDED(t_control->Output(DEBUG_OUTPUT_NORMAL, (output + "\n").c_str()));
   }
+  return true;
 }
 
 void EXT_CLASS::onLoadDynamicModule(const std::shared_ptr<LoadedDll> &dll) {
@@ -139,6 +141,7 @@ std::shared_ptr<IDebugClient> g_debugClient;
 
 HRESULT EXT_CLASS::Initialize() {
   t_logger = std::make_shared<WindbgLogger>();
+  g_logger = t_logger;
   HRESULT result = initializeThreadGlobals();
 
   if (!SUCCEEDED(result)) {
@@ -230,7 +233,7 @@ std::string EXT_CLASS::getWindbgDir() const {
   auto modulePathSize = GetModuleFileNameA(
       currentModule, (char *)modulePath.c_str(), modulePath.size());
   modulePath.resize(modulePathSize + 1);
-  return std::filesystem::path(modulePath).parent_path().string()+"\\winext";
+  return std::filesystem::path(modulePath).parent_path().string() + "\\winext";
 }
 
 std::string EXT_CLASS::getConfigFilePath() const {
@@ -242,18 +245,12 @@ void EXT_CLASS::executeCommand(
     const std::function<bool(CommonCommandArgs &)> &command) {
   std::thread t([this, command]() {
     g_platform->setCurrentThread(g_threadFactory->create(0));
-
-    if (!g_platform->verifyPreConditions()) {
-      log("failed to verify pre conditions");
-      return;
-    }
-
     CommonCommandArgs commonArgs;
     auto thread = g_platform->getCurrentThread();
     commonArgs.selectedFrameIndex =
         thread->getRegisterValue("$frame", 0).to_ulong();
-
-    command(commonArgs);
+    auto dlls = g_blink.getAllDlls();
+    commands::runCommand(command, commonArgs, dlls);
   });
   t.detach();
 }
@@ -265,6 +262,58 @@ bool EXT_CLASS::isKernelDebugger() {
   return DEBUG_CLASS_KERNEL == Class;
 }
 
+#include <iostream>
+EXT_COMMAND(expr, "EvaluateExpression",
+            "{custom}{;x;expression;the expression or a file to read from the "
+            "expression file path}") {
+  auto scriptFilePathPointer = GetUnnamedArgStr(0);
+  std::string scriptFilePath = scriptFilePathPointer;
+  std::cout << scriptFilePath;
+  executeCommand([this, scriptFilePath](CommonCommandArgs &args) {
+    auto expression = readFile(scriptFilePath);
+    if (!expression) {
+      writeLog("failed to read file " + scriptFilePath);
+      return false;
+    }
+    auto expressionValue =
+        std::string(expression.value().begin(), expression.value().end());
+    auto thread = g_platform->getCurrentThread();
+    auto currentFrame = thread->getRegisterValue("$frame", 0).to_ullong();
+    auto res = commands::executeExpression(
+        args, std::string{expressionValue.begin(), expressionValue.end()});
+    abortIfFalse(
+        SUCCEEDED(g_ExtInstance.t_control->Execute(
+            DEBUG_OUTCTL_THIS_CLIENT,
+            std::string(".frame /r " + std::to_string(currentFrame)).c_str(),
+            0)),
+        ".frame failed");
+    return res;
+  });
+}
+
+EXT_COMMAND(discard_expr,
+            "Discard current expression if exists , this operation is not "
+            "calling needed destructors.",
+            "") {
+  executeCommand([](CommonCommandArgs &args) {
+    args.selectedFrameIndex = 0;
+    auto thread = g_platform->getCurrentThread();
+    if (!g_functionRunManager.isWaitingForFunctionToEnd(
+            thread->getThreadId())) {
+      writeLog("no active expression to discard");
+    }
+    g_functionRunManager.notifyFunctionEnded(thread->getThreadId());
+    return true;
+  });
+}
+
+EXT_COMMAND(jump_to_most_updated, "jump to most updated function", "") {
+  executeCommand([](CommonCommandArgs &args) {
+    
+    return commands::jumpToMostUpdatedFunction(args);
+  });
+}
+
 EXT_COMMAND(reload_config, "reload config.json again", "") {
   auto configFilePath = getConfigFilePath();
   if (!g_config.load(configFilePath)) {
@@ -273,13 +322,15 @@ EXT_COMMAND(reload_config, "reload config.json again", "") {
   g_blink.resetDllToChange();
 }
 
-EXT_COMMAND(return_without, "return from current frame without calling destructors", "") {
+EXT_COMMAND(return_without,
+            "return from current frame without calling destructors", "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, false);
   });
 }
 
-EXT_COMMAND(return_with, "return from current frame with calling destructors", "") {
+EXT_COMMAND(return_with, "return from current frame with calling destructors",
+            "") {
   executeCommand([](CommonCommandArgs &args) {
     return commands::returnFromFrame(args, 1, true);
   });
@@ -288,7 +339,6 @@ EXT_COMMAND(return_with, "return from current frame with calling destructors", "
 EXT_COMMAND(return_to_frame_without,
             "return to the selected frame without calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
-    args.selectedFrameIndex = 0;
 
     auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
@@ -299,14 +349,14 @@ EXT_COMMAND(return_to_frame_without,
 EXT_COMMAND(return_to_frame_with,
             "return to the selected frame with calling destrcutors", "") {
   executeCommand([](CommonCommandArgs &args) {
-    args.selectedFrameIndex = 0;
-    auto thread = g_platform->getCurrentThread();
     return commands::returnFromFrame(
-        args, thread->getRegisterValue("$frame", 0).to_ulong(), true);
+        args, args.selectedFrameIndex, true);
   });
 }
 
-EXT_COMMAND(jump, " Jump to a previous line in the same function, including calling needed destructors",
+EXT_COMMAND(jump,
+            " Jump to a previous line in the same function, including calling "
+            "needed destructors",
             "{;s;lineNumber;line number in decimal representation}") {
   auto raw = GetUnnamedArgStr(0);
   std::istringstream ss(raw);
@@ -315,15 +365,22 @@ EXT_COMMAND(jump, " Jump to a previous line in the same function, including call
   if (ss.fail()) {
     writeLog("line isn't a decimal number although it should be - please give "
              "a decimal number");
+    return;
   }
   executeCommand([line, this](CommonCommandArgs &args) {
-    args.selectedFrameIndex = 0;
+    if (args.selectedFrameIndex != 0) {
+      writeLog("you should only select frame 0");
+      return false;
+    }
     commands::jumpTo(args, line);
     return true;
   });
 }
 
-EXT_COMMAND(reload_dynamic_modules, "Make Windbg reload dynamic modules again, useful when you did .reload /f and Windbg removed the dynamic modules.", "") {
+EXT_COMMAND(reload_dynamic_modules,
+            "Make Windbg reload dynamic modules again, useful when you did "
+            ".reload /f and Windbg removed the dynamic modules.",
+            "") {
   g_platform->setCurrentThread(g_threadFactory->create(0));
   for (const auto &module : g_blink.getDynamicDlls()) {
     g_ExtInstance.onLoadDynamicModule(module);

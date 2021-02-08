@@ -9,7 +9,7 @@ namespace VSPackage.BsodSurvivorPlugin
 		// [Conditional("DEBUG")]
 		public static void Trace(Exception ex)
 		{
-			Debug.WriteLine("Exception occurred in cppcheck add-in: " + ex.ToString());
+			Debug.WriteLine("Exception occurred in BsodSurvivor add-in: " + ex.ToString());
 		}
 	}
 }

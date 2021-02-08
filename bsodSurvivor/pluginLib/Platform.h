@@ -12,7 +12,7 @@
 class PlatformThread {
 public:
   virtual bool initialize() = 0;
-
+  virtual void showThreadInfo() {};
   virtual void suspendThread() = 0;
   virtual void resumeThread() = 0;
   virtual int getThreadId() = 0;

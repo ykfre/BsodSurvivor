@@ -1096,6 +1096,7 @@ void AsmPrinter::emitFunctionBody() {
   bool HasAnyRealCode = false;
   int NumInstsInFunction = 0;
   bool IsEHa = MMI->getModule()->getModuleFlag("eh-asynch");
+  bool isPrevOpcodeNop = false;
   for (auto &MBB : *MF) {
     // Print a label for the basic block.
     emitBasicBlockStart(MBB);
@@ -1127,9 +1128,11 @@ void AsmPrinter::emitFunctionBody() {
 
       switch (MI.getOpcode()) {
       case TargetOpcode::CFI_INSTRUCTION:
+        isPrevOpcodeNop = false;
         emitCFIInstruction(MI);
         break;
       case TargetOpcode::LOCAL_ESCAPE:
+        isPrevOpcodeNop = false;
         emitFrameAlloc(MI);
         break;
       case TargetOpcode::ANNOTATION_LABEL:
@@ -1147,7 +1150,11 @@ void AsmPrinter::emitFunctionBody() {
         {
           
             auto MI2 = std::next(MI.getIterator());
-            emitNops(1);
+            if (!isPrevOpcodeNop)
+            {
+              emitNops(1);
+              isPrevOpcodeNop = true;
+            }
             if (ShouldPrintDebugScopes) {
               for (const HandlerInfo &HI : Handlers) {
                 NamedRegionTimer T(HI.TimerName, HI.TimerDescription,
@@ -1159,29 +1166,45 @@ void AsmPrinter::emitFunctionBody() {
         }
         break;
       case TargetOpcode::INLINEASM:
-      case TargetOpcode::INLINEASM_BR:
+      case TargetOpcode::INLINEASM_BR: {
         emitInlineAsm(&MI);
+        isPrevOpcodeNop = false;
+      }
         break;
       case TargetOpcode::DBG_VALUE:
         if (isVerbose()) {
-          if (!emitDebugValueComment(&MI, *this))
+          if (!emitDebugValueComment(&MI, *this)) {
             emitInstruction(&MI);
+            isPrevOpcodeNop = false;
+          }
         }
         break;
       case TargetOpcode::DBG_LABEL:
         if (isVerbose()) {
-          if (!emitDebugLabelComment(&MI, *this))
+            if (!emitDebugLabelComment(&MI, *this))
+            {
             emitInstruction(&MI);
+              isPrevOpcodeNop = false;
+          }
         }
         break;
       case TargetOpcode::IMPLICIT_DEF:
-        if (isVerbose()) emitImplicitDef(&MI);
+        
+        if (isVerbose()) {
+          emitImplicitDef(&MI);
+          isPrevOpcodeNop = false;
+        }
         break;
       case TargetOpcode::KILL:
-        if (isVerbose()) emitKill(&MI, *this);
+        
+        if (isVerbose()) {
+          emitKill(&MI, *this);
+          isPrevOpcodeNop = false;
+        }
         break;
       default:
         emitInstruction(&MI);
+        isPrevOpcodeNop = false;
         break;
       }
 

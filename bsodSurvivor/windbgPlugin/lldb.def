@@ -21,5 +21,8 @@ EXPORTS
     return_to_frame_with
     reload_dynamic_modules
     jump
+    jump_to_most_updated
     reload_config
     reset_saved_files
+    expr
+    discard_expr

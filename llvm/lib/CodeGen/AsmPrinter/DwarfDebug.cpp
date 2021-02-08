@@ -81,6 +81,7 @@
 #include <utility>
 #include <vector>
 
+extern bool g_shouldEmitDwarfForGlobals;
 using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
@@ -1189,6 +1190,9 @@ void DwarfDebug::beginModule() {
 
     // Global Variables.
     for (auto *GVE : CUNode->getGlobalVariables()) {
+      if (!g_shouldEmitDwarfForGlobals) {
+        continue;
+      }
       // Don't bother adding DIGlobalVariableExpressions listed in the CU if we
       // already know about the variable and it isn't adding a constant
       // expression.
@@ -1199,9 +1203,12 @@ void DwarfDebug::beginModule() {
     }
     DenseSet<DIGlobalVariable *> Processed;
     for (auto *GVE : CUNode->getGlobalVariables()) {
+      if (!g_shouldEmitDwarfForGlobals) {
+        continue;
+      }
       DIGlobalVariable *GV = GVE->getVariable();
       if (Processed.insert(GV).second)
-        CU.getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
+         CU.getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
     }
 
     for (auto *Ty : CUNode->getEnumTypes()) {
