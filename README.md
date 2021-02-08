@@ -68,7 +68,7 @@ but then I remembered that what I really wants is that uniName in line 17 to be 
 the following content:
 RtlInitUnicodeString(&uniName, L" \\\\\DosDevices\\\C:\\\WINDOWS\\\example2.txt");
 
-![](readme-pics\after_expr.PNG)
+![](readme-pics/after_expr.PNG)
 
 UniName as you can see have the value of L" \\\\\DosDevices\\\C:\\\WINDOWS\\\example2.txt".
 
