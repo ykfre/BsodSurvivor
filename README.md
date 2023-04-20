@@ -1,35 +1,19 @@
 # BSOD Survivor
 
-Tired of always telling yourself when you got a BSOD that what if I could just return to the caller function which caused the BSOD, and change its args? or just do any change? and instead of that you need to do the tiersome reboot/revert to the machine, attach Windbg again to the machine, and hope it isn't some statistically bug?
-Or want to add a conditional breakpoint easily to some function you have like if(g_counter == 8) {__debugbreak();} without any need to unload the driver?
-Or even just update almost any code of a function you want without driver unloading.
+Drivers development is a time consuming process.
+Have you ever been frustrated with the time-consuming process of rebooting your VM or reattaching Windbg again just to fix a BSOD caused by a function call of your driver? Or have you wanted to add a conditional breakpoint without unloading the driver? or just change a line? Look no further! Our project offers a solution to these problems and more.
+
+Our project allows you to update source code and global variables in debugging without unloading the driver or rebooting your VM. You can easily compile the file with the changes you want, link it with the already loaded code in memory, and replace the old functions with the new ones - all at runtime! And with our Bsod Survivor Visual Studio Plugin, you can instruct Windbg which code to change in real time.
+
+Not only that, but our project also allows you to change the program state to be in the state before the current function was called, and jump to a previous line in the function - all while calling the necessary destructors of the function, so you can rerun the code safely!!. And if you need to run expression evaluation from a file, including templates and default parameters, our project has got you covered also.
+
+
+To see our project in action, take a look at our example. We show you how to fix an infinite loop caused by a function call in just a few simple steps. With our project, debugging has never been easier!
 
 **This project is for you!!**
 
-These are the major components off the project:
+Our project is a fork of LLVM 10 and is currently in beta version 0.3.0. It consists of a Visual Studio plugin, Windbg plugin, and changes to LLDB/Clang/LLD.
 
-1. Update source code / global variables  in debugging without any need to unload the driver or reboot the computer, by compiling the wanted changed file and link the created obj file with the already loaded code in memory , and then replace the functions which were in the old obj by the new functions which are in the new obj, (for now even if the functions are the same).
-
-   You will need to use [Bsod Survivor Visual Studio Plugin](#installation) (and not only Windbg Plugin as all the other components) in order to  use this feature.
-   This plugin is needed for instructing Windbg which code to change at run time.
-
-   Please read the [limitations.](#updating-driver-code-in-runtime-limitations)
-
-2. Change the program state to be in the state before the current function was called - useful for continue the program even from some BSODs or making the same function called again but with a changed code. (See [Example](#example))
-
-   This is done by calling the needed destructors in the current function, and return to the registers state of the calling function
-
-3. Jump to a previous line in the function - include calling needed destructors.
-
-   Useful in order to reexamine what some code do again and again.
-4. Run expression evaluation from a file including templates/default parameters and so on, which Windbg doesn't support.
-
-
-This project is a fork of LLVM 10.
-
-This project is in beta version 0.3.0
-
-The project is composed from Visual Studio plugin, Windbg plugin, and changes to LLDB/Clang/LLD.
 
 
 # Example
@@ -96,17 +80,17 @@ and follow the installation guide in [here](installer/README.md).
 
 # Windbg Commands
 
-- **!expr {expression}** - Evaluates the expression in a file path and then evaluate it, Your breakpoints should be work as always so you can break in the functions which are called inside the expression.
-- !**reload_config** - Reload config.json again.
-- !**return_with** - Return from current frame with calling destructors, without continue the function flow.
-- !**return_without** - Return from current frame without calling destructors, without continue the function flow.
-- !**return_to_frame_with** - Return from current frame to the selected frame(you should press in Windbg on the selected frame) with calling destructors, without continue the function flow.
-- !**return_to_frame_without** - Return from current frame to the selected frame(you should press in Windbg on the selected frame) without calling destructors, without continue the function flow.
-- **!jump {line_num}** - Jump to a previous line in the same function, including calling needed destructors.
-- **!reload_dynamic_modules** - Make Windbg reload dynamic modules again, useful when you did .reload /f and Windbg removed the dynamic modules.
-- **!reset_saved_files** - Make Windbg stop showing some version of a cpp file, and make it use the most updated one in the disk, should only be used if a bug somehow appeared. 
-- **!discard_expr** - Discard current expression if exists , this operation is not calling needed destructors.
-- **!jump_to_most_updated** - Change the current program counter to an equallivent function to the current function which is the most updated function, if it is safe to do so.
+- **!expr {expression}** - This command allows you to evaluate an expression which resides in a file path. You can still use breakpoints as you normally would, so you can break in functions called inside the expression.
+- !**reload_config** - This command reloads the config.json file, allowing you to update your configurations on the fly.
+- !**return_with** - This command returns from the current frame while calling destructors.
+- !**return_without** - This command returns from the current frame without calling destructors.
+- !**return_to_frame_with** -  This command returns from the current frame to the selected frame (which you should select by pressing on it in Windbg) while calling destructors.
+- !**return_to_frame_without** - This command returns from the current frame to the selected frame (which you should select by pressing on it in Windbg) without calling destructors.
+- **!jump {line_num}** - This command jumps to a previous line in the same function, including calling any needed destructors..
+- **!reload_dynamic_modules** - This command makes Windbg reload dynamic modules again, which is useful if you have used the .reload /f command and Windbg removed the dynamic modules.
+- **!reset_saved_files** - This command makes Windbg stop showing some version of a cpp file, and makes it use the most updated one in the disk. This should only be used if a bug has somehow appeared.
+- **!discard_expr** - This command discards the current active expression if it exists. This operation does not call any needed destructors.
+- **!jump_to_most_updated** - This command changes the current program counter to an equivalent function to the current function, which is the most updated function, if it is safe to do so.
 
 # Build Your Driver
 
@@ -150,7 +134,7 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 
 # Limitations And Known Issues
 
-- There is for now only a support for one driver, that's means you can't use any feature of this project for debugging multiple drivers, only for one of them it will work (you will need to decide which one in the config.json file of the Windbg Plugin)
+- The project currently only supports debugging one driver at a time, and you will need to specify which driver to use in the configuration file (config.json).
 - You won't be able to debug multiple vms nor using multiple instances of the Windbg plugin. 
 - The vm must be stopped before you run any feature, and you must be sure the operation of the feature ended before you continue your run  (There will be an informative log).
 - Some Antiviruses may for some reason block some operations of your local Windbg -please add Windbg and the plugin to the white list of those antiviruses if some blocking window appears. 
@@ -160,8 +144,6 @@ For the visual studio plugin - only Visual Studio 2019 is supported.
 - Changes of functions are taking affect only on the next rerun of a function - meaning if you are already in a function when you debugged, before you linked, you must return from this function/call it again in order for the changes to take affect.
 
   for that reason I added a stub function like realEntry in ClangDriverExample, which gives me an ability to return from realEntry, and run it again like in the example [above](#example). Stubs are useful for every function which is a callback to external pes.
-
-- For now we support only changing one cpp/c file (and via that its headers).
 
 - Can't link with code which isn't reside in memory/ is in the source file which you change, meaning mostly that if you are using libs, your program should be linked with /wholearchive with them, please be note that this isn't necessary to libs of exported dlls like ntos, fltmgr and so on, because their functions are exported by drivers which are loaded in the memory.
 
